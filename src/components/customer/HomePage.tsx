@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Wifi, Tv, Wind, Coffee, Sparkles, Camera, MapPin, Settings, Home } from 'lucide-react';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
@@ -31,7 +31,7 @@ export default function HomePage() {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
       });
       const locResult = await locResponse.json();
-      
+
       // Fetch rooms
       const roomsResponse = await fetch(`${API_URL}/phong`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
@@ -44,7 +44,7 @@ export default function HomePage() {
           const roomCount = roomsResult.data?.filter(
             (room: any) => room.loai_phong?.id_co_so === loc.id
           ).length || 0;
-          
+
           return {
             ...loc,
             roomCount
@@ -72,21 +72,21 @@ export default function HomePage() {
   return (
     <div>
 
-      {/* Hero Section */}
-      <section className="relative h-[600px] bg-gradient-to-br from-blue-900 to-indigo-900">
+  {/* Hero Section */}
+  <section className="relative h-[600px]" style={{ backgroundColor: '#0f7072' }}>
         <div className="absolute inset-0 bg-black/40"></div>
-        <div 
+        <div
           className="absolute inset-0 bg-cover bg-center mix-blend-overlay"
           style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1654075309556-14a41021eedb?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxob21lc3RheSUyMGV4dGVyaW9yfGVufDF8fHx8MTc2MjYxOTYwMHww&ixlib=rb-4.1.0&q=80&w=1080)' }}
         />
-        
+
         <div className="relative h-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center">
           <div className="text-white max-w-2xl">
             <h1 className="text-white mb-4">
               Trải nghiệm không gian sống hiện đại
             </h1>
             <p className="text-xl text-gray-100 mb-8">
-              LaLa House - Hệ thống homestay cao cấp tại Hà Nội với đầy đủ tiện nghi, 
+              LaLa House - Hệ thống homestay cao cấp tại Hà Nội với đầy đủ tiện nghi,
               phong cách độc đáo và vị trí đắc địa.
             </p>
             <Link
