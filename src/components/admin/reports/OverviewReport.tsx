@@ -1,7 +1,7 @@
-import { 
-  TrendingUp, 
-  Users, 
-  DollarSign, 
+import {
+  TrendingUp,
+  Users,
+  DollarSign,
   Home,
   FileText,
   BarChart3,
@@ -115,22 +115,22 @@ export default function OverviewReport({ reportData, formatCurrency }: OverviewR
           <p className="text-sm text-gray-600 mb-1">Tiền cọc CSVC</p>
           <p className="text-xl text-gray-900">{formatCurrency(reportData.totalDeposit)}</p>
         </div>
-        
+
         <div className="bg-white rounded-lg shadow-sm p-4">
           <p className="text-sm text-gray-600 mb-1">Số đêm đã bán</p>
           <p className="text-xl text-gray-900">{reportData.totalNights}</p>
         </div>
-        
+
         <div className="bg-white rounded-lg shadow-sm p-4">
           <p className="text-sm text-gray-600 mb-1">Giá TB/đêm</p>
           <p className="text-xl text-gray-900">{formatCurrency(reportData.averageNightlyRate)}</p>
         </div>
-        
+
         <div className="bg-white rounded-lg shadow-sm p-4">
           <p className="text-sm text-gray-600 mb-1">Giá TB/đơn</p>
           <p className="text-xl text-gray-900">{formatCurrency(reportData.averageBookingValue)}</p>
         </div>
-        
+
         <div className="bg-white rounded-lg shadow-sm p-4">
           <p className="text-sm text-gray-600 mb-1">Tỷ lệ hủy</p>
           <p className="text-xl text-gray-900">{reportData.cancelRate.toFixed(1)}%</p>
@@ -151,15 +151,15 @@ export default function OverviewReport({ reportData, formatCurrency }: OverviewR
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="date" />
                 <YAxis />
-                <Tooltip 
+                <Tooltip
                   formatter={(value: number) => formatCurrency(value)}
                   labelFormatter={(label) => `Ngày: ${label}`}
                 />
                 <Legend />
-                <Line 
-                  type="monotone" 
-                  dataKey="revenue" 
-                  stroke="#8b5cf6" 
+                <Line
+                  type="monotone"
+                  dataKey="revenue"
+                  stroke="#8b5cf6"
                   name="Doanh thu"
                   strokeWidth={2}
                 />
@@ -184,13 +184,13 @@ export default function OverviewReport({ reportData, formatCurrency }: OverviewR
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="date" />
                 <YAxis />
-                <Tooltip 
+                <Tooltip
                   labelFormatter={(label) => `Ngày: ${label}`}
                 />
                 <Legend />
-                <Bar 
-                  dataKey="bookings" 
-                  fill="#3b82f6" 
+                <Bar
+                  dataKey="bookings"
+                  fill="#3b82f6"
                   name="Số đặt phòng"
                 />
               </BarChart>
@@ -216,12 +216,11 @@ export default function OverviewReport({ reportData, formatCurrency }: OverviewR
               {reportData.topRooms.slice(0, 5).map((room, index) => (
                 <div key={index} className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                      index === 0 ? 'bg-yellow-100 text-yellow-600' :
-                      index === 1 ? 'bg-gray-100 text-gray-600' :
-                      index === 2 ? 'bg-orange-100 text-orange-600' :
-                      'bg-blue-100 text-blue-600'
-                    }`}>
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${index === 0 ? 'bg-yellow-100 text-yellow-600' :
+                        index === 1 ? 'bg-gray-100 text-gray-600' :
+                          index === 2 ? 'bg-orange-100 text-orange-600' :
+                            'bg-blue-100 text-blue-600'
+                      }`}>
                       {index + 1}
                     </div>
                     <div>
@@ -315,17 +314,17 @@ export default function OverviewReport({ reportData, formatCurrency }: OverviewR
             <p className="text-sm text-gray-600">Đã xác nhận</p>
             <p className="text-2xl text-gray-900">{reportData.confirmedBookings}</p>
           </div>
-          
+
           <div className="border-l-4 border-blue-500 pl-4">
             <p className="text-sm text-gray-600">Đã nhận phòng</p>
             <p className="text-2xl text-gray-900">{reportData.checkedInBookings}</p>
           </div>
-          
+
           <div className="border-l-4 border-purple-500 pl-4">
             <p className="text-sm text-gray-600">Đã trả phòng</p>
             <p className="text-2xl text-gray-900">{reportData.checkedOutBookings}</p>
           </div>
-          
+
           <div className="border-l-4 border-red-500 pl-4">
             <p className="text-sm text-gray-600">Đã hủy</p>
             <p className="text-2xl text-gray-900">{reportData.cancelledBookings}</p>

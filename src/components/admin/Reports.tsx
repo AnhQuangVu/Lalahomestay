@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Download, 
+import {
+  Download,
   Calendar
 } from 'lucide-react';
 import { format, subDays } from 'date-fns';
@@ -19,35 +19,35 @@ interface ReportData {
   totalDeposit: number;
   totalCustomers: number;
   newCustomers: number;
-  
+
   // Phòng
   totalRooms: number;
   occupiedRooms: number;
   availableRooms: number;
   occupancyRate: number;
   totalNights: number;
-  
+
   // Đặt phòng
   confirmedBookings: number;
   cancelledBookings: number;
   checkedInBookings: number;
   checkedOutBookings: number;
   cancelRate: number;
-  
+
   // Doanh thu
   averageBookingValue: number;
   averageNightlyRate: number;
   growthRate: number;
-  
+
   // Chi tiết theo thời gian
   dailyRevenue: Array<{ date: string; revenue: number; bookings: number; }>;
-  
+
   // Top phòng
   topRooms: Array<{ name: string; bookings: number; revenue: number; }>;
-  
+
   // Nguồn đặt phòng
   bookingSources: Array<{ source: string; count: number; }>;
-  
+
   // Trạng thái đặt phòng
   bookingStatus: Array<{ status: string; count: number; }>;
 }
@@ -74,7 +74,7 @@ export default function Reports() {
           }
         }
       );
-      
+
       const result = await response.json();
       if (result.success) {
         setReportData(result.data);
@@ -144,99 +144,301 @@ export default function Reports() {
     }
 
     try {
-  // dynamic import can return the module object or the default export depending on bundler
-  const mod = await import('xlsx');
-  // prefer default if present, otherwise use module namespace
-  const XLSX = (mod && ((mod as any).default || mod)) as any;
+      // dynamic import can return the module object or the default export depending on bundler
+      const mod = await import('xlsx');
+      // prefer default if present, otherwise use module namespace
+      const XLSX = (mod && ((mod as any).default || mod)) as any;
 
-  const wb = XLSX.utils.book_new();
-  const exportTime = new Date().toLocaleString('vi-VN');
+      const wb = XLSX.utils.book_new();
+      const exportTime = new Date().toLocaleString('vi-VN');
 
-      // build per-type sheets
-      const pushSheet = (name: string, aoa: Array<Array<string | number>>) => {
+      // build per-type sheets với styling
+      const pushSheet = (name: string, aoa: Array<Array<string | number>>, options?: any) => {
         const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+        // Set column widths
+        const colWidths = options?.colWidths || [{ wch: 30 }, { wch: 20 }, { wch: 20 }, { wch: 20 }];
+        ws['!cols'] = colWidths;
+
+        // Merge cells for headers if specified
+        if (options?.merges) {
+          ws['!merges'] = options.merges;
+        }
+
         XLSX.utils.book_append_sheet(wb, ws, name);
+      };
+
+      const formatCurrencyForExcel = (num: number) => {
+        return new Intl.NumberFormat('vi-VN').format(num) + ' ₫';
       };
 
       if (type === 'overview') {
         const rows: Array<Array<string | number>> = [];
-        rows.push(['Thời gian xuất', exportTime]);
+
+        // Header section
+        rows.push(['LALA HOUSE - BÁO CÁO TỔNG QUAN']);
+        rows.push([`Kỳ báo cáo: ${startDate} đến ${endDate}`]);
+        rows.push([`Thời gian xuất: ${exportTime}`]);
         rows.push([]);
-        rows.push(['BÁO CÁO - TỔNG QUAN']);
-        rows.push([`Từ: ${startDate}`, `Đến: ${endDate}`]);
+
+        // KPIs Summary với format đẹp
+        rows.push(['CHỈ SỐ KINH DOANH CHÍNH', '', '', '']);
+        rows.push(['Chỉ số', 'Giá trị', 'Đơn vị', 'Ghi chú']);
+        rows.push(['Tổng doanh thu', reportData.totalRevenue, '₫', formatCurrencyForExcel(reportData.totalRevenue)]);
+        rows.push(['Tổng đặt phòng', reportData.totalBookings, 'booking', '']);
+        rows.push(['Tổng khách hàng', reportData.totalCustomers, 'khách', '']);
+        rows.push(['Khách hàng mới', reportData.newCustomers, 'khách', '']);
+        rows.push(['Tiền cọc CSVC', reportData.totalDeposit, '₫', formatCurrencyForExcel(reportData.totalDeposit)]);
         rows.push([]);
-        rows.push(['KPIs', 'Giá trị']);
-        rows.push(['Tổng doanh thu', reportData.totalRevenue]);
-        rows.push(['Tổng đặt phòng', reportData.totalBookings]);
-        rows.push(['Tổng khách hàng', reportData.totalCustomers]);
-        rows.push(['Tiền cọc', reportData.totalDeposit]);
-        rows.push(['Khách mới', reportData.newCustomers]);
-        pushSheet('Overview', rows);
+
+        // Phòng
+        rows.push(['THỐNG KÊ PHÒNG', '', '', '']);
+        rows.push(['Chỉ số', 'Giá trị', 'Phần trăm', '']);
+        rows.push(['Tổng số phòng', reportData.totalRooms, '100%', '']);
+        rows.push(['Phòng đang sử dụng', reportData.occupiedRooms, `${reportData.occupancyRate}%`, '']);
+        rows.push(['Phòng trống', reportData.availableRooms, `${100 - reportData.occupancyRate}%`, '']);
+        rows.push([]);
+
+        // Đặt phòng
+        rows.push(['CHI TIẾT ĐẶT PHÒNG', '', '', '']);
+        rows.push(['Loại', 'Số lượng', 'Tỷ lệ', '']);
+        rows.push(['Đã xác nhận', reportData.confirmedBookings, `${((reportData.confirmedBookings / reportData.totalBookings) * 100).toFixed(1)}%`, '']);
+        rows.push(['Đã nhận phòng', reportData.checkedInBookings, `${((reportData.checkedInBookings / reportData.totalBookings) * 100).toFixed(1)}%`, '']);
+        rows.push(['Đã trả phòng', reportData.checkedOutBookings, `${((reportData.checkedOutBookings / reportData.totalBookings) * 100).toFixed(1)}%`, '']);
+        rows.push(['Đã hủy', reportData.cancelledBookings, `${reportData.cancelRate.toFixed(1)}%`, '']);
+        rows.push([]);
+
+        // Doanh thu
+        rows.push(['PHÂN TÍCH DOANH THU', '', '', '']);
+        rows.push(['Chỉ số', 'Giá trị (₫)', '', '']);
+        rows.push(['Doanh thu TB/booking', reportData.averageBookingValue, '', formatCurrencyForExcel(reportData.averageBookingValue)]);
+        rows.push(['Doanh thu TB/đêm', reportData.averageNightlyRate, '', formatCurrencyForExcel(reportData.averageNightlyRate)]);
+        rows.push(['Tổng số đêm', reportData.totalNights, 'đêm', '']);
+
+        pushSheet('Tổng quan', rows, {
+          colWidths: [{ wch: 30 }, { wch: 20 }, { wch: 20 }, { wch: 30 }],
+          merges: [
+            { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }, // Title
+            { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } }, // Date range
+            { s: { r: 4, c: 0 }, e: { r: 4, c: 3 } }, // KPIs header
+            { s: { r: 13, c: 0 }, e: { r: 13, c: 3 } }, // Phòng header
+            { s: { r: 18, c: 0 }, e: { r: 18, c: 3 } }, // Đặt phòng header
+            { s: { r: 24, c: 0 }, e: { r: 24, c: 3 } }  // Doanh thu header
+          ]
+        });
       }
 
       if (type === 'revenue') {
         const rows: Array<Array<string | number>> = [];
-        rows.push(['Thời gian xuất', exportTime]);
+
+        // Header
+        rows.push(['LALA HOUSE - BÁO CÁO DOANH THU']);
+        rows.push([`Kỳ báo cáo: ${startDate} đến ${endDate}`]);
+        rows.push([`Thời gian xuất: ${exportTime}`]);
         rows.push([]);
-        rows.push(['BÁO CÁO - DOANH THU']);
-        rows.push([`Từ: ${startDate}`, `Đến: ${endDate}`]);
+
+        // Tổng quan doanh thu
+        rows.push(['TỔNG QUAN DOANH THU', '', '', '']);
+        rows.push(['Chỉ số', 'Giá trị', '', 'Định dạng']);
+        rows.push(['Tổng doanh thu', reportData.totalRevenue, '', formatCurrencyForExcel(reportData.totalRevenue)]);
+        rows.push(['Doanh thu TB/booking', reportData.averageBookingValue, '', formatCurrencyForExcel(reportData.averageBookingValue)]);
+        rows.push(['Doanh thu TB/đêm', reportData.averageNightlyRate, '', formatCurrencyForExcel(reportData.averageNightlyRate)]);
+        rows.push(['Tỷ lệ tăng trưởng', reportData.growthRate, '%', '']);
+        rows.push(['Tổng số booking', reportData.totalBookings, 'booking', '']);
+        rows.push(['Tổng số đêm', reportData.totalNights, 'đêm', '']);
         rows.push([]);
-        rows.push(['Ngày', 'Doanh thu', 'Số đặt phòng']);
-        (reportData.dailyRevenue || []).forEach((d: any) => rows.push([d.date, d.revenue, d.bookings]));
+
+        // Doanh thu theo ngày
+        rows.push(['DOANH THU THEO NGÀY', '', '', '']);
+        rows.push(['Ngày', 'Doanh thu (₫)', 'Số booking', 'Doanh thu TB']);
+
+        let totalDaily = 0;
+        let totalBookingsDaily = 0;
+
+        (reportData.dailyRevenue || []).forEach((d: any) => {
+          totalDaily += d.revenue;
+          totalBookingsDaily += d.bookings;
+          const avgDaily = d.bookings > 0 ? Math.round(d.revenue / d.bookings) : 0;
+          rows.push([
+            d.date,
+            d.revenue,
+            d.bookings,
+            formatCurrencyForExcel(avgDaily)
+          ]);
+        });
+
+        // Tổng cộng
         rows.push([]);
-        rows.push(['Chỉ số', 'Giá trị']);
-        rows.push(['Doanh thu trung bình/booking', reportData.averageBookingValue]);
-        rows.push(['Doanh thu trung bình/đêm', reportData.averageNightlyRate]);
-        rows.push(['Tăng trưởng', reportData.growthRate]);
-        pushSheet('Revenue', rows);
+        rows.push(['TỔNG CỘNG', totalDaily, totalBookingsDaily, formatCurrencyForExcel(Math.round(totalDaily / totalBookingsDaily))]);
+
+        pushSheet('Doanh thu', rows, {
+          colWidths: [{ wch: 20 }, { wch: 20 }, { wch: 15 }, { wch: 25 }],
+          merges: [
+            { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
+            { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } },
+            { s: { r: 4, c: 0 }, e: { r: 4, c: 3 } },
+            { s: { r: 13, c: 0 }, e: { r: 13, c: 3 } }
+          ]
+        });
       }
 
       if (type === 'bookings') {
         const rows: Array<Array<string | number>> = [];
-        rows.push(['Thời gian xuất', exportTime]);
+
+        // Header
+        rows.push(['LALA HOUSE - BÁO CÁO ĐẶT PHÒNG']);
+        rows.push([`Kỳ báo cáo: ${startDate} đến ${endDate}`]);
+        rows.push([`Thời gian xuất: ${exportTime}`]);
         rows.push([]);
-        rows.push(['BÁO CÁO - ĐẶT PHÒNG']);
-        rows.push([`Từ: ${startDate}`, `Đến: ${endDate}`]);
+
+        // Tổng quan
+        rows.push(['TỔNG QUAN ĐẶT PHÒNG', '', '', '']);
+        rows.push(['Chỉ số', 'Số lượng', 'Tỷ lệ (%)', '']);
+        rows.push(['Tổng đặt phòng', reportData.totalBookings, '100.0', '']);
+        rows.push(['Đã xác nhận', reportData.confirmedBookings, ((reportData.confirmedBookings / reportData.totalBookings) * 100).toFixed(1), '']);
+        rows.push(['Đã nhận phòng', reportData.checkedInBookings, ((reportData.checkedInBookings / reportData.totalBookings) * 100).toFixed(1), '']);
+        rows.push(['Đã trả phòng', reportData.checkedOutBookings, ((reportData.checkedOutBookings / reportData.totalBookings) * 100).toFixed(1), '']);
+        rows.push(['Đã hủy', reportData.cancelledBookings, reportData.cancelRate.toFixed(1), '⚠️ Tỷ lệ hủy']);
         rows.push([]);
-        rows.push(['Trạng thái', 'Số lượng']);
-        (reportData.bookingStatus || []).forEach((s: any) => rows.push([s.status, s.count]));
+
+        // Trạng thái chi tiết
+        rows.push(['PHÂN BỔ THEO TRẠNG THÁI', '', '', '']);
+        rows.push(['Trạng thái', 'Số lượng', 'Tỷ lệ (%)', 'Biểu đồ']);
+
+        (reportData.bookingStatus || []).forEach((s: any) => {
+          const percentage = ((s.count / reportData.totalBookings) * 100).toFixed(1);
+          const barChart = '█'.repeat(Math.round(s.count / reportData.totalBookings * 20));
+          rows.push([s.status, s.count, percentage, barChart]);
+        });
+
         rows.push([]);
-        rows.push(['Loại', 'Giá trị']);
-        rows.push(['Đã xác nhận', reportData.confirmedBookings]);
-        rows.push(['Đã hủy', reportData.cancelledBookings]);
-        rows.push(['Đã check-in', reportData.checkedInBookings]);
-        rows.push(['Đã check-out', reportData.checkedOutBookings]);
-        pushSheet('Bookings', rows);
+
+        // Hiệu suất
+        rows.push(['ĐÁNH GIÁ HIỆU SUẤT', '', '', '']);
+        rows.push(['Tiêu chí', 'Giá trị', 'Đánh giá', '']);
+        rows.push(['Tỷ lệ hủy', reportData.cancelRate.toFixed(1) + '%', reportData.cancelRate < 10 ? '✓ Tốt' : reportData.cancelRate < 20 ? '⚠️ Trung bình' : '✗ Cần cải thiện', '']);
+        rows.push(['Tỷ lệ xác nhận', ((reportData.confirmedBookings / reportData.totalBookings) * 100).toFixed(1) + '%', '✓ Tracking', '']);
+        rows.push(['Tỷ lệ hoàn thành', ((reportData.checkedOutBookings / reportData.totalBookings) * 100).toFixed(1) + '%', '✓ Tracking', '']);
+
+        pushSheet('Đặt phòng', rows, {
+          colWidths: [{ wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 30 }],
+          merges: [
+            { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
+            { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } },
+            { s: { r: 4, c: 0 }, e: { r: 4, c: 3 } },
+            { s: { r: 12, c: 0 }, e: { r: 12, c: 3 } },
+            { s: { r: 12 + (reportData.bookingStatus?.length || 0) + 2, c: 0 }, e: { r: 12 + (reportData.bookingStatus?.length || 0) + 2, c: 3 } }
+          ]
+        });
       }
 
       if (type === 'rooms') {
         const rows: Array<Array<string | number>> = [];
-        rows.push(['Thời gian xuất', exportTime]);
+
+        // Header
+        rows.push(['LALA HOUSE - BÁO CÁO PHÒNG']);
+        rows.push([`Kỳ báo cáo: ${startDate} đến ${endDate}`]);
+        rows.push([`Thời gian xuất: ${exportTime}`]);
         rows.push([]);
-        rows.push(['BÁO CÁO - PHÒNG']);
-        rows.push([`Từ: ${startDate}`, `Đến: ${endDate}`]);
+
+        // Tổng quan phòng
+        rows.push(['TỔNG QUAN PHÒNG', '', '', '']);
+        rows.push(['Chỉ số', 'Số lượng', 'Tỷ lệ (%)', 'Trạng thái']);
+        rows.push(['Tổng số phòng', reportData.totalRooms, '100.0', '📊 Tổng']);
+        rows.push(['Phòng đang sử dụng', reportData.occupiedRooms, reportData.occupancyRate, '🔴 Đang dùng']);
+        rows.push(['Phòng trống', reportData.availableRooms, (100 - reportData.occupancyRate).toFixed(1), '🟢 Trống']);
         rows.push([]);
-        rows.push(['Tổng phòng', 'Phòng đang sử dụng', 'Phòng trống', 'Tỷ lệ sử dụng (%)']);
-        rows.push([reportData.totalRooms, reportData.occupiedRooms, reportData.availableRooms, reportData.occupancyRate]);
+
+        // Đánh giá tỷ lệ sử dụng
+        rows.push(['ĐÁNH GIÁ TỶ LỆ SỬ DỤNG', '', '', '']);
+        rows.push(['Tiêu chí', 'Giá trị', 'Đánh giá', '']);
+        const occupancyStatus = reportData.occupancyRate >= 80 ? '✓ Rất tốt' :
+          reportData.occupancyRate >= 60 ? '✓ Tốt' :
+            reportData.occupancyRate >= 40 ? '⚠️ Trung bình' : '✗ Cần cải thiện';
+        rows.push(['Tỷ lệ sử dụng phòng', reportData.occupancyRate + '%', occupancyStatus, '']);
+        rows.push(['Tổng số đêm', reportData.totalNights, 'đêm', '']);
+        rows.push(['Đêm TB/phòng', (reportData.totalNights / reportData.totalRooms).toFixed(1), 'đêm', '']);
         rows.push([]);
-        rows.push(['Top phòng', 'Số lượt đặt', 'Doanh thu']);
-        (reportData.topRooms || []).forEach((r: any) => rows.push([r.name, r.bookings, r.revenue]));
-        pushSheet('Rooms', rows);
+
+        // Top phòng
+        rows.push(['TOP PHÒNG DOANH THU CAO', '', '', '']);
+        rows.push(['Phòng', 'Số lượt đặt', 'Doanh thu (₫)', 'Doanh thu TB/lượt']);
+
+        (reportData.topRooms || []).forEach((r: any, index: number) => {
+          const avgPerBooking = r.bookings > 0 ? Math.round(r.revenue / r.bookings) : 0;
+          const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '  ';
+          rows.push([
+            medal + ' ' + r.name,
+            r.bookings,
+            r.revenue,
+            formatCurrencyForExcel(avgPerBooking)
+          ]);
+        });
+
+        pushSheet('Phòng', rows, {
+          colWidths: [{ wch: 35 }, { wch: 15 }, { wch: 20 }, { wch: 25 }],
+          merges: [
+            { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
+            { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } },
+            { s: { r: 4, c: 0 }, e: { r: 4, c: 3 } },
+            { s: { r: 10, c: 0 }, e: { r: 10, c: 3 } },
+            { s: { r: 15, c: 0 }, e: { r: 15, c: 3 } }
+          ]
+        });
       }
 
       if (type === 'customers') {
         const rows: Array<Array<string | number>> = [];
-        rows.push(['Thời gian xuất', exportTime]);
+
+        // Header
+        rows.push(['LALA HOUSE - BÁO CÁO KHÁCH HÀNG']);
+        rows.push([`Kỳ báo cáo: ${startDate} đến ${endDate}`]);
+        rows.push([`Thời gian xuất: ${exportTime}`]);
         rows.push([]);
-        rows.push(['BÁO CÁO - KHÁCH HÀNG']);
-        rows.push([`Từ: ${startDate}`, `Đến: ${endDate}`]);
+
+        // Tổng quan khách hàng
+        rows.push(['TỔNG QUAN KHÁCH HÀNG', '', '', '']);
+        rows.push(['Chỉ số', 'Số lượng', 'Tỷ lệ (%)', 'Ghi chú']);
+        rows.push(['Tổng khách hàng', reportData.totalCustomers, '100.0', 'Tổng cộng']);
+        rows.push(['Khách hàng mới', reportData.newCustomers, ((reportData.newCustomers / reportData.totalCustomers) * 100).toFixed(1), '🆕 Trong kỳ này']);
+        rows.push(['Khách hàng cũ', reportData.totalCustomers - reportData.newCustomers, (((reportData.totalCustomers - reportData.newCustomers) / reportData.totalCustomers) * 100).toFixed(1), '🔄 Quay lại']);
         rows.push([]);
-        rows.push(['Tổng khách hàng', reportData.totalCustomers]);
-        rows.push(['Khách mới', reportData.newCustomers]);
+
+        // Phân tích tăng trưởng
+        rows.push(['PHÂN TÍCH TĂNG TRƯỞNG', '', '', '']);
+        rows.push(['Tiêu chí', 'Giá trị', 'Đánh giá', '']);
+        const newCustomerRate = (reportData.newCustomers / reportData.totalCustomers) * 100;
+        const growthStatus = newCustomerRate >= 30 ? '✓ Tăng trưởng tốt' :
+          newCustomerRate >= 15 ? '✓ Ổn định' : '⚠️ Cần chú ý';
+        rows.push(['Tỷ lệ khách mới', newCustomerRate.toFixed(1) + '%', growthStatus, '']);
+        rows.push(['Booking TB/khách', (reportData.totalBookings / reportData.totalCustomers).toFixed(1), 'booking', '']);
+        rows.push(['Doanh thu TB/khách', Math.round(reportData.totalRevenue / reportData.totalCustomers), formatCurrencyForExcel(Math.round(reportData.totalRevenue / reportData.totalCustomers)), '']);
         rows.push([]);
-        rows.push(['Nguồn đặt phòng', 'Số lượng']);
-        (reportData.bookingSources || []).forEach((s: any) => rows.push([s.source, s.count]));
-        pushSheet('Customers', rows);
+
+        // Nguồn đặt phòng
+        rows.push(['NGUỒN ĐẶT PHÒNG', '', '', '']);
+        rows.push(['Kênh', 'Số lượng', 'Tỷ lệ (%)', 'Biểu đồ']);
+
+        const totalSources = (reportData.bookingSources || []).reduce((sum: number, s: any) => sum + s.count, 0);
+        (reportData.bookingSources || []).forEach((s: any) => {
+          const percentage = totalSources > 0 ? ((s.count / totalSources) * 100).toFixed(1) : '0.0';
+          const barChart = '█'.repeat(Math.round((s.count / totalSources) * 20));
+          rows.push([s.source, s.count, percentage, barChart]);
+        });
+
+        rows.push([]);
+        rows.push(['TỔNG CỘNG', totalSources, '100.0', '']);
+
+        pushSheet('Khách hàng', rows, {
+          colWidths: [{ wch: 30 }, { wch: 15 }, { wch: 15 }, { wch: 30 }],
+          merges: [
+            { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
+            { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } },
+            { s: { r: 4, c: 0 }, e: { r: 4, c: 3 } },
+            { s: { r: 10, c: 0 }, e: { r: 10, c: 3 } },
+            { s: { r: 15, c: 0 }, e: { r: 15, c: 3 } }
+          ]
+        });
       }
 
       const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
@@ -459,7 +661,7 @@ export default function Reports() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-gray-900">Báo cáo - Thống kê</h1>
-        
+
         {/* Export Buttons */}
         <div className="flex space-x-3">
           <button
@@ -524,7 +726,7 @@ export default function Reports() {
           </div>
 
           <div className="flex items-end">
-            <button 
+            <button
               onClick={fetchReportData}
               className="w-full px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
             >

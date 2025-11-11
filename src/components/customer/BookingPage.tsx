@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Calendar, Users, MapPin, Home, Filter, RefreshCw, Upload, X } from 'lucide-react';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
-import { getRoomImage, formatCurrency } from '../../utils/imageUtils';
+import { getRoomImage, getRoomImages, formatCurrency } from '../../utils/imageUtils';
 import { uploadToCloudinary } from '../../utils/cloudinary';
 import { toast } from 'sonner@2.0.3';
 import PaymentQRDialog from '../PaymentQRDialog';
+import RoomImageCarousel from './RoomImageCarousel';
 
 const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-faeb1932`;
 const DEPOSIT_AMOUNT = 500000;
@@ -528,26 +529,12 @@ export default function BookingPage() {
                         } ${room.trang_thai !== 'trong' ? 'opacity-60 cursor-not-allowed' : ''}`}
                       style={selectedRoom?.id === room.id ? { borderColor: '#0f7072', boxShadow: '0 0 0 2px #0f7072' } : {}}
                     >
-                      <div className="relative h-48">
-                        <img
-                          src={getRoomImage(room.id)}
+                      <div className="relative">
+                        <RoomImageCarousel
+                          images={getRoomImages(room.id, 4)}
                           alt={room.ma_phong || 'Phòng LaLa House'}
-                          loading="lazy"
-                          onError={(e) => {
-                            const img = e.currentTarget as HTMLImageElement;
-                            if (!img.dataset.fallbackApplied) {
-                              img.dataset.fallbackApplied = '1';
-                              // Log room info to help debug which records failed
-                              try {
-                                // eslint-disable-next-line no-console
-                                console.warn('Room image failed, applying fallback', { id: room.id, ma_phong: room.ma_phong });
-                              } catch { }
-                              img.src = getRoomImage(null);
-                            }
-                          }}
-                          className="w-full h-full object-cover"
                         />
-                        <div className="absolute top-3 right-3">
+                        <div className="absolute top-3 right-3 z-10">
                           {getStatusBadge(room.trang_thai)}
                         </div>
                       </div>
