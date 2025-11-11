@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Calendar, Users, MapPin, Home, Filter, RefreshCw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Users, MapPin, Home, Filter, RefreshCw, Upload, X } from 'lucide-react';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { getRoomImage, formatCurrency } from '../../utils/imageUtils';
+import { uploadToCloudinary } from '../../utils/cloudinary';
 import { toast } from 'sonner@2.0.3';
+import PaymentQRDialog from '../PaymentQRDialog';
 
 const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-faeb1932`;
 const DEPOSIT_AMOUNT = 500000;
@@ -39,6 +41,17 @@ export default function BookingPage() {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [notes, setNotes] = useState('');
+
+  // CCCD Images
+  const [cccdFront, setCccdFront] = useState<File | null>(null);
+  const [cccdBack, setCccdBack] = useState<File | null>(null);
+  const [cccdFrontPreview, setCccdFrontPreview] = useState<string>('');
+  const [cccdBackPreview, setCccdBackPreview] = useState<string>('');
+  const [uploadingCccd, setUploadingCccd] = useState(false);
+
+  // Payment QR Dialog
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [bookingData, setBookingData] = useState<any>(null);
 
   useEffect(() => {
     fetchData();
@@ -219,6 +232,40 @@ export default function BookingPage() {
     }
   };
 
+  const handleCccdUpload = (file: File, side: 'front' | 'back') => {
+    if (!file.type.startsWith('image/')) {
+      toast.error('Vui lòng chọn file ảnh');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('File ảnh không được vượt quá 5MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (side === 'front') {
+        setCccdFront(file);
+        setCccdFrontPreview(reader.result as string);
+      } else {
+        setCccdBack(file);
+        setCccdBackPreview(reader.result as string);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeCccdImage = (side: 'front' | 'back') => {
+    if (side === 'front') {
+      setCccdFront(null);
+      setCccdFrontPreview('');
+    } else {
+      setCccdBack(null);
+      setCccdBackPreview('');
+    }
+  };
+
   const handleSubmitBooking = async () => {
     if (!fullName || !phone) {
       toast.error('Vui lòng nhập đầy đủ họ tên và số điện thoại');
@@ -243,12 +290,41 @@ export default function BookingPage() {
 
     setLoading(true);
     try {
+      // Upload CCCD images first if provided
+      let cccdFrontUrl = null;
+      let cccdBackUrl = null;
+
+      if (cccdFront || cccdBack) {
+        setUploadingCccd(true);
+        toast.info('Đang upload ảnh CCCD...');
+
+        try {
+          if (cccdFront) {
+            cccdFrontUrl = await uploadToCloudinary(cccdFront, 'cccd');
+          }
+          if (cccdBack) {
+            cccdBackUrl = await uploadToCloudinary(cccdBack, 'cccd');
+          }
+          toast.success('Upload ảnh CCCD thành công!');
+        } catch (error) {
+          console.error('Error uploading CCCD:', error);
+          toast.error('Không thể upload ảnh CCCD. Vui lòng thử lại.');
+          setUploadingCccd(false);
+          setLoading(false);
+          return;
+        } finally {
+          setUploadingCccd(false);
+        }
+      }
+
       // Send booking data with customer info - server will handle customer creation
       const bookingData = {
         // Customer info (server will find or create customer)
         ho_ten: fullName,
         sdt: phone,
         email: email || null,
+        cccd_mat_truoc: cccdFrontUrl,
+        cccd_mat_sau: cccdBackUrl,
 
         // Booking info
         id_phong: selectedRoom.id,
@@ -265,6 +341,14 @@ export default function BookingPage() {
       };
 
       console.log('Creating booking with data:', bookingData);
+      console.log('CCCD URLs - Front:', cccdFrontUrl, 'Back:', cccdBackUrl);
+
+      // DEBUG: Verify CCCD data before sending
+      if (cccdFrontUrl || cccdBackUrl) {
+        console.log('✅ CCCD data is being sent to server');
+      } else {
+        console.log('⚠️ No CCCD data to send');
+      }
 
       const createBookingRes = await fetch(`${API_URL}/dat-phong`, {
         method: 'POST',
@@ -281,28 +365,22 @@ export default function BookingPage() {
       if (bookingResult.success) {
         const bookingCode = bookingResult.data.ma_dat;
 
-        // Show detailed success notification
-        toast.success(
-          <div className="space-y-2">
-            <div className="font-semibold">Đặt phòng thành công!</div>
-            <div className="text-sm">
-              <div>📋 Mã đặt phòng: <span className="font-mono font-semibold">{bookingCode}</span></div>
-              <div>🏠 Phòng: {selectedRoom.loai_phong?.ten_loai} - {selectedRoom.ma_phong}</div>
-              <div>💰 Tổng tiền: {formatCurrency(calculateTotal() + DEPOSIT_AMOUNT)}</div>
-            </div>
-            <div className="text-xs text-gray-600 mt-2">
-              Vui lòng lưu lại mã đặt phòng để tra cứu sau
-            </div>
-          </div>,
-          {
-            duration: 6000,
+        // Store booking data for QR dialog
+        setBookingData({
+          bookingCode: bookingCode,
+          amount: calculateTotal() + DEPOSIT_AMOUNT,
+          bookingDetails: {
+            roomName: `${selectedRoom.loai_phong?.ten_loai} - ${selectedRoom.ma_phong}`,
+            checkIn: new Date(checkIn).toLocaleString('vi-VN'),
+            checkOut: new Date(checkOut).toLocaleString('vi-VN')
           }
-        );
+        });
 
-        // Redirect to lookup page with booking code
-        setTimeout(() => {
-          navigate(`/lookup?code=${bookingCode}`);
-        }, 3000);
+        // Show payment QR dialog
+        setShowPaymentDialog(true);
+
+        // Show success toast
+        toast.success('Đặt phòng thành công! Vui lòng thanh toán để hoàn tất.');
       } else {
         throw new Error(bookingResult.error || 'Không thể tạo đơn đặt phòng');
       }
@@ -641,7 +719,7 @@ export default function BookingPage() {
                 />
               </div>
 
-              <div>
+              <div className="md:col-span-2">
                 <label className="block text-sm text-gray-700 mb-2">Ghi chú</label>
                 <textarea
                   value={notes}
@@ -653,11 +731,87 @@ export default function BookingPage() {
               </div>
             </div>
 
-            <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <p className="text-sm text-yellow-800">
-                ⚠️ Vui lòng mang theo CCCD/CMND khi đến nhận phòng để làm thủ tục check-in
+            {/* CCCD Upload Section */}
+            <div className="mt-6 border-t pt-6">
+              <h3 className="text-gray-900 mb-4 font-medium">Upload ảnh CCCD/CMND (Tùy chọn)</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Upload ảnh CCCD để xác minh nhanh hơn khi check-in. Ảnh sẽ được lưu trữ an toàn.
               </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* CCCD Mặt trước */}
+                <div>
+                  <label className="block text-sm text-gray-700 mb-2">CCCD Mặt trước</label>
+                  {cccdFrontPreview ? (
+                    <div className="relative">
+                      <img
+                        src={cccdFrontPreview}
+                        alt="CCCD mặt trước"
+                        className="w-full h-48 object-cover rounded-lg border-2 border-gray-300"
+                      />
+                      <button
+                        onClick={() => removeCccdImage('front')}
+                        className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
+                      <Upload className="w-8 h-8 text-gray-400 mb-2" />
+                      <span className="text-sm text-gray-600">Click để chọn ảnh</span>
+                      <span className="text-xs text-gray-500 mt-1">PNG, JPG (max 5MB)</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => e.target.files?.[0] && handleCccdUpload(e.target.files[0], 'front')}
+                      />
+                    </label>
+                  )}
+                </div>
+
+                {/* CCCD Mặt sau */}
+                <div>
+                  <label className="block text-sm text-gray-700 mb-2">CCCD Mặt sau</label>
+                  {cccdBackPreview ? (
+                    <div className="relative">
+                      <img
+                        src={cccdBackPreview}
+                        alt="CCCD mặt sau"
+                        className="w-full h-48 object-cover rounded-lg border-2 border-gray-300"
+                      />
+                      <button
+                        onClick={() => removeCccdImage('back')}
+                        className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
+                      <Upload className="w-8 h-8 text-gray-400 mb-2" />
+                      <span className="text-sm text-gray-600">Click để chọn ảnh</span>
+                      <span className="text-xs text-gray-500 mt-1">PNG, JPG (max 5MB)</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => e.target.files?.[0] && handleCccdUpload(e.target.files[0], 'back')}
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
             </div>
+
+            {(cccdFront || cccdBack) && (
+              <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="text-sm text-yellow-800">
+                  ⚠️ Đã upload ảnh CCCD. Bạn vẫn cần mang theo CCCD gốc khi check-in.
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -674,17 +828,32 @@ export default function BookingPage() {
 
           <button
             onClick={handleNextStep}
-            disabled={loading || (step === 1 && !selectedRoom)}
+            disabled={loading || uploadingCccd || (step === 1 && !selectedRoom)}
             className="flex items-center gap-2 px-6 py-3 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             style={{ backgroundColor: '#0f7072' }}
             onMouseEnter={(e) => !e.currentTarget.disabled && (e.currentTarget.style.backgroundColor = '#0d5f61')}
             onMouseLeave={(e) => !e.currentTarget.disabled && (e.currentTarget.style.backgroundColor = '#0f7072')}
           >
-            {step === 3 ? (loading ? 'Đang xử lý...' : 'Xác nhận đặt phòng') : 'Tiếp tục'}
+            {step === 3 ? (
+              uploadingCccd ? 'Đang upload CCCD...' :
+                loading ? 'Đang xử lý...' :
+                  'Xác nhận đặt phòng'
+            ) : 'Tiếp tục'}
             {step < 3 && <ChevronRight className="w-5 h-5" />}
           </button>
         </div>
       </div>
+
+      {/* Payment QR Dialog */}
+      {bookingData && (
+        <PaymentQRDialog
+          open={showPaymentDialog}
+          onOpenChange={setShowPaymentDialog}
+          bookingCode={bookingData.bookingCode}
+          amount={bookingData.amount}
+          bookingDetails={bookingData.bookingDetails}
+        />
+      )}
     </div>
   );
 }

@@ -183,11 +183,11 @@ app.get('/make-server-faeb1932/phong', async (c) => {
   try {
     const loaiPhongId = c.req.query('loai_phong_id');
     const trangThai = c.req.query('trang_thai');
-    
+
     const filters: any = {};
     if (loaiPhongId) filters.loaiPhongId = loaiPhongId;
     if (trangThai) filters.trangThai = trangThai;
-    
+
     const data = await sql.getAllPhong(filters);
     return c.json({
       success: true,
@@ -278,14 +278,14 @@ app.get('/make-server-faeb1932/khach-hang/:phone', async (c) => {
   try {
     const phone = c.req.param('phone');
     const data = await sql.getKhachHangByPhone(phone);
-    
+
     if (!data) {
       return c.json({
         success: false,
         error: 'Không tìm thấy khách hàng'
       }, 404);
     }
-    
+
     return c.json({
       success: true,
       data
@@ -302,9 +302,9 @@ app.get('/make-server-faeb1932/khach-hang/:phone', async (c) => {
 app.post('/make-server-faeb1932/khach-hang', async (c) => {
   try {
     const body = await c.req.json();
-    
+
     console.log('Creating khach_hang with data:', JSON.stringify(body, null, 2));
-    
+
     // Validate required fields
     if (!body.ho_ten || body.ho_ten.trim() === '') {
       console.error('Validation error: ho_ten is required but got:', body.ho_ten);
@@ -313,7 +313,7 @@ app.post('/make-server-faeb1932/khach-hang', async (c) => {
         error: 'Họ tên là bắt buộc'
       }, 400);
     }
-    
+
     if (!body.sdt || body.sdt.trim() === '') {
       console.error('Validation error: sdt is required but got:', body.sdt);
       return c.json({
@@ -321,10 +321,12 @@ app.post('/make-server-faeb1932/khach-hang', async (c) => {
         error: 'Số điện thoại là bắt buộc'
       }, 400);
     }
-    
+
     const data = await sql.createKhachHang(body);
     console.log('Created khach_hang successfully:', data.id);
-    
+    // DEBUG: print full created customer record (helps verify cccd fields)
+    console.log('DEBUG created khach_hang record:', JSON.stringify(data, null, 2));
+
     return c.json({
       success: true,
       data,
@@ -367,13 +369,13 @@ app.get('/make-server-faeb1932/dat-phong', async (c) => {
     const startDate = c.req.query('start_date');
     const endDate = c.req.query('end_date');
     const kenhDat = c.req.query('kenh_dat');
-    
+
     const filters: any = {};
     if (trangThai) filters.trangThai = trangThai;
     if (startDate) filters.startDate = startDate;
     if (endDate) filters.endDate = endDate;
     if (kenhDat) filters.kenhDat = kenhDat;
-    
+
     const data = await sql.getAllDatPhong(filters);
     return c.json({
       success: true,
@@ -392,14 +394,14 @@ app.get('/make-server-faeb1932/dat-phong/ma/:maDat', async (c) => {
   try {
     const maDat = c.req.param('maDat');
     const data = await sql.getDatPhongByMaDat(maDat);
-    
+
     if (!data) {
       return c.json({
         success: false,
         error: 'Không tìm thấy đơn đặt phòng'
       }, 404);
     }
-    
+
     return c.json({
       success: true,
       data
@@ -433,17 +435,17 @@ app.get('/make-server-faeb1932/dat-phong/khach-hang/:khachHangId', async (c) => 
 app.post('/make-server-faeb1932/dat-phong', async (c) => {
   try {
     const body = await c.req.json();
-    
+
     console.log('Creating booking with data:', JSON.stringify(body, null, 2));
-    
+
     // Generate booking code if not provided
     if (!body.ma_dat) {
       body.ma_dat = generateBookingCode();
     }
-    
+
     // Determine customer ID
     let customerId = body.id_khach_hang;
-    
+
     // If no customer ID provided, try to find or create customer
     if (!customerId) {
       if (!body.sdt || !body.ho_ten) {
@@ -453,23 +455,57 @@ app.post('/make-server-faeb1932/dat-phong', async (c) => {
           error: 'Thiếu thông tin khách hàng (số điện thoại hoặc họ tên)'
         }, 400);
       }
-      
+
       let khachHang = await sql.getKhachHangByPhone(body.sdt);
       if (!khachHang) {
+        // Create new customer
         console.log('Creating new customer with ho_ten:', body.ho_ten, 'sdt:', body.sdt);
+        console.log('CCCD data from request - mat_truoc:', body.cccd_mat_truoc, 'mat_sau:', body.cccd_mat_sau);
         khachHang = await sql.createKhachHang({
           ho_ten: body.ho_ten,
           sdt: body.sdt,
           email: body.email || null,
           dia_chi: body.dia_chi || null,
-          ghi_chu: body.ghi_chu_khach || null
+          ghi_chu: body.ghi_chu_khach || null,
+          cccd_mat_truoc: body.cccd_mat_truoc || null,
+          cccd_mat_sau: body.cccd_mat_sau || null
         });
+        console.log('DEBUG new khachHang from createKhachHang:', JSON.stringify(khachHang, null, 2));
+      } else {
+        // Customer exists - only update CCCD if new images are provided
+        console.log('Customer exists:', khachHang.ho_ten, '-', khachHang.sdt);
+        console.log('Existing CCCD - mat_truoc:', khachHang.cccd_mat_truoc, 'mat_sau:', khachHang.cccd_mat_sau);
+        console.log('New CCCD from request - mat_truoc:', body.cccd_mat_truoc, 'mat_sau:', body.cccd_mat_sau);
+
+        const updateData: any = {};
+
+        // Only update CCCD if new images are provided
+        if (body.cccd_mat_truoc) {
+          updateData.cccd_mat_truoc = body.cccd_mat_truoc;
+          console.log('Will update cccd_mat_truoc');
+        }
+        if (body.cccd_mat_sau) {
+          updateData.cccd_mat_sau = body.cccd_mat_sau;
+          console.log('Will update cccd_mat_sau');
+        }
+
+        // Only call update if there's something to update
+        if (Object.keys(updateData).length > 0) {
+          console.log('Updating customer CCCD with data:', JSON.stringify(updateData, null, 2));
+          await sql.updateKhachHang(khachHang.id, updateData);
+
+          // Refresh customer data
+          khachHang = await sql.getKhachHangByPhone(body.sdt);
+          console.log('DEBUG refreshed khachHang after update:', JSON.stringify(khachHang, null, 2));
+        } else {
+          console.log('No CCCD update needed, using existing customer data');
+        }
       }
       customerId = khachHang.id;
     }
-    
+
     console.log('Using customer ID:', customerId);
-    
+
     // Create booking
     // Accept ghi_chu coming from either body.ghi_chu (frontend) or body.ghi_chu_khach (legacy)
     const datPhongData = {
@@ -481,23 +517,23 @@ app.post('/make-server-faeb1932/dat-phong', async (c) => {
       so_khach: body.so_khach || 1,
       ghi_chu: body.ghi_chu ?? body.ghi_chu_khach ?? null,
       kenh_dat: body.kenh_dat || 'website',
-      trang_thai: body.trang_thai || 'da_coc',
+      trang_thai: body.trang_thai || 'cho_coc',  // Mặc định: Chờ cọc
       tong_tien: body.tong_tien,
       coc_csvc: body.coc_csvc || 500000
     };
-    
+
     console.log('Creating booking with data:', JSON.stringify(datPhongData, null, 2));
     console.log('Booking note (ghi_chu) value:', datPhongData.ghi_chu);
-    
+
     const data = await sql.createDatPhong(datPhongData);
-    
+
     console.log('Booking created successfully:', data.id);
-    
+
     // Update room status
     await sql.updatePhong(body.id_phong, {
       trang_thai: 'sap_nhan'
     });
-    
+
     return c.json({
       success: true,
       data,
@@ -577,9 +613,9 @@ app.get('/make-server-faeb1932/bookings/lookup', async (c) => {
   try {
     const code = c.req.query('code');
     const phone = c.req.query('phone');
-    
+
     let bookings = [];
-    
+
     if (code) {
       // Search by booking code
       const booking = await sql.getDatPhongByMaDat(code);
@@ -596,10 +632,10 @@ app.get('/make-server-faeb1932/bookings/lookup', async (c) => {
           numberOfGuests: booking.so_khach,
           totalAmount: booking.tong_tien,
           paymentStatus: 'pending',
-          bookingStatus: booking.trang_thai === 'da_coc' ? 'confirmed' : 
-                        booking.trang_thai === 'dang_o' ? 'checked-in' :
-                        booking.trang_thai === 'da_tra' ? 'checked-out' :
-                        booking.trang_thai === 'da_huy' ? 'cancelled' : 'pending',
+          bookingStatus: booking.trang_thai === 'da_coc' ? 'confirmed' :
+            booking.trang_thai === 'dang_o' ? 'checked-in' :
+              booking.trang_thai === 'da_tra' ? 'checked-out' :
+                booking.trang_thai === 'da_huy' ? 'cancelled' : 'pending',
           createdAt: booking.created_at
         }];
       }
@@ -620,15 +656,15 @@ app.get('/make-server-faeb1932/bookings/lookup', async (c) => {
           numberOfGuests: booking.so_khach,
           totalAmount: booking.tong_tien,
           paymentStatus: 'pending',
-          bookingStatus: booking.trang_thai === 'da_coc' ? 'confirmed' : 
-                        booking.trang_thai === 'dang_o' ? 'checked-in' :
-                        booking.trang_thai === 'da_tra' ? 'checked-out' :
-                        booking.trang_thai === 'da_huy' ? 'cancelled' : 'pending',
+          bookingStatus: booking.trang_thai === 'da_coc' ? 'confirmed' :
+            booking.trang_thai === 'dang_o' ? 'checked-in' :
+              booking.trang_thai === 'da_tra' ? 'checked-out' :
+                booking.trang_thai === 'da_huy' ? 'cancelled' : 'pending',
           createdAt: booking.created_at
         }));
       }
     }
-    
+
     return c.json({
       success: true,
       bookings
@@ -647,9 +683,9 @@ app.get('/make-server-faeb1932/bookings/lookup', async (c) => {
 app.post('/make-server-faeb1932/bookings/manual', async (c) => {
   try {
     const formData = await c.req.json();
-    
+
     console.log('Manual booking with data:', JSON.stringify(formData, null, 2));
-    
+
     // Validate required fields
     if (!formData.customerName || !formData.customerPhone) {
       return c.json({
@@ -657,14 +693,14 @@ app.post('/make-server-faeb1932/bookings/manual', async (c) => {
         error: 'Thiếu thông tin khách hàng'
       }, 400);
     }
-    
+
     if (!formData.room || !formData.checkIn || !formData.checkOut) {
       return c.json({
         success: false,
         error: 'Thiếu thông tin đặt phòng'
       }, 400);
     }
-    
+
     // Create/get customer
     let khachHang = await sql.getKhachHangByPhone(formData.customerPhone);
     if (!khachHang) {
@@ -675,7 +711,7 @@ app.post('/make-server-faeb1932/bookings/manual', async (c) => {
         ghi_chu: formData.notes || null
       });
     }
-    
+
     // Calculate total (simplified - in real app should get from room data)
     const start = new Date(formData.checkIn);
     const end = new Date(formData.checkOut);
@@ -683,7 +719,7 @@ app.post('/make-server-faeb1932/bookings/manual', async (c) => {
     const nights = Math.ceil(hours / 24);
     const pricePerNight = 500000;
     const totalAmount = pricePerNight * nights;
-    
+
     // Create booking
     const bookingCode = generateBookingCode();
     const bookingData = {
@@ -699,14 +735,14 @@ app.post('/make-server-faeb1932/bookings/manual', async (c) => {
       tong_tien: totalAmount,
       coc_csvc: 500000
     };
-    
+
     const booking = await sql.createDatPhong(bookingData);
-    
+
     // Update room status
     await sql.updatePhong(formData.room, {
       trang_thai: 'sap_nhan'
     });
-    
+
     return c.json({
       success: true,
       bookingCode,
@@ -746,14 +782,14 @@ app.post('/make-server-faeb1932/thanh-toan', async (c) => {
   try {
     const body = await c.req.json();
     const data = await sql.createThanhToan(body);
-    
+
     // Update booking payment status if paid
     if (body.trang_thai === 'thanh_cong') {
       await sql.updateDatPhong(body.id_dat_phong, {
         trang_thai: 'da_tt'
       });
     }
-    
+
     return c.json({
       success: true,
       data,
@@ -809,14 +845,14 @@ app.get('/make-server-faeb1932/tai-khoan/email/:email', async (c) => {
   try {
     const email = c.req.param('email');
     const data = await sql.getTaiKhoanByEmail(email);
-    
+
     if (!data) {
       return c.json({
         success: false,
         error: 'Không tìm thấy tài khoản'
       }, 404);
     }
-    
+
     return c.json({
       success: true,
       data
@@ -961,11 +997,11 @@ app.get('/make-server-faeb1932/admin/statistics', async (c) => {
   try {
     const startDate = c.req.query('start_date');
     const endDate = c.req.query('end_date');
-    
+
     const filters: any = {};
     if (startDate) filters.startDate = startDate;
     if (endDate) filters.endDate = endDate;
-    
+
     const data = await sql.getStatistics(filters);
     return c.json({
       success: true,
@@ -984,11 +1020,11 @@ app.get('/make-server-faeb1932/admin/reports', async (c) => {
   try {
     const startDate = c.req.query('start_date');
     const endDate = c.req.query('end_date');
-    
+
     const filters: any = {};
     if (startDate) filters.startDate = startDate;
     if (endDate) filters.endDate = endDate;
-    
+
     const data = await sql.getDetailedReports(filters);
     return c.json({
       success: true,
@@ -1008,11 +1044,11 @@ app.get('/make-server-faeb1932/admin/reports/export', async (c) => {
     const format = c.req.query('format') || 'excel';
     const startDate = c.req.query('start_date');
     const endDate = c.req.query('end_date');
-    
+
     // For now, return a simple text response
     // In production, you would generate actual Excel/PDF files
     const message = `Xuất báo cáo ${format.toUpperCase()} từ ${startDate} đến ${endDate}`;
-    
+
     return c.json({
       success: true,
       message,
@@ -1033,11 +1069,11 @@ app.get('/make-server-faeb1932/staff/room-report', async (c) => {
   try {
     const startDate = c.req.query('start_date');
     const endDate = c.req.query('end_date');
-    
+
     const filters: any = {};
     if (startDate) filters.startDate = startDate;
     if (endDate) filters.endDate = endDate;
-    
+
     const data = await sql.getStaffRoomReport(filters);
     return c.json({
       success: true,
@@ -1055,7 +1091,7 @@ app.get('/make-server-faeb1932/staff/room-report', async (c) => {
 app.get('/make-server-faeb1932/staff/daily-report', async (c) => {
   try {
     const reportDate = c.req.query('report_date');
-    
+
     const data = await sql.getDailyFinancialReport(reportDate);
     return c.json({
       success: true,
@@ -1103,12 +1139,12 @@ app.get('/make-server-faeb1932/debug/revenue', async (c) => {
         phong(ma_phong)
       `)
       .order('thoi_gian_nhan', { ascending: false });
-    
+
     if (error) throw error;
-    
+
     console.log('🔍 DEBUG: Total bookings from DB:', bookings.length);
     console.log('🔍 DEBUG: Sample booking:', bookings[0]);
-    
+
     const breakdown = bookings.map(b => ({
       ma_dat: b.ma_dat,
       khach: b.khach_hang?.ho_ten,
@@ -1119,7 +1155,7 @@ app.get('/make-server-faeb1932/debug/revenue', async (c) => {
       coc_csvc: b.coc_csvc,
       ngay: new Date(b.thoi_gian_nhan).toLocaleDateString('vi-VN')
     }));
-    
+
     // Calculate multiple ways to debug
     const totalAll = bookings.reduce((sum, b) => sum + (b.tong_tien || 0), 0);
     const totalExcludeCancelled = bookings
@@ -1128,13 +1164,13 @@ app.get('/make-server-faeb1932/debug/revenue', async (c) => {
     const totalCancelled = bookings
       .filter(b => b.trang_thai === 'da_huy')
       .reduce((sum, b) => sum + (b.tong_tien || 0), 0);
-    
+
     // Also try with parseFloat
     const totalAllParsed = bookings.reduce((sum, b) => sum + (parseFloat(b.tong_tien) || 0), 0);
     const totalExcludeCancelledParsed = bookings
       .filter(b => b.trang_thai !== 'da_huy')
       .reduce((sum, b) => sum + (parseFloat(b.tong_tien) || 0), 0);
-    
+
     const statusCount = {
       da_coc: bookings.filter(b => b.trang_thai === 'da_coc').length,
       da_tt: bookings.filter(b => b.trang_thai === 'da_tt').length,
@@ -1142,11 +1178,11 @@ app.get('/make-server-faeb1932/debug/revenue', async (c) => {
       checkout: bookings.filter(b => b.trang_thai === 'checkout').length,
       da_huy: bookings.filter(b => b.trang_thai === 'da_huy').length,
     };
-    
+
     console.log('💰 Total all bookings:', totalAll);
     console.log('💰 Total exclude cancelled:', totalExcludeCancelled);
     console.log('💰 Total parsed:', totalAllParsed);
-    
+
     return c.json({
       success: true,
       debug: {

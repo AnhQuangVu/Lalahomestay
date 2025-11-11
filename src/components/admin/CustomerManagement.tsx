@@ -7,7 +7,7 @@ import { Textarea } from '../ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Badge } from '../ui/badge';
-import { Search, Plus, Edit, Eye, RefreshCw, Phone, Mail, MapPin } from 'lucide-react';
+import { Search, Plus, Edit, Eye, RefreshCw, Phone, Mail, MapPin, Image as ImageIcon } from 'lucide-react';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { toast } from 'sonner@2.0.3';
 
@@ -18,14 +18,14 @@ export default function CustomerManagement() {
   const [filteredCustomers, setFilteredCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  
+
   // Dialog states
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [customerBookings, setCustomerBookings] = useState<any[]>([]);
-  
+
   // Form state
   const [formData, setFormData] = useState({
     ho_ten: '',
@@ -41,7 +41,7 @@ export default function CustomerManagement() {
 
   useEffect(() => {
     if (searchTerm) {
-      const filtered = customers.filter(c => 
+      const filtered = customers.filter(c =>
         c.ho_ten.toLowerCase().includes(searchTerm.toLowerCase()) ||
         c.sdt.includes(searchTerm) ||
         (c.email && c.email.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -59,7 +59,7 @@ export default function CustomerManagement() {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
       });
       const result = await response.json();
-      
+
       if (result.success) {
         setCustomers(result.data || []);
         setFilteredCustomers(result.data || []);
@@ -80,7 +80,7 @@ export default function CustomerManagement() {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
       });
       const result = await response.json();
-      
+
       if (result.success) {
         setCustomerBookings(result.data || []);
       }
@@ -107,7 +107,7 @@ export default function CustomerManagement() {
       });
 
       const result = await response.json();
-      
+
       if (result.success) {
         toast.success('Thêm khách hàng thành công!');
         setShowAddDialog(false);
@@ -142,7 +142,7 @@ export default function CustomerManagement() {
       });
 
       const result = await response.json();
-      
+
       if (result.success) {
         toast.success('Cập nhật khách hàng thành công!');
         setShowEditDialog(false);
@@ -208,7 +208,7 @@ export default function CustomerManagement() {
       'checkout': 'default',
       'huy': 'destructive'
     };
-    
+
     const labels: any = {
       'da_coc': 'Đã cọc',
       'da_tt': 'Đã TT',
@@ -216,7 +216,7 @@ export default function CustomerManagement() {
       'checkout': 'Check-out',
       'huy': 'Đã hủy'
     };
-    
+
     return <Badge variant={variants[status] || 'secondary'}>{labels[status] || status}</Badge>;
   };
 
@@ -291,7 +291,17 @@ export default function CustomerManagement() {
                 ) : (
                   filteredCustomers.map((customer) => (
                     <TableRow key={customer.id}>
-                      <TableCell>{customer.ho_ten}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {customer.ho_ten}
+                          {(customer.cccd_mat_truoc || customer.cccd_mat_sau) && (
+                            <Badge variant="secondary" className="text-xs">
+                              <ImageIcon className="w-3 h-3 mr-1" />
+                              CCCD
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <Phone className="w-3 h-3" />
@@ -337,7 +347,7 @@ export default function CustomerManagement() {
 
       {/* Add Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Thêm khách hàng mới</DialogTitle>
             <DialogDescription>
@@ -405,7 +415,7 @@ export default function CustomerManagement() {
 
       {/* Edit Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Chỉnh sửa khách hàng</DialogTitle>
             <DialogDescription>
@@ -468,83 +478,149 @@ export default function CustomerManagement() {
 
       {/* View Dialog */}
       <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Chi tiết khách hàng</DialogTitle>
+        <DialogContent className="max-w-5xl w-full max-h-[90vh] flex flex-col p-0">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b">
+            <DialogTitle className="text-xl">Chi tiết khách hàng</DialogTitle>
             <DialogDescription>
               Thông tin chi tiết và lịch sử đặt phòng
             </DialogDescription>
           </DialogHeader>
-          {selectedCustomer && (
-            <div className="space-y-4">
-              {/* Customer Info */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Thông tin khách hàng</CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Họ tên</Label>
-                    <p className="mt-1">{selectedCustomer.ho_ten}</p>
-                  </div>
-                  <div>
-                    <Label>SĐT</Label>
-                    <p className="mt-1">{selectedCustomer.sdt}</p>
-                  </div>
-                  <div>
-                    <Label>Email</Label>
-                    <p className="mt-1">{selectedCustomer.email || '-'}</p>
-                  </div>
-                  <div>
-                    <Label>Địa chỉ</Label>
-                    <p className="mt-1">{selectedCustomer.dia_chi || '-'}</p>
-                  </div>
-                  <div className="col-span-2">
-                    <Label>Ghi chú</Label>
-                    <p className="mt-1">{selectedCustomer.ghi_chu || '-'}</p>
-                  </div>
-                </CardContent>
-              </Card>
 
-              {/* Booking History */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Lịch sử đặt phòng ({customerBookings.length})</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {customerBookings.length === 0 ? (
-                    <p className="text-gray-500 text-center py-4">Chưa có lịch sử đặt phòng</p>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Mã đặt</TableHead>
-                          <TableHead>Phòng</TableHead>
-                          <TableHead>Check-in</TableHead>
-                          <TableHead>Check-out</TableHead>
-                          <TableHead>Trạng thái</TableHead>
-                          <TableHead className="text-right">Tổng tiền</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {customerBookings.map((booking) => (
-                          <TableRow key={booking.id}>
-                            <TableCell>{booking.ma_dat}</TableCell>
-                            <TableCell>{booking.phong?.ma_phong || '-'}</TableCell>
-                            <TableCell>{formatDate(booking.thoi_gian_nhan)}</TableCell>
-                            <TableCell>{formatDate(booking.thoi_gian_tra)}</TableCell>
-                            <TableCell>{getStatusBadge(booking.trang_thai)}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(booking.tong_tien)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          )}
-          <DialogFooter>
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            {selectedCustomer && (
+              <div className="space-y-6">
+                {/* Customer Info */}
+                <Card>
+                  <CardHeader className="bg-gray-50">
+                    <CardTitle className="text-base">📋 Thông tin khách hàng</CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-2 gap-4 pt-4">
+                    <div>
+                      <Label className="font-semibold">Họ tên</Label>
+                      <p className="mt-1 text-gray-700">{selectedCustomer.ho_ten}</p>
+                    </div>
+                    <div>
+                      <Label className="font-semibold">SĐT</Label>
+                      <p className="mt-1 text-gray-700">{selectedCustomer.sdt}</p>
+                    </div>
+                    <div>
+                      <Label className="font-semibold">Email</Label>
+                      <p className="mt-1 text-gray-700">{selectedCustomer.email || '-'}</p>
+                    </div>
+                    <div>
+                      <Label className="font-semibold">Địa chỉ</Label>
+                      <p className="mt-1 text-gray-700">{selectedCustomer.dia_chi || '-'}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <Label className="font-semibold">Ghi chú</Label>
+                      <p className="mt-1 text-gray-700">{selectedCustomer.ghi_chu || '-'}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* CCCD Images - Prominent Display */}
+                {(selectedCustomer.cccd_mat_truoc || selectedCustomer.cccd_mat_sau) ? (
+                  <Card className="border-2 border-blue-200 bg-blue-50/50">
+                    <CardHeader className="bg-blue-100">
+                      <CardTitle className="text-base flex items-center gap-2 text-blue-900">
+                        <ImageIcon className="w-5 h-5" />
+                        🆔 Ảnh CCCD/CMND đã upload
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {selectedCustomer.cccd_mat_truoc && (
+                          <div className="space-y-2">
+                            <Label className="text-base font-semibold text-gray-900">📄 Mặt trước</Label>
+                            <a
+                              href={selectedCustomer.cccd_mat_truoc}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block border-2 border-gray-300 rounded-lg overflow-hidden hover:shadow-xl hover:border-blue-500 transition-all"
+                            >
+                              <img
+                                src={selectedCustomer.cccd_mat_truoc}
+                                alt="CCCD mặt trước"
+                                className="w-full h-48 sm:h-56 md:h-64 object-cover"
+                              />
+                            </a>
+                            <p className="text-sm text-blue-700 font-medium">💡 Click để xem full size trong tab mới</p>
+                          </div>
+                        )}
+                        {selectedCustomer.cccd_mat_sau && (
+                          <div className="space-y-2">
+                            <Label className="text-base font-semibold text-gray-900">📄 Mặt sau</Label>
+                            <a
+                              href={selectedCustomer.cccd_mat_sau}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block border-2 border-gray-300 rounded-lg overflow-hidden hover:shadow-xl hover:border-blue-500 transition-all"
+                            >
+                              <img
+                                src={selectedCustomer.cccd_mat_sau}
+                                alt="CCCD mặt sau"
+                                className="w-full h-48 sm:h-56 md:h-64 object-cover"
+                              />
+                            </a>
+                            <p className="text-sm text-blue-700 font-medium">💡 Click để xem full size trong tab mới</p>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card className="border-2 border-gray-200">
+                    <CardContent className="py-6">
+                      <p className="text-center text-gray-500">
+                        ⚠️ Khách hàng chưa upload ảnh CCCD/CMND
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Booking History */}
+                <Card>
+                  <CardHeader className="bg-gray-50">
+                    <CardTitle className="text-base">📅 Lịch sử đặt phòng ({customerBookings.length})</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    {customerBookings.length === 0 ? (
+                      <p className="text-gray-500 text-center py-4">Chưa có lịch sử đặt phòng</p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Mã đặt</TableHead>
+                              <TableHead>Phòng</TableHead>
+                              <TableHead>Check-in</TableHead>
+                              <TableHead>Check-out</TableHead>
+                              <TableHead>Trạng thái</TableHead>
+                              <TableHead className="text-right">Tổng tiền</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {customerBookings.map((booking) => (
+                              <TableRow key={booking.id}>
+                                <TableCell>{booking.ma_dat}</TableCell>
+                                <TableCell>{booking.phong?.ma_phong || '-'}</TableCell>
+                                <TableCell>{formatDate(booking.thoi_gian_nhan)}</TableCell>
+                                <TableCell>{formatDate(booking.thoi_gian_tra)}</TableCell>
+                                <TableCell>{getStatusBadge(booking.trang_thai)}</TableCell>
+                                <TableCell className="text-right">{formatCurrency(booking.tong_tien)}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="px-6 py-4 border-t bg-gray-50">
             <Button onClick={() => setShowViewDialog(false)}>Đóng</Button>
           </DialogFooter>
         </DialogContent>

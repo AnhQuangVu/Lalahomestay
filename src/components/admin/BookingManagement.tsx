@@ -37,7 +37,7 @@ export default function BookingManagement() {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
       });
       const result = await response.json();
-      
+
       if (result.success) {
         setBookings(result.data || []);
       } else {
@@ -83,7 +83,7 @@ export default function BookingManagement() {
       });
 
       const result = await response.json();
-      
+
       if (result.success) {
         toast.success('Cập nhật trạng thái thành công!');
         fetchBookings();
@@ -100,7 +100,7 @@ export default function BookingManagement() {
 
   const handleDelete = async (bookingId: string) => {
     if (!confirm('Bạn có chắc muốn xóa đơn đặt phòng này?')) return;
-    
+
     setLoading(true);
     try {
       const response = await fetch(`${API_URL}/dat-phong/${bookingId}`, {
@@ -123,6 +123,95 @@ export default function BookingManagement() {
     }
   };
 
+  const handleConfirmPayment = async (bookingId: string) => {
+    if (!confirm('Xác nhận đã nhận được tiền cọc?')) return;
+
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/dat-phong/${bookingId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify({ trang_thai: 'da_coc' })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        toast.success('Xác nhận thanh toán thành công!');
+        fetchBookings();
+      } else {
+        toast.error(result.error || 'Không thể xác nhận thanh toán');
+      }
+    } catch (error) {
+      console.error('Error confirming payment:', error);
+      toast.error('Không thể kết nối với server');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; className: string }> = {
+      // Trạng thái mới
+      'cho_coc': {
+        label: 'Chờ cọc',
+        variant: 'outline',
+        className: 'bg-yellow-50 text-yellow-700 border-yellow-300'
+      },
+      'da_coc': {
+        label: 'Đã cọc',
+        variant: 'default',
+        className: 'bg-green-50 text-green-700 border-green-300'
+      },
+      'da_nhan_phong': {
+        label: 'Đã nhận phòng',
+        variant: 'default',
+        className: 'bg-blue-50 text-blue-700 border-blue-300'
+      },
+      'da_tra_phong': {
+        label: 'Đã trả phòng',
+        variant: 'secondary',
+        className: 'bg-gray-50 text-gray-700 border-gray-300'
+      },
+      'da_huy': {
+        label: 'Đã hủy',
+        variant: 'destructive',
+        className: 'bg-red-50 text-red-700 border-red-300'
+      },
+      // Trạng thái cũ (backward compatibility)
+      'da_tt': {
+        label: 'Đã thanh toán',
+        variant: 'default',
+        className: 'bg-green-50 text-green-700 border-green-300'
+      },
+      'checkin': {
+        label: 'Đã check-in',
+        variant: 'default',
+        className: 'bg-blue-50 text-blue-700 border-blue-300'
+      },
+      'checkout': {
+        label: 'Đã check-out',
+        variant: 'secondary',
+        className: 'bg-gray-50 text-gray-700 border-gray-300'
+      },
+      'huy': {
+        label: 'Đã hủy',
+        variant: 'destructive',
+        className: 'bg-red-50 text-red-700 border-red-300'
+      }
+    };
+
+    const config = statusConfig[status] || statusConfig['cho_coc'];
+    return (
+      <Badge variant={config.variant} className={config.className}>
+        {config.label}
+      </Badge>
+    );
+  };
+
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '-';
     return new Date(dateStr).toLocaleString('vi-VN');
@@ -135,26 +224,6 @@ export default function BookingManagement() {
     }).format(amount);
   };
 
-  const getStatusBadge = (status: string) => {
-    const variants: any = {
-      'da_coc': 'secondary',
-      'da_tt': 'default',
-      'checkin': 'default',
-      'checkout': 'default',
-      'huy': 'destructive'
-    };
-    
-    const labels: any = {
-      'da_coc': 'Đã cọc',
-      'da_tt': 'Đã thanh toán',
-      'checkin': 'Đã check-in',
-      'checkout': 'Đã check-out',
-      'huy': 'Đã hủy'
-    };
-    
-    return <Badge variant={variants[status] || 'secondary'}>{labels[status] || status}</Badge>;
-  };
-
   const getChannelBadge = (channel: string) => {
     const labels: any = {
       'website': 'Website',
@@ -162,7 +231,7 @@ export default function BookingManagement() {
       'zalo': 'Zalo',
       'khac': 'Khác'
     };
-    
+
     return <Badge variant="outline">{labels[channel] || channel}</Badge>;
   };
 
@@ -206,11 +275,11 @@ export default function BookingManagement() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Tất cả</SelectItem>
+                <SelectItem value="cho_coc">Chờ cọc</SelectItem>
                 <SelectItem value="da_coc">Đã cọc</SelectItem>
-                <SelectItem value="da_tt">Đã thanh toán</SelectItem>
-                <SelectItem value="checkin">Đã check-in</SelectItem>
-                <SelectItem value="checkout">Đã check-out</SelectItem>
-                <SelectItem value="huy">Đã hủy</SelectItem>
+                <SelectItem value="da_nhan_phong">Đã nhận phòng</SelectItem>
+                <SelectItem value="da_tra_phong">Đã trả phòng</SelectItem>
+                <SelectItem value="da_huy">Đã hủy</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -271,17 +340,17 @@ export default function BookingManagement() {
                       <TableCell>
                         <Select
                           value={booking.trang_thai}
-                          onValueChange={(v) => handleUpdateStatus(booking.id, v)}
+                          onValueChange={(v: string) => handleUpdateStatus(booking.id, v)}
                         >
                           <SelectTrigger className="w-36">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
+                            <SelectItem value="cho_coc">Chờ cọc</SelectItem>
                             <SelectItem value="da_coc">Đã cọc</SelectItem>
-                            <SelectItem value="da_tt">Đã TT</SelectItem>
-                            <SelectItem value="checkin">Check-in</SelectItem>
-                            <SelectItem value="checkout">Check-out</SelectItem>
-                            <SelectItem value="huy">Hủy</SelectItem>
+                            <SelectItem value="da_nhan_phong">Đã nhận phòng</SelectItem>
+                            <SelectItem value="da_tra_phong">Đã trả phòng</SelectItem>
+                            <SelectItem value="da_huy">Đã hủy</SelectItem>
                           </SelectContent>
                         </Select>
                       </TableCell>
@@ -298,6 +367,16 @@ export default function BookingManagement() {
                           >
                             <Eye className="w-4 h-4" />
                           </Button>
+                          {booking.trang_thai === 'cho_coc' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleConfirmPayment(booking.id)}
+                              className="bg-green-50 text-green-700 hover:bg-green-100 border-green-300"
+                            >
+                              ✓ Xác nhận
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"

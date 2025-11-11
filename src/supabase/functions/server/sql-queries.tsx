@@ -13,7 +13,7 @@ export async function getAllCoSo() {
     .from('co_so')
     .select('*')
     .order('ten_co_so');
-  
+
   if (error) throw error;
   return data;
 }
@@ -24,7 +24,7 @@ export async function createCoSo(coSo: any) {
     .insert(coSo)
     .select()
     .single();
-  
+
   if (error) throw error;
   return data;
 }
@@ -36,7 +36,7 @@ export async function updateCoSo(id: string, updates: any) {
     .eq('id', id)
     .select()
     .single();
-  
+
   if (error) throw error;
   return data;
 }
@@ -46,7 +46,7 @@ export async function deleteCoSo(id: string) {
     .from('co_so')
     .delete()
     .eq('id', id);
-  
+
   if (error) throw error;
 }
 
@@ -56,13 +56,13 @@ export async function getAllLoaiPhong(coSoId?: string) {
   let query = supabase
     .from('loai_phong')
     .select('*, co_so(*)');
-  
+
   if (coSoId) {
     query = query.eq('id_co_so', coSoId);
   }
-  
+
   const { data, error } = await query.order('ten_loai');
-  
+
   if (error) throw error;
   return data;
 }
@@ -73,7 +73,7 @@ export async function createLoaiPhong(loaiPhong: any) {
     .insert(loaiPhong)
     .select('*, co_so(*)')
     .single();
-  
+
   if (error) throw error;
   return data;
 }
@@ -85,7 +85,7 @@ export async function updateLoaiPhong(id: string, updates: any) {
     .eq('id', id)
     .select('*, co_so(*)')
     .single();
-  
+
   if (error) throw error;
   return data;
 }
@@ -95,7 +95,7 @@ export async function deleteLoaiPhong(id: string) {
     .from('loai_phong')
     .delete()
     .eq('id', id);
-  
+
   if (error) throw error;
 }
 
@@ -111,17 +111,17 @@ export async function getAllPhong(filters?: { loaiPhongId?: string, trangThai?: 
         co_so(*)
       )
     `);
-  
+
   if (filters?.loaiPhongId) {
     query = query.eq('id_loai_phong', filters.loaiPhongId);
   }
-  
+
   if (filters?.trangThai) {
     query = query.eq('trang_thai', filters.trangThai);
   }
-  
+
   const { data, error } = await query.order('ma_phong');
-  
+
   if (error) throw error;
   return data;
 }
@@ -138,7 +138,7 @@ export async function createPhong(phong: any) {
       )
     `)
     .single();
-  
+
   if (error) throw error;
   return data;
 }
@@ -156,7 +156,7 @@ export async function updatePhong(id: string, updates: any) {
       )
     `)
     .single();
-  
+
   if (error) throw error;
   return data;
 }
@@ -166,7 +166,7 @@ export async function deletePhong(id: string) {
     .from('phong')
     .delete()
     .eq('id', id);
-  
+
   if (error) throw error;
 }
 
@@ -177,7 +177,7 @@ export async function getAllKhachHang() {
     .from('khach_hang')
     .select('*')
     .order('ngay_tao', { ascending: false });
-  
+
   if (error) throw error;
   return data;
 }
@@ -188,7 +188,7 @@ export async function getKhachHangByPhone(sdt: string) {
     .select('*')
     .eq('sdt', sdt)
     .single();
-  
+
   if (error && error.code !== 'PGRST116') throw error; // PGRST116 = not found
   return data;
 }
@@ -199,7 +199,7 @@ export async function createKhachHang(khachHang: any) {
     .insert(khachHang)
     .select()
     .single();
-  
+
   if (error) throw error;
   return data;
 }
@@ -211,18 +211,18 @@ export async function updateKhachHang(id: string, updates: any) {
     .eq('id', id)
     .select()
     .single();
-  
+
   if (error) throw error;
   return data;
 }
 
 // ==================== ĐẶT PHÒNG (BOOKINGS) ====================
 
-export async function getAllDatPhong(filters?: { 
-  trangThai?: string, 
-  startDate?: string, 
+export async function getAllDatPhong(filters?: {
+  trangThai?: string,
+  startDate?: string,
   endDate?: string,
-  kenhDat?: string 
+  kenhDat?: string
 }) {
   let query = supabase
     .from('dat_phong')
@@ -238,25 +238,25 @@ export async function getAllDatPhong(filters?: {
       ),
       thanh_toan(*)
     `);
-  
+
   if (filters?.trangThai) {
     query = query.eq('trang_thai', filters.trangThai);
   }
-  
+
   if (filters?.startDate) {
     query = query.gte('thoi_gian_nhan', filters.startDate);
   }
-  
+
   if (filters?.endDate) {
     query = query.lte('thoi_gian_tra', filters.endDate);
   }
-  
+
   if (filters?.kenhDat) {
     query = query.eq('kenh_dat', filters.kenhDat);
   }
-  
+
   const { data, error } = await query.order('ngay_tao', { ascending: false });
-  
+
   if (error) throw error;
   return data;
 }
@@ -278,7 +278,7 @@ export async function getDatPhongByMaDat(maDat: string) {
     `)
     .eq('ma_dat', maDat)
     .single();
-  
+
   if (error && error.code !== 'PGRST116') throw error;
   return data;
 }
@@ -300,7 +300,7 @@ export async function getDatPhongByKhachHang(khachHangId: string) {
     `)
     .eq('id_khach_hang', khachHangId)
     .order('ngay_tao', { ascending: false });
-  
+
   if (error) throw error;
   return data;
 }
@@ -321,7 +321,7 @@ export async function createDatPhong(datPhong: any) {
       )
     `)
     .single();
-  
+
   if (error) throw error;
   return data;
 }
@@ -344,7 +344,7 @@ export async function updateDatPhong(id: string, updates: any) {
       thanh_toan(*)
     `)
     .single();
-  
+
   if (error) throw error;
   return data;
 }
@@ -354,7 +354,7 @@ export async function deleteDatPhong(id: string) {
     .from('dat_phong')
     .delete()
     .eq('id', id);
-  
+
   if (error) throw error;
 }
 
@@ -370,13 +370,13 @@ export async function getAllThanhToan(datPhongId?: string) {
         khach_hang(*)
       )
     `);
-  
+
   if (datPhongId) {
     query = query.eq('id_dat_phong', datPhongId);
   }
-  
+
   const { data, error } = await query.order('ngay_tt', { ascending: false });
-  
+
   if (error) throw error;
   return data;
 }
@@ -393,7 +393,7 @@ export async function createThanhToan(thanhToan: any) {
       )
     `)
     .single();
-  
+
   if (error) throw error;
   return data;
 }
@@ -405,7 +405,7 @@ export async function updateThanhToan(id: string, updates: any) {
     .eq('id', id)
     .select()
     .single();
-  
+
   if (error) throw error;
   return data;
 }
@@ -417,7 +417,7 @@ export async function getAllTaiKhoan() {
     .from('tai_khoan')
     .select('*')
     .order('ngay_tao', { ascending: false });
-  
+
   if (error) throw error;
   return data;
 }
@@ -428,7 +428,7 @@ export async function getTaiKhoanByEmail(email: string) {
     .select('*')
     .eq('email', email)
     .single();
-  
+
   if (error && error.code !== 'PGRST116') throw error;
   return data;
 }
@@ -439,7 +439,7 @@ export async function createTaiKhoan(taiKhoan: any) {
     .insert(taiKhoan)
     .select()
     .single();
-  
+
   if (error) throw error;
   return data;
 }
@@ -451,7 +451,7 @@ export async function updateTaiKhoan(id: string, updates: any) {
     .eq('id', id)
     .select()
     .single();
-  
+
   if (error) throw error;
   return data;
 }
@@ -461,7 +461,7 @@ export async function deleteTaiKhoan(id: string) {
     .from('tai_khoan')
     .delete()
     .eq('id', id);
-  
+
   if (error) throw error;
 }
 
@@ -472,7 +472,7 @@ export async function getAllTienIch() {
     .from('tien_ich')
     .select('*')
     .order('ten_tien_ich');
-  
+
   if (error) throw error;
   return data;
 }
@@ -484,7 +484,7 @@ export async function getTienIchByPhong(phongId: string) {
       tien_ich(*)
     `)
     .eq('id_phong', phongId);
-  
+
   if (error) throw error;
   return data?.map(item => item.tien_ich) || [];
 }
@@ -499,7 +499,7 @@ export async function getAllPhanHoi() {
       khach_hang(*)
     `)
     .order('ngay_gui', { ascending: false });
-  
+
   if (error) throw error;
   return data;
 }
@@ -513,7 +513,7 @@ export async function createPhanHoi(phanHoi: any) {
       khach_hang(*)
     `)
     .single();
-  
+
   if (error) throw error;
   return data;
 }
@@ -530,41 +530,41 @@ export async function getStatistics(filters?: { startDate?: string, endDate?: st
       phong(*, loai_phong(*))
     `)
     .order('thoi_gian_nhan', { ascending: false });
-  
+
   if (filters?.startDate) {
     bookingsQuery = bookingsQuery.gte('thoi_gian_nhan', filters.startDate);
   }
   if (filters?.endDate) {
     bookingsQuery = bookingsQuery.lte('thoi_gian_nhan', filters.endDate + 'T23:59:59');
   }
-  
+
   const { data: bookings, error } = await bookingsQuery;
   if (error) throw error;
-  
+
   // Calculate statistics - USING CORRECT STATUS NAMES
   const totalBookings = bookings.length;
-  const confirmedBookings = bookings.filter(b => 
-    b.trang_thai === 'da_coc' || b.trang_thai === 'da_tt' || 
+  const confirmedBookings = bookings.filter(b =>
+    b.trang_thai === 'da_coc' || b.trang_thai === 'da_tt' ||
     b.trang_thai === 'checkin' || b.trang_thai === 'checkout'
   ).length;
   const cancelledBookings = bookings.filter(b => b.trang_thai === 'da_huy').length;
-  
+
   // Total revenue - exclude cancelled bookings
   const totalRevenue = bookings
     .filter(b => b.trang_thai !== 'da_huy')
     .reduce((sum, b) => sum + (b.tong_tien || 0), 0);
-  
+
   // Get all rooms
   const rooms = await getAllPhong();
   const totalRooms = rooms.length;
-  const occupiedRooms = rooms.filter(r => 
+  const occupiedRooms = rooms.filter(r =>
     r.trang_thai === 'dang_dung' || r.trang_thai === 'sap_nhan'
   ).length;
-  
+
   // Get all customers
   const customers = await getAllKhachHang();
   const totalCustomers = customers.length;
-  
+
   return {
     totalBookings,
     confirmedBookings,
@@ -587,45 +587,51 @@ export async function getDetailedReports(filters?: { startDate?: string, endDate
       phong(*, loai_phong(*))
     `)
     .order('thoi_gian_nhan', { ascending: false });
-  
+
   if (filters?.startDate) {
     bookingsQuery = bookingsQuery.gte('thoi_gian_nhan', filters.startDate);
   }
   if (filters?.endDate) {
     bookingsQuery = bookingsQuery.lte('thoi_gian_nhan', filters.endDate + 'T23:59:59');
   }
-  
+
   const { data: bookings, error } = await bookingsQuery;
   if (error) throw error;
-  
+
   // Get all rooms
   const rooms = await getAllPhong();
-  
+
   // Get all customers (no date filter since khach_hang may not have created_at)
   const allCustomers = await getAllKhachHang();
-  
+
   // Filter customers who have bookings in the date range
   const customerIdsInRange = new Set(bookings.map(b => b.id_khach_hang));
   const filteredCustomers = allCustomers.filter(c => customerIdsInRange.has(c.id));
-  
+
   // Calculate basic stats
   const totalBookings = bookings.length;
-  const confirmedBookings = bookings.filter(b => b.trang_thai === 'da_coc' || b.trang_thai === 'da_tt').length;
+  const confirmedBookings = bookings.filter(b =>
+    b.trang_thai === 'da_coc' || b.trang_thai === 'da_tt'
+  ).length;
   const cancelledBookings = bookings.filter(b => b.trang_thai === 'da_huy').length;
-  const checkedInBookings = bookings.filter(b => b.trang_thai === 'checkin').length;
-  const checkedOutBookings = bookings.filter(b => b.trang_thai === 'checkout').length;
-  
+  const checkedInBookings = bookings.filter(b =>
+    b.trang_thai === 'da_nhan_phong' || b.trang_thai === 'checkin'
+  ).length;
+  const checkedOutBookings = bookings.filter(b =>
+    b.trang_thai === 'da_tra_phong' || b.trang_thai === 'checkout'
+  ).length;
+
   const cancelRate = totalBookings > 0 ? (cancelledBookings / totalBookings) * 100 : 0;
-  
+
   // Calculate revenue
   const totalRevenue = bookings
     .filter(b => b.trang_thai !== 'da_huy')
     .reduce((sum, b) => sum + (b.tong_tien || 0), 0);
-  
+
   const totalDeposit = bookings
     .filter(b => b.trang_thai !== 'da_huy')
     .reduce((sum, b) => sum + (b.coc_csvc || 0), 0);
-  
+
   // Calculate nights
   const totalNights = bookings
     .filter(b => b.trang_thai !== 'da_huy')
@@ -635,30 +641,30 @@ export async function getDetailedReports(filters?: { startDate?: string, endDate
       const nights = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
       return sum + Math.max(nights, 0);
     }, 0);
-  
+
   const averageNightlyRate = totalNights > 0 ? Math.round(totalRevenue / totalNights) : 0;
   const averageBookingValue = totalBookings > 0 ? Math.round(totalRevenue / totalBookings) : 0;
-  
+
   // Room stats
   const totalRooms = rooms.length;
-  const occupiedRooms = rooms.filter(r => 
+  const occupiedRooms = rooms.filter(r =>
     r.trang_thai === 'dang_dung' || r.trang_thai === 'sap_nhan'
   ).length;
   const availableRooms = totalRooms - occupiedRooms;
   const occupancyRate = totalRooms > 0 ? Math.round((occupiedRooms / totalRooms) * 100) : 0;
-  
+
   // Customer stats
   const totalCustomers = allCustomers.length;
   const newCustomers = filteredCustomers.length;
-  
+
   // Calculate growth (mock for now - would need previous period data)
   const growthRate = 15.5; // Mock data
-  
+
   // Daily revenue
   const dailyRevenueMap = new Map<string, { revenue: number; bookings: number }>();
   bookings.forEach(b => {
     if (b.trang_thai === 'da_huy') return;
-    
+
     const date = new Date(b.thoi_gian_nhan).toISOString().split('T')[0];
     const current = dailyRevenueMap.get(date) || { revenue: 0, bookings: 0 };
     dailyRevenueMap.set(date, {
@@ -666,7 +672,7 @@ export async function getDetailedReports(filters?: { startDate?: string, endDate
       bookings: current.bookings + 1
     });
   });
-  
+
   const dailyRevenue = Array.from(dailyRevenueMap.entries())
     .map(([date, data]) => ({
       date: new Date(date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }),
@@ -678,12 +684,12 @@ export async function getDetailedReports(filters?: { startDate?: string, endDate
       const [dayB, monthB] = b.date.split('/');
       return (parseInt(monthA) * 100 + parseInt(dayA)) - (parseInt(monthB) * 100 + parseInt(dayB));
     });
-  
+
   // Top rooms
   const roomRevenueMap = new Map<string, { name: string; bookings: number; revenue: number }>();
   bookings.forEach(b => {
     if (b.trang_thai === 'da_huy' || !b.phong) return;
-    
+
     const roomName = `${b.phong.loai_phong?.ten_loai || 'N/A'} - ${b.phong.ma_phong}`;
     const current = roomRevenueMap.get(roomName) || { name: roomName, bookings: 0, revenue: 0 };
     roomRevenueMap.set(roomName, {
@@ -692,17 +698,17 @@ export async function getDetailedReports(filters?: { startDate?: string, endDate
       revenue: current.revenue + (b.tong_tien || 0)
     });
   });
-  
+
   const topRooms = Array.from(roomRevenueMap.values())
     .sort((a, b) => b.bookings - a.bookings);
-  
+
   // Booking sources
   const sourceMap = new Map<string, number>();
   bookings.forEach(b => {
     const source = b.kenh_dat || 'other';
     sourceMap.set(source, (sourceMap.get(source) || 0) + 1);
   });
-  
+
   const sourceLabels: Record<string, string> = {
     walk_in: 'Walk-in',
     phone: 'Điện thoại',
@@ -714,34 +720,39 @@ export async function getDetailedReports(filters?: { startDate?: string, endDate
     agoda: 'Agoda',
     other: 'Khác'
   };
-  
+
   const bookingSources = Array.from(sourceMap.entries())
     .map(([source, count]) => ({
       source: sourceLabels[source] || source,
       count
     }));
-  
+
   // Booking status
   const statusMap = new Map<string, number>();
   bookings.forEach(b => {
     const status = b.trang_thai || 'pending';
     statusMap.set(status, (statusMap.get(status) || 0) + 1);
   });
-  
+
   const statusLabels: Record<string, string> = {
+    // New status values
+    cho_coc: 'Chờ cọc',
     da_coc: 'Đã cọc',
+    da_nhan_phong: 'Đã nhận phòng',
+    da_tra_phong: 'Đã trả phòng',
+    da_huy: 'Đã hủy',
+    // Old status values (backward compatibility)
     da_tt: 'Đã thanh toán',
     checkin: 'Đang ở',
-    checkout: 'Đã trả',
-    da_huy: 'Đã hủy'
+    checkout: 'Đã trả'
   };
-  
+
   const bookingStatus = Array.from(statusMap.entries())
     .map(([status, count]) => ({
       status: statusLabels[status] || status,
       count
     }));
-  
+
   return {
     // Tổng quan
     totalBookings,
@@ -749,26 +760,26 @@ export async function getDetailedReports(filters?: { startDate?: string, endDate
     totalDeposit,
     totalCustomers,
     newCustomers,
-    
+
     // Phòng
     totalRooms,
     occupiedRooms,
     availableRooms,
     occupancyRate,
     totalNights,
-    
+
     // Đặt phòng
     confirmedBookings,
     cancelledBookings,
     checkedInBookings,
     checkedOutBookings,
     cancelRate,
-    
+
     // Doanh thu
     averageBookingValue,
     averageNightlyRate,
     growthRate,
-    
+
     // Chi tiết
     dailyRevenue,
     topRooms,
@@ -783,48 +794,48 @@ export async function getStaffRoomReport(filters?: { startDate?: string, endDate
   // Generate date range
   const start = filters?.startDate ? new Date(filters.startDate) : new Date();
   const end = filters?.endDate ? new Date(filters.endDate) : new Date();
-  
+
   const dateRange: Date[] = [];
   const currentDate = new Date(start);
   while (currentDate <= end) {
     dateRange.push(new Date(currentDate));
     currentDate.setDate(currentDate.getDate() + 1);
   }
-  
+
   // Get all rooms
   const rooms = await getAllPhong();
   const totalRooms = rooms.length;
-  
+
   // Get all bookings
   const bookings = await getAllDatPhong(filters);
-  
+
   // Calculate daily stats
   const dailyStats = dateRange.map(date => {
     const dateStr = date.toISOString().split('T')[0];
-    
+
     // Bookings on this date
     const dateBookings = bookings.filter(b => {
       const checkIn = new Date(b.thoi_gian_nhan).toISOString().split('T')[0];
       const checkOut = new Date(b.thoi_gian_tra).toISOString().split('T')[0];
       return dateStr >= checkIn && dateStr <= checkOut && b.trang_thai !== 'da_huy';
     });
-    
+
     // Check-outs on this date
     const checkOuts = bookings.filter(b => {
       const checkOut = new Date(b.thoi_gian_tra).toISOString().split('T')[0];
       return dateStr === checkOut && b.trang_thai !== 'da_huy';
     });
-    
+
     // Check-ins on this date
     const checkIns = bookings.filter(b => {
       const checkIn = new Date(b.thoi_gian_nhan).toISOString().split('T')[0];
       return dateStr === checkIn && b.trang_thai !== 'da_huy';
     });
-    
+
     const occupied = dateBookings.length;
     const empty = totalRooms - occupied;
     const occupancy = totalRooms > 0 ? Math.round((occupied / totalRooms) * 100) : 0;
-    
+
     return {
       date: date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }),
       emptyRooms: empty,
@@ -834,7 +845,7 @@ export async function getStaffRoomReport(filters?: { startDate?: string, endDate
       occupancy
     };
   });
-  
+
   return dailyStats;
 }
 
@@ -842,7 +853,7 @@ export async function getStaffRoomReport(filters?: { startDate?: string, endDate
 
 export async function getDailyFinancialReport(reportDate?: string) {
   const targetDate = reportDate || new Date().toISOString().split('T')[0];
-  
+
   // Get bookings that had activity on this date (check-in or check-out)
   const { data: bookings, error } = await supabase
     .from('dat_phong')
@@ -855,51 +866,51 @@ export async function getDailyFinancialReport(reportDate?: string) {
     .or(`thoi_gian_nhan.gte.${targetDate}T00:00:00,thoi_gian_tra.gte.${targetDate}T00:00:00`)
     .or(`thoi_gian_nhan.lte.${targetDate}T23:59:59,thoi_gian_tra.lte.${targetDate}T23:59:59`)
     .order('thoi_gian_nhan', { ascending: true });
-  
+
   if (error) throw error;
-  
+
   // Filter bookings that actually had activity on target date
   const relevantBookings = bookings?.filter(b => {
     const checkInDate = new Date(b.thoi_gian_nhan).toISOString().split('T')[0];
     const checkOutDate = new Date(b.thoi_gian_tra).toISOString().split('T')[0];
     return checkInDate === targetDate || checkOutDate === targetDate;
   }) || [];
-  
+
   // Build transaction list
   const transactions = relevantBookings.map(booking => {
     const checkInDate = new Date(booking.thoi_gian_nhan).toISOString().split('T')[0];
     const checkOutDate = new Date(booking.thoi_gian_tra).toISOString().split('T')[0];
-    
+
     const isCheckIn = checkInDate === targetDate;
     const isCheckOut = checkOutDate === targetDate;
-    
+
     let revenue = 0;
     let received = 0;
     let deposit = 0;
     let refund = 0;
     let debt = 0;
-    
+
     if (isCheckIn) {
       // Check-in: receive deposit
       deposit = booking.coc_csvc || 0;
       received = deposit;
     }
-    
+
     if (isCheckOut) {
       // Check-out: receive payment and refund deposit
       revenue = booking.tong_tien || 0;
       received = revenue;
       refund = booking.coc_csvc || 0;
-      
+
       // If not fully paid, mark as debt
-      const paid = booking.thanh_toan?.reduce((sum: number, t: any) => 
+      const paid = booking.thanh_toan?.reduce((sum: number, t: any) =>
         sum + (t.trang_thai === 'thanh_cong' ? t.so_tien : 0), 0) || 0;
       debt = Math.max(0, revenue - paid);
     }
-    
+
     const sourceLabels: Record<string, string> = {
       walk_in: 'Walk-in',
-      phone: 'Điện thoại', 
+      phone: 'Điện thoại',
       website: 'Website',
       facebook: 'Facebook',
       zalo: 'Zalo',
@@ -907,11 +918,11 @@ export async function getDailyFinancialReport(reportDate?: string) {
       agoda: 'Agoda',
       khac: 'Khác'
     };
-    
+
     let note = `Đặt qua ${sourceLabels[booking.kenh_dat] || booking.kenh_dat}`;
     if (isCheckOut) note += ', Đã trả phòng';
     if (booking.ghi_chu) note += `, ${booking.ghi_chu}`;
-    
+
     return {
       code: booking.ma_dat,
       time: new Date(isCheckIn ? booking.thoi_gian_nhan : booking.thoi_gian_tra)
@@ -926,14 +937,14 @@ export async function getDailyFinancialReport(reportDate?: string) {
       note
     };
   });
-  
+
   // Calculate totals
   const totalRevenue = transactions.reduce((sum, t) => sum + t.revenue, 0);
   const totalReceived = transactions.reduce((sum, t) => sum + t.received, 0);
   const totalDeposit = transactions.reduce((sum, t) => sum + t.deposit, 0);
   const totalRefund = transactions.reduce((sum, t) => sum + t.refund, 0);
   const totalDebt = transactions.reduce((sum, t) => sum + t.debt, 0);
-  
+
   return {
     transactions,
     summary: {
