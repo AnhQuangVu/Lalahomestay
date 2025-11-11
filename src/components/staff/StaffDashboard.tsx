@@ -116,7 +116,7 @@ export default function StaffDashboard() {
     const now = new Date();
     const in2Hours = new Date(now.getTime() + 2 * 60 * 60 * 1000);
     const in4Hours = new Date(now.getTime() + 4 * 60 * 60 * 1000);
-    
+
     return [
       {
         id: '1',
@@ -238,18 +238,17 @@ export default function StaffDashboard() {
     <div>
       <div className="mb-6">
         <h1 className="text-gray-900 mb-4">Lịch đặt phòng</h1>
-        
+
         {/* Filters */}
         <div className="flex flex-wrap gap-2">
           {filterButtons.map((btn) => (
             <button
               key={btn.value}
               onClick={() => setFilter(btn.value)}
-              className={`px-4 py-2 rounded-lg transition-all ${
-                filter === btn.value
+              className={`px-4 py-2 rounded-lg transition-all ${filter === btn.value
                   ? btn.color + ' ring-2 ring-offset-2 ring-blue-500'
                   : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-              }`}
+                }`}
             >
               {btn.label}
             </button>
@@ -292,7 +291,7 @@ export default function StaffDashboard() {
                     <div className="mt-3 pt-3 border-t border-gray-300">
                       <p className="text-sm text-gray-900">{room.currentBooking.customerName}</p>
                       <p className="text-xs text-gray-600 mt-1">
-                        {format(new Date(room.currentBooking.checkIn), 'dd/MM HH:mm', { locale: vi })} 
+                        {format(new Date(room.currentBooking.checkIn), 'dd/MM HH:mm', { locale: vi })}
                         {' → '}
                         {format(new Date(room.currentBooking.checkOut), 'dd/MM HH:mm', { locale: vi })}
                       </p>
@@ -308,7 +307,7 @@ export default function StaffDashboard() {
                       {room.price2h.toLocaleString('vi-VN')}đ / 2h
                     </p>
                     <p className="text-xs text-gray-600">
-                      {room.priceNight.toLocaleString('vi-VN')}đ / đêm
+                      {room.priceNight.toLocaleString('vi-VN')}đ / ngày
                     </p>
                   </div>
                 )}

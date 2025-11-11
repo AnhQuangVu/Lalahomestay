@@ -64,13 +64,12 @@ export default function AdminLayout({ user, onLogout }: AdminLayoutProps) {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex items-center space-x-3 px-4 py-3 rounded-lg mb-2 transition-colors ${
-                  active
+                className={`flex items-center space-x-3 px-4 py-3 rounded-lg mb-2 transition-colors ${active
                     ? 'bg-purple-50 text-purple-600'
                     : item.highlight
-                    ? 'bg-green-50 text-green-600 hover:bg-green-100'
-                    : 'text-gray-700 hover:bg-gray-50'
-                }`}
+                      ? 'bg-green-50 text-green-600 hover:bg-green-100'
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
               >
                 <Icon className="w-5 h-5" />
                 <span>{item.label}</span>
@@ -115,7 +114,7 @@ export default function AdminLayout({ user, onLogout }: AdminLayoutProps) {
                 />
               </div>
             </div>
-            
+
             <div className="flex items-center space-x-4 ml-4">
               <button className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-lg">
                 <Bell className="w-6 h-6" />

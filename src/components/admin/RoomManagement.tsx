@@ -18,19 +18,19 @@ const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-faeb1
 export default function RoomManagement() {
   const [activeTab, setActiveTab] = useState('rooms');
   const [loading, setLoading] = useState(false);
-  
+
   // Data states
   const [rooms, setRooms] = useState<any[]>([]);
   const [concepts, setConcepts] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
-  
+
   // Dialog states
   const [showRoomDialog, setShowRoomDialog] = useState(false);
   const [showConceptDialog, setShowConceptDialog] = useState(false);
   const [showLocationDialog, setShowLocationDialog] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any>(null);
-  
+
   // Form states
   const [roomForm, setRoomForm] = useState({
     ma_phong: '',
@@ -39,7 +39,7 @@ export default function RoomManagement() {
     tinh_trang_vesinh: 'sach',
     ghi_chu: ''
   });
-  
+
   const [conceptForm, setConceptForm] = useState({
     ten_loai: '',
     mo_ta: '',
@@ -48,7 +48,7 @@ export default function RoomManagement() {
     id_co_so: '',
     trang_thai: true
   });
-  
+
   const [locationForm, setLocationForm] = useState({
     ten_co_so: '',
     dia_chi: '',
@@ -131,7 +131,7 @@ export default function RoomManagement() {
     try {
       const url = editMode ? `${API_URL}/phong/${selectedItem.id}` : `${API_URL}/phong`;
       const method = editMode ? 'PUT' : 'POST';
-      
+
       const response = await fetch(url, {
         method,
         headers: {
@@ -142,7 +142,7 @@ export default function RoomManagement() {
       });
 
       const result = await response.json();
-      
+
       if (result.success) {
         toast.success(editMode ? 'Cập nhật phòng thành công!' : 'Thêm phòng thành công!');
         setShowRoomDialog(false);
@@ -161,7 +161,7 @@ export default function RoomManagement() {
 
   const handleDeleteRoom = async (id: string) => {
     if (!confirm('Bạn có chắc muốn xóa phòng này?')) return;
-    
+
     setLoading(true);
     try {
       const response = await fetch(`${API_URL}/phong/${id}`, {
@@ -195,13 +195,13 @@ export default function RoomManagement() {
     try {
       const url = editMode ? `${API_URL}/loai-phong/${selectedItem.id}` : `${API_URL}/loai-phong`;
       const method = editMode ? 'PUT' : 'POST';
-      
+
       const payload = {
         ...conceptForm,
         gia_gio: parseInt(conceptForm.gia_gio),
         gia_dem: parseInt(conceptForm.gia_dem)
       };
-      
+
       const response = await fetch(url, {
         method,
         headers: {
@@ -212,7 +212,7 @@ export default function RoomManagement() {
       });
 
       const result = await response.json();
-      
+
       if (result.success) {
         toast.success(editMode ? 'Cập nhật loại phòng thành công!' : 'Thêm loại phòng thành công!');
         setShowConceptDialog(false);
@@ -231,7 +231,7 @@ export default function RoomManagement() {
 
   const handleDeleteConcept = async (id: string) => {
     if (!confirm('Bạn có chắc muốn xóa loại phòng này?')) return;
-    
+
     setLoading(true);
     try {
       const response = await fetch(`${API_URL}/loai-phong/${id}`, {
@@ -265,7 +265,7 @@ export default function RoomManagement() {
     try {
       const url = editMode ? `${API_URL}/co-so/${selectedItem.id}` : `${API_URL}/co-so`;
       const method = editMode ? 'PUT' : 'POST';
-      
+
       const response = await fetch(url, {
         method,
         headers: {
@@ -276,7 +276,7 @@ export default function RoomManagement() {
       });
 
       const result = await response.json();
-      
+
       if (result.success) {
         toast.success(editMode ? 'Cập nhật cơ sở thành công!' : 'Thêm cơ sở thành công!');
         setShowLocationDialog(false);
@@ -295,7 +295,7 @@ export default function RoomManagement() {
 
   const handleDeleteLocation = async (id: string) => {
     if (!confirm('Bạn có chắc muốn xóa cơ sở này?')) return;
-    
+
     setLoading(true);
     try {
       const response = await fetch(`${API_URL}/co-so/${id}`, {
@@ -371,7 +371,7 @@ export default function RoomManagement() {
       'sap_tra': 'secondary',
       'bao_tri': 'secondary'
     };
-    
+
     const labels: any = {
       'trong': 'Trống',
       'dang_dung': 'Đang dùng',
@@ -379,7 +379,7 @@ export default function RoomManagement() {
       'sap_tra': 'Sắp trả',
       'bao_tri': 'Bảo trì'
     };
-    
+
     return <Badge variant={variants[status] || 'secondary'}>{labels[status] || status}</Badge>;
   };
 
@@ -460,9 +460,9 @@ export default function RoomManagement() {
                         <TableCell className="max-w-xs truncate">{room.ghi_chu || '-'}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex gap-2 justify-end">
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
+                            <Button
+                              variant="ghost"
+                              size="sm"
                               onClick={() => {
                                 setSelectedItem(room);
                                 setRoomForm({
@@ -478,9 +478,9 @@ export default function RoomManagement() {
                             >
                               <Edit className="w-4 h-4" />
                             </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
+                            <Button
+                              variant="ghost"
+                              size="sm"
                               onClick={() => handleDeleteRoom(room.id)}
                             >
                               <Trash2 className="w-4 h-4" />
@@ -524,7 +524,7 @@ export default function RoomManagement() {
                     <TableHead>Tên loại</TableHead>
                     <TableHead>Cơ sở</TableHead>
                     <TableHead>Giá giờ</TableHead>
-                    <TableHead>Giá đêm</TableHead>
+                    <TableHead>Giá ngày</TableHead>
                     <TableHead>Mô tả</TableHead>
                     <TableHead>Trạng thái</TableHead>
                     <TableHead className="text-right">Thao tác</TableHead>
@@ -545,9 +545,9 @@ export default function RoomManagement() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex gap-2 justify-end">
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => {
                               setSelectedItem(concept);
                               setConceptForm({
@@ -564,9 +564,9 @@ export default function RoomManagement() {
                           >
                             <Edit className="w-4 h-4" />
                           </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => handleDeleteConcept(concept.id)}
                           >
                             <Trash2 className="w-4 h-4" />
@@ -628,9 +628,9 @@ export default function RoomManagement() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex gap-2 justify-end">
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => {
                               setSelectedItem(location);
                               setLocationForm({
@@ -646,9 +646,9 @@ export default function RoomManagement() {
                           >
                             <Edit className="w-4 h-4" />
                           </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => handleDeleteLocation(location.id)}
                           >
                             <Trash2 className="w-4 h-4" />
@@ -784,7 +784,7 @@ export default function RoomManagement() {
                 />
               </div>
               <div>
-                <Label>Giá đêm (VND) *</Label>
+                <Label>Giá ngày (VND) *</Label>
                 <Input
                   type="number"
                   value={conceptForm.gia_dem}

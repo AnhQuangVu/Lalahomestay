@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Wifi, Tv, Wind, Coffee, Sparkles, Camera, MapPin, Settings, Home } from 'lucide-react';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
@@ -72,8 +72,8 @@ export default function HomePage() {
   return (
     <div>
 
-  {/* Hero Section */}
-  <section className="relative h-[600px]" style={{ backgroundColor: '#0f7072' }}>
+      {/* Hero Section */}
+      <section className="relative h-[600px]" style={{ backgroundColor: '#0f7072' }}>
         <div className="absolute inset-0 bg-black/40"></div>
         <div
           className="absolute inset-0 bg-cover bg-center mix-blend-overlay"
@@ -83,7 +83,7 @@ export default function HomePage() {
         <div className="relative h-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center">
           <div className="text-white max-w-2xl">
             <h1 className="text-white mb-4">
-              Trải nghiệm không gian sống hiện đại
+              Lala House - Chuỗi Homestay đa sắc màu dành cho giới trẻ
             </h1>
             <p className="text-xl text-gray-100 mb-8">
               LaLa House - Hệ thống homestay cao cấp tại Hà Nội với đầy đủ tiện nghi,
@@ -91,7 +91,8 @@ export default function HomePage() {
             </p>
             <Link
               to="/booking"
-              className="inline-flex items-center px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors space-x-2"
+              className="inline-flex items-center px-8 py-4 bg-white font-semibold rounded-lg hover:bg-gray-100 transition-colors space-x-2"
+              style={{ color: '#0f7072' }}
             >
               <span>Đặt phòng ngay</span>
               <ArrowRight className="w-5 h-5" />
@@ -112,7 +113,7 @@ export default function HomePage() {
 
           {loading ? (
             <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <div className="animate-spin rounded-full h-12 w-12 mx-auto mb-4" style={{ borderBottom: '2px solid #0f7072' }}></div>
               <p className="text-gray-600">Đang tải phòng...</p>
             </div>
           ) : featuredRooms.length === 0 ? (
@@ -154,11 +155,14 @@ export default function HomePage() {
                     <div className="flex items-center justify-between pt-4 border-t">
                       <div>
                         <p className="text-sm text-gray-600">Từ</p>
-                        <p className="text-blue-600">{formatCurrency(room.loai_phong?.gia_gio || 0)}/giờ</p>
+                        <p className="font-semibold" style={{ color: '#0f7072' }}>{formatCurrency(room.loai_phong?.gia_gio || 0)}/giờ</p>
                       </div>
                       <Link
                         to="/booking"
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                        className="px-4 py-2 text-white rounded-lg transition-colors"
+                        style={{ backgroundColor: '#0f7072' }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0d5f61'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0f7072'}
                       >
                         Đặt ngay
                       </Link>
@@ -172,7 +176,16 @@ export default function HomePage() {
           <div className="text-center mt-12">
             <Link
               to="/booking"
-              className="inline-flex items-center px-6 py-3 border-2 border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
+              className="inline-flex items-center px-6 py-3 border-2 rounded-lg transition-colors"
+              style={{ borderColor: '#0f7072', color: '#0f7072' }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#0f7072';
+                e.currentTarget.style.color = 'white';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.color = '#0f7072';
+              }}
             >
               Xem tất cả phòng
               <ArrowRight className="w-5 h-5 ml-2" />
@@ -193,7 +206,7 @@ export default function HomePage() {
 
           {loading ? (
             <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <div className="animate-spin rounded-full h-12 w-12 mx-auto mb-4" style={{ borderBottom: '2px solid #0f7072' }}></div>
               <p className="text-gray-600">Đang tải cơ sở...</p>
             </div>
           ) : locations.length === 0 ? (
@@ -222,7 +235,7 @@ export default function HomePage() {
                       <p>{location.dia_chi}</p>
                     </div>
                     {location.hotline && (
-                      <p className="text-sm text-blue-600 mt-2">📞 {location.hotline}</p>
+                      <p className="text-sm mt-2" style={{ color: '#0f7072' }}>📞 {location.hotline}</p>
                     )}
                   </div>
                 </div>
@@ -247,8 +260,8 @@ export default function HomePage() {
               const Icon = amenity.icon;
               return (
                 <div key={index} className="flex flex-col items-center text-center p-6 bg-gray-50 rounded-xl hover:bg-white hover:shadow-md transition-all">
-                  <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-3">
-                    <Icon className="w-8 h-8 text-blue-600" />
+                  <div className="w-16 h-16 rounded-full flex items-center justify-center mb-3" style={{ backgroundColor: 'rgba(15, 112, 114, 0.1)' }}>
+                    <Icon className="w-8 h-8" style={{ color: '#0f7072' }} />
                   </div>
                   <p className="text-gray-700">{amenity.name}</p>
                 </div>
@@ -259,22 +272,27 @@ export default function HomePage() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-16 bg-gradient-to-r from-blue-600 to-indigo-600">
+      <section className="py-16" style={{ backgroundColor: '#0f7072' }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-white mb-4">Sẵn sàng trải nghiệm?</h2>
-          <p className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
+          <p className="text-xl mb-8 max-w-2xl mx-auto" style={{ color: 'rgba(255, 255, 255, 0.9)' }}>
             Đặt phòng ngay hôm nay để nhận ưu đãi đặc biệt và trải nghiệm không gian sống tuyệt vời
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-4">
             <Link
               to="/booking"
-              className="px-8 py-4 bg-white text-blue-600 rounded-lg hover:bg-gray-100 transition-colors"
+              className="px-8 py-4 bg-white rounded-lg transition-colors font-semibold"
+              style={{ color: '#0f7072' }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
             >
               Đặt phòng ngay
             </Link>
             <Link
               to="/contact"
-              className="px-8 py-4 border-2 border-white text-white rounded-lg hover:bg-white/10 transition-colors"
+              className="px-8 py-4 border-2 border-white text-white rounded-lg transition-colors"
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
             >
               Liên hệ tư vấn
             </Link>

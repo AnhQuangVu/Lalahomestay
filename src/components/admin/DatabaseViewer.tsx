@@ -12,7 +12,7 @@ const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-faeb1
 export function DatabaseViewer() {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('co-so');
-  
+
   // State for all tables
   const [coSo, setCoSo] = useState<any[]>([]);
   const [loaiPhong, setLoaiPhong] = useState<any[]>([]);
@@ -77,14 +77,14 @@ export function DatabaseViewer() {
 
   const exportToCSV = (data: any[], filename: string) => {
     if (!data || data.length === 0) return;
-    
+
     const headers = Object.keys(data[0]).join(',');
-    const rows = data.map(row => 
-      Object.values(row).map(val => 
+    const rows = data.map(row =>
+      Object.values(row).map(val =>
         typeof val === 'object' ? JSON.stringify(val) : val
       ).join(',')
     );
-    
+
     const csv = [headers, ...rows].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -125,7 +125,7 @@ export function DatabaseViewer() {
               </p>
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm">Tổng doanh thu</CardTitle>
@@ -134,7 +134,7 @@ export function DatabaseViewer() {
               <div className="text-2xl">{formatCurrency(statistics.totalRevenue)}</div>
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm">Tỷ lệ lấp đầy</CardTitle>
@@ -146,7 +146,7 @@ export function DatabaseViewer() {
               </p>
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm">Tổng khách hàng</CardTitle>
@@ -231,7 +231,7 @@ export function DatabaseViewer() {
                       <TableHead>Tên loại</TableHead>
                       <TableHead>Cơ sở</TableHead>
                       <TableHead>Giá giờ</TableHead>
-                      <TableHead>Giá đêm</TableHead>
+                      <TableHead>Giá ngày</TableHead>
                       <TableHead>Mô tả</TableHead>
                       <TableHead>Trạng thái</TableHead>
                     </TableRow>
@@ -289,8 +289,8 @@ export function DatabaseViewer() {
                         <TableCell>
                           <Badge variant={
                             item.trang_thai === 'trong' ? 'default' :
-                            item.trang_thai === 'dang_dung' ? 'destructive' :
-                            'secondary'
+                              item.trang_thai === 'dang_dung' ? 'destructive' :
+                                'secondary'
                           }>
                             {item.trang_thai}
                           </Badge>
@@ -385,8 +385,8 @@ export function DatabaseViewer() {
                         <TableCell>
                           <Badge variant={
                             item.trang_thai === 'checkout' ? 'default' :
-                            item.trang_thai === 'da_huy' ? 'destructive' :
-                            'secondary'
+                              item.trang_thai === 'da_huy' ? 'destructive' :
+                                'secondary'
                           }>
                             {item.trang_thai}
                           </Badge>
@@ -436,8 +436,8 @@ export function DatabaseViewer() {
                         <TableCell>
                           <Badge variant={
                             item.trang_thai === 'thanh_cong' ? 'default' :
-                            item.trang_thai === 'that_bai' ? 'destructive' :
-                            'secondary'
+                              item.trang_thai === 'that_bai' ? 'destructive' :
+                                'secondary'
                           }>
                             {item.trang_thai}
                           </Badge>
@@ -481,8 +481,8 @@ export function DatabaseViewer() {
                         <TableCell>
                           <Badge variant={
                             item.vai_tro === 'quan_tri' ? 'default' :
-                            item.vai_tro === 'le_tan' ? 'secondary' :
-                            'outline'
+                              item.vai_tro === 'le_tan' ? 'secondary' :
+                                'outline'
                           }>
                             {item.vai_tro}
                           </Badge>
