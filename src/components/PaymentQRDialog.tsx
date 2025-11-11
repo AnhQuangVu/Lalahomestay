@@ -29,7 +29,8 @@ export default function PaymentQRDialog({
     const [copiedAccount, setCopiedAccount] = useState(false);
 
     const paymentDescription = PAYMENT_CONFIG.generateDescription(bookingCode);
-    const qrUrl = PAYMENT_CONFIG.generateQRUrl(amount, paymentDescription);
+    // Use fixed QR code image
+    const qrUrl = PAYMENT_CONFIG.qrImageUrl;
 
     const handleCopyContent = () => {
         navigator.clipboard.writeText(paymentDescription);
@@ -47,20 +48,14 @@ export default function PaymentQRDialog({
 
     const handleDownloadQR = async () => {
         try {
-            // Fetch image as blob to bypass CORS
-            const response = await fetch(qrUrl);
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-
+            // For local images, we can use a simpler approach
             const link = document.createElement('a');
-            link.href = url;
+            link.href = qrUrl;
             link.download = `QR-${bookingCode}.png`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
 
-            // Clean up
-            window.URL.revokeObjectURL(url);
             toast.success('Đã tải QR code thành công!');
         } catch (error) {
             console.error('Error downloading QR:', error);
