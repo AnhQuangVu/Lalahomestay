@@ -190,19 +190,9 @@ export default function DailyReport() {
     <div className="max-w-7xl mx-auto">
       {/* Header với gradient */}
       <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">📊 Báo cáo cuối ngày</h1>
-            <p className="text-gray-600">Tổng hợp giao dịch và doanh thu trong ngày</p>
-          </div>
-          <button
-            onClick={handleExport}
-            disabled={!reportData || transactions.length === 0}
-            className="flex items-center space-x-2 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-lg transition-all hover:shadow-xl disabled:bg-gray-400 disabled:cursor-not-allowed disabled:shadow-none"
-          >
-            <Download className="w-5 h-5" />
-            <span className="font-medium">Xuất Excel</span>
-          </button>
+        <div className="mb-4">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">📊 Báo cáo cuối ngày</h1>
+          <p className="text-gray-600">Tổng hợp giao dịch và doanh thu trong ngày</p>
         </div>
       </div>
 
