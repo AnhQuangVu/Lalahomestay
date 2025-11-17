@@ -19,12 +19,12 @@ export default function AccountManagement() {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
-  
+
   // Dialog states
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<any>(null);
-  
+
   // Form state
   const [formData, setFormData] = useState({
     ho_ten: '',
@@ -49,7 +49,7 @@ export default function AccountManagement() {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
       });
       const result = await response.json();
-      
+
       if (result.success) {
         setAccounts(result.data || []);
       } else {
@@ -99,7 +99,7 @@ export default function AccountManagement() {
       });
 
       const result = await response.json();
-      
+
       if (result.success) {
         toast.success('Thêm tài khoản thành công!');
         setShowAddDialog(false);
@@ -134,7 +134,7 @@ export default function AccountManagement() {
       });
 
       const result = await response.json();
-      
+
       if (result.success) {
         toast.success('Cập nhật tài khoản thành công!');
         setShowEditDialog(false);
@@ -153,7 +153,7 @@ export default function AccountManagement() {
 
   const handleDelete = async (accountId: string) => {
     if (!confirm('Bạn có chắc muốn xóa tài khoản này?')) return;
-    
+
     setLoading(true);
     try {
       const response = await fetch(`${API_URL}/tai-khoan/${accountId}`, {
@@ -208,17 +208,15 @@ export default function AccountManagement() {
     const variants: any = {
       'quan_tri': 'default',
       'le_tan': 'secondary',
-      'ke_toan': 'secondary',
-      'khach_hang': 'outline'
+      'ke_toan': 'secondary'
     };
-    
+
     const labels: any = {
       'quan_tri': '👑 Quản trị',
       'le_tan': '👤 Lễ tân',
-      'ke_toan': '💰 Kế toán',
-      'khach_hang': '👥 Khách hàng'
+      'ke_toan': '💰 Kế toán'
     };
-    
+
     return <Badge variant={variants[role] || 'secondary'}>{labels[role] || role}</Badge>;
   };
 
@@ -271,7 +269,6 @@ export default function AccountManagement() {
                 <SelectItem value="quan_tri">Quản trị</SelectItem>
                 <SelectItem value="le_tan">Lễ tân</SelectItem>
                 <SelectItem value="ke_toan">Kế toán</SelectItem>
-                <SelectItem value="khach_hang">Khách hàng</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -386,7 +383,6 @@ export default function AccountManagement() {
                   <SelectItem value="quan_tri">Quản trị</SelectItem>
                   <SelectItem value="le_tan">Lễ tân</SelectItem>
                   <SelectItem value="ke_toan">Kế toán</SelectItem>
-                  <SelectItem value="khach_hang">Khách hàng</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -457,7 +453,6 @@ export default function AccountManagement() {
                   <SelectItem value="quan_tri">Quản trị</SelectItem>
                   <SelectItem value="le_tan">Lễ tân</SelectItem>
                   <SelectItem value="ke_toan">Kế toán</SelectItem>
-                  <SelectItem value="khach_hang">Khách hàng</SelectItem>
                 </SelectContent>
               </Select>
             </div>
