@@ -94,7 +94,11 @@ export default function BookingPage() {
       if (locData.success) setLocations(locData.data || []);
       if (conceptData.success) setConcepts(conceptData.data || []);
       if (roomData.success) {
-        setAllRooms(roomData.data || []);
+        // Lọc bỏ phòng đình chỉ - không hiển thị cho customer
+        const availableRooms = (roomData.data || []).filter(
+          (room: any) => room.trang_thai !== 'dinh_chi' && room.trang_thai !== 'bao_tri'
+        );
+        setAllRooms(availableRooms);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -106,6 +110,9 @@ export default function BookingPage() {
 
   const filterRooms = () => {
     let filtered = allRooms;
+
+    // Luôn loại bỏ phòng đình chỉ và bảo trì (double-check safety)
+    filtered = filtered.filter(r => r.trang_thai !== 'dinh_chi' && r.trang_thai !== 'bao_tri');
 
     // Filter by status
     if (statusFilter !== 'all') {
