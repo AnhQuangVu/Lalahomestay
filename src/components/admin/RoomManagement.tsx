@@ -10,7 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Badge } from '../ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-import { Search, Plus, Edit, RefreshCw, Home, Tag, Building2, Trash2 } from 'lucide-react';
+import { Search, Plus, Edit, RefreshCw, Home, Tag, Building2, Trash2, Upload, X } from 'lucide-react';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { uploadToCloudinary } from '../../utils/cloudinary';
 import { getRoomImage } from '../../utils/imageUtils';
@@ -67,8 +67,16 @@ export default function RoomManagement() {
     dia_chi: '',
     hotline: '',
     mo_ta: '',
+    anh_dai_dien: '',
+    anh_phu: [] as string[],
     trang_thai: true
   });
+
+  // Location image upload states
+  const [locationImageFile, setLocationImageFile] = useState<File | null>(null);
+  const [locationGalleryFiles, setLocationGalleryFiles] = useState<File[]>([]);
+  const [locationImagePreview, setLocationImagePreview] = useState<string>('');
+  const [locationGalleryPreviews, setLocationGalleryPreviews] = useState<string[]>([]);
 
   useEffect(() => {
     fetchAll();
@@ -362,8 +370,31 @@ export default function RoomManagement() {
 
     setLoading(true);
     try {
+      // Upload location image to Cloudinary if provided
+      let anhDaiDienUrl = locationForm.anh_dai_dien;
+      let anhPhuUrls = locationForm.anh_phu || [];
+
+      if (locationImageFile) {
+        toast.info('Đang upload ảnh đại diện cơ sở...');
+        anhDaiDienUrl = await uploadToCloudinary(locationImageFile, 'locations');
+      }
+
+      if (locationGalleryFiles.length > 0) {
+        toast.info('Đang upload ảnh gallery cơ sở...');
+        const uploadedUrls = await Promise.all(
+          locationGalleryFiles.map(file => uploadToCloudinary(file, 'locations'))
+        );
+        anhPhuUrls = [...anhPhuUrls, ...uploadedUrls];
+      }
+
       const url = editMode ? `${API_URL}/co-so/${selectedItem.id}` : `${API_URL}/co-so`;
       const method = editMode ? 'PUT' : 'POST';
+
+      const payload = {
+        ...locationForm,
+        anh_dai_dien: anhDaiDienUrl,
+        anh_phu: anhPhuUrls
+      };
 
       const response = await fetch(url, {
         method,
@@ -371,7 +402,7 @@ export default function RoomManagement() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${publicAnonKey}`
         },
-        body: JSON.stringify(locationForm)
+        body: JSON.stringify(payload)
       });
 
       const result = await response.json();
@@ -498,8 +529,14 @@ export default function RoomManagement() {
       dia_chi: '',
       hotline: '',
       mo_ta: '',
+      anh_dai_dien: '',
+      anh_phu: [],
       trang_thai: true
     });
+    setLocationImageFile(null);
+    setLocationGalleryFiles([]);
+    setLocationImagePreview('');
+    setLocationGalleryPreviews([]);
     setEditMode(false);
     setSelectedItem(null);
   };
@@ -804,8 +841,14 @@ export default function RoomManagement() {
                                 dia_chi: location.dia_chi,
                                 hotline: location.hotline || '',
                                 mo_ta: location.mo_ta || '',
+                                anh_dai_dien: location.anh_dai_dien || '',
+                                anh_phu: location.anh_phu || [],
                                 trang_thai: location.trang_thai
                               });
+                              setLocationImageFile(null);
+                              setLocationGalleryFiles([]);
+                              setLocationImagePreview('');
+                              setLocationGalleryPreviews([]);
                               setEditMode(true);
                               setShowLocationDialog(true);
                             }}
@@ -1167,6 +1210,142 @@ export default function RoomManagement() {
                 value={locationForm.mo_ta}
                 onChange={(e) => setLocationForm({ ...locationForm, mo_ta: e.target.value })}
               />
+            </div>
+
+            {/* Location Images */}
+            <div className="space-y-4">
+              {/* Main Image */}
+              <div>
+                <Label>Ảnh đại diện cơ sở</Label>
+                <div className="mt-2">
+                  {locationImagePreview || locationForm.anh_dai_dien ? (
+                    <div className="relative border rounded-lg p-2">
+                      <img
+                        src={locationImagePreview || locationForm.anh_dai_dien}
+                        alt="Cơ sở"
+                        className="w-full h-40 object-cover rounded"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLocationImageFile(null);
+                          setLocationImagePreview('');
+                          setLocationForm({ ...locationForm, anh_dai_dien: '' });
+                        }}
+                        className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full hover:bg-red-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="border-2 border-dashed border-gray-300 rounded-lg p-4 flex flex-col items-center justify-center cursor-pointer hover:border-gray-400 transition-colors h-40">
+                      <Upload className="w-8 h-8 text-gray-400 mb-2" />
+                      <span className="text-sm text-gray-500">Tải ảnh đại diện</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            if (file.size > 10 * 1024 * 1024) {
+                              toast.error('Kích thước ảnh không được vượt quá 10MB');
+                              return;
+                            }
+                            setLocationImageFile(file);
+                            const url = URL.createObjectURL(file);
+                            setLocationImagePreview(url);
+                          }
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              {/* Gallery */}
+              <div>
+                <Label>Ảnh gallery cơ sở (tùy chọn)</Label>
+                <div className="mt-2 space-y-2">
+                  {/* Existing images */}
+                  {locationForm.anh_phu && locationForm.anh_phu.length > 0 && (
+                    <div className="grid grid-cols-3 gap-2">
+                      {locationForm.anh_phu.map((url, idx) => (
+                        <div key={idx} className="relative border rounded p-1">
+                          <img src={url} alt={`Gallery ${idx + 1}`} className="w-full h-20 object-cover rounded" />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newList = locationForm.anh_phu.filter((_, i) => i !== idx);
+                              setLocationForm({ ...locationForm, anh_phu: newList });
+                            }}
+                            className="absolute -top-1 -right-1 bg-red-500 text-white p-1 rounded-full hover:bg-red-600"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* New selected files preview */}
+                  {locationGalleryPreviews.length > 0 && (
+                    <div className="grid grid-cols-3 gap-2">
+                      {locationGalleryPreviews.map((url, idx) => (
+                        <div key={idx} className="relative border rounded p-1 border-blue-400">
+                          <img src={url} alt={`New ${idx + 1}`} className="w-full h-20 object-cover rounded" />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const files = [...locationGalleryFiles];
+                              const previews = [...locationGalleryPreviews];
+                              try { URL.revokeObjectURL(previews[idx]); } catch (e) { }
+                              files.splice(idx, 1);
+                              previews.splice(idx, 1);
+                              setLocationGalleryFiles(files);
+                              setLocationGalleryPreviews(previews);
+                            }}
+                            className="absolute -top-1 -right-1 bg-red-500 text-white p-1 rounded-full hover:bg-red-600"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Upload button */}
+                  <label className="border-2 border-dashed border-gray-300 rounded-lg p-4 flex flex-col items-center justify-center cursor-pointer hover:border-gray-400 transition-colors">
+                    <Upload className="w-6 h-6 text-gray-400 mb-1" />
+                    <span className="text-sm text-gray-500">Thêm ảnh gallery</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files || []);
+                        if (files.length === 0) return;
+
+                        const validFiles: File[] = [];
+                        for (const file of files) {
+                          if (file.size > 10 * 1024 * 1024) {
+                            toast.error(`${file.name} vượt quá 10MB`);
+                            continue;
+                          }
+                          validFiles.push(file);
+                        }
+
+                        if (validFiles.length > 0) {
+                          setLocationGalleryFiles([...locationGalleryFiles, ...validFiles]);
+                          const newPreviews = validFiles.map(f => URL.createObjectURL(f));
+                          setLocationGalleryPreviews([...locationGalleryPreviews, ...newPreviews]);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
             </div>
           </div>
           <DialogFooter>

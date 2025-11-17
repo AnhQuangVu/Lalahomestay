@@ -190,6 +190,67 @@ const galleryImages = room.anh_phu?.length > 0
 | 2025-11-17 | `add_room_images.sql` | Thêm cột `anh_chinh` (text) và `anh_phu` (text[]) vào bảng `phong` |
 | 2025-11-17 | `add_dinh_chi_status.sql` | Thêm trạng thái 'dinh_chi' vào CHECK constraint của `phong.trang_thai` |
 | 2025-11-17 | `add_customer_cccd_images.sql` | Thêm cột `cccd_mat_truoc` và `cccd_mat_sau` vào bảng `khach_hang` |
+| 2025-11-17 | `add_location_images.sql` | Thêm cột `anh_dai_dien` (text) và `anh_phu` (text[]) vào bảng `co_so` |
+
+---
+
+## Bảng: `co_so` (Cơ sở / Chi nhánh)
+
+### Schema hiện tại (sau migration `add_location_images.sql`)
+
+```sql
+CREATE TABLE public.co_so (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  ten_co_so text NOT NULL,
+  dia_chi text NULL,
+  hotline text NULL,
+  mo_ta text NULL,
+  trang_thai boolean NULL DEFAULT true,
+  anh_dai_dien text NULL,                -- ✨ MỚI: URL ảnh đại diện cơ sở (Cloudinary)
+  anh_phu text[] NULL DEFAULT '{}',      -- ✨ MỚI: Mảng URLs ảnh gallery cơ sở (Cloudinary)
+  
+  CONSTRAINT co_so_pkey PRIMARY KEY (id)
+) TABLESPACE pg_default;
+```
+
+### Các trường (Fields)
+
+| Tên trường | Kiểu | Nullable | Mặc định | Mô tả |
+|------------|------|----------|----------|-------|
+| `id` | uuid | NO | `gen_random_uuid()` | Primary key |
+| `ten_co_so` | text | NO | - | Tên cơ sở/chi nhánh, ví dụ: "LaLa House Quận 1", "LaLa House Thủ Đức" |
+| `dia_chi` | text | YES | NULL | Địa chỉ cơ sở |
+| `hotline` | text | YES | NULL | Số điện thoại hotline |
+| `mo_ta` | text | YES | NULL | Mô tả chi tiết về cơ sở |
+| `trang_thai` | boolean | YES | `true` | Trạng thái hoạt động: `true` = đang hoạt động, `false` = ngừng |
+| **`anh_dai_dien`** | **text** | **YES** | **NULL** | **URL ảnh đại diện cơ sở (Cloudinary)** |
+| **`anh_phu`** | **text[]** | **YES** | **`'{}'`** | **Mảng URLs ảnh gallery cơ sở (Cloudinary)** |
+
+### Ràng buộc (Constraints)
+
+- **Primary Key**: `id`
+
+### API Usage (Frontend)
+
+```typescript
+// Thêm cơ sở mới với ảnh
+const newLocation = {
+  ten_co_so: "LaLa House Quận 1",
+  dia_chi: "123 Đường ABC, Quận 1, TP.HCM",
+  hotline: "0900123456",
+  mo_ta: "Cơ sở chính nằm ngay trung tâm quận 1",
+  trang_thai: true,
+  anh_dai_dien: "https://res.cloudinary.com/.../location-main.jpg",
+  anh_phu: ["https://res.cloudinary.com/.../gallery1.jpg", "https://res.cloudinary.com/.../gallery2.jpg"]
+};
+
+// POST /co-so
+const response = await fetch(`${API_URL}/co-so`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'apikey': publicAnonKey },
+  body: JSON.stringify(newLocation)
+});
+```
 
 ---
 
