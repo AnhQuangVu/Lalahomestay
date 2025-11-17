@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { uploadToCloudinary } from '../../utils/cloudinary';
 import { Calendar, Users } from 'lucide-react';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { toast } from 'sonner';
@@ -18,8 +19,42 @@ export default function NewBooking() {
     numberOfGuests: 2,
     notes: '',
     bookingSource: 'facebook',
-    paymentMethod: 'transfer'
+    paymentMethod: 'transfer',
+    cccdFront: '', // link ảnh mặt trước
+    cccdBack: '',  // link ảnh mặt sau
+    cccdFrontUploading: false,
+    cccdBackUploading: false
   });
+
+  // Xử lý upload ảnh CCCD mặt trước
+  const handleUploadCCCDFront = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFormData(prev => ({ ...prev, cccdFrontUploading: true }));
+    try {
+      const url = await uploadToCloudinary(file, 'cccd');
+      setFormData(prev => ({ ...prev, cccdFront: url, cccdFrontUploading: false }));
+      toast.success('Tải ảnh mặt trước thành công!');
+    } catch (err) {
+      setFormData(prev => ({ ...prev, cccdFrontUploading: false }));
+      toast.error('Tải ảnh mặt trước thất bại!');
+    }
+  };
+
+  // Xử lý upload ảnh CCCD mặt sau
+  const handleUploadCCCDBack = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFormData(prev => ({ ...prev, cccdBackUploading: true }));
+    try {
+      const url = await uploadToCloudinary(file, 'cccd');
+      setFormData(prev => ({ ...prev, cccdBack: url, cccdBackUploading: false }));
+      toast.success('Tải ảnh mặt sau thành công!');
+    } catch (err) {
+      setFormData(prev => ({ ...prev, cccdBackUploading: false }));
+      toast.error('Tải ảnh mặt sau thất bại!');
+    }
+  };
 
   const [loading, setLoading] = useState(false);
   const [locations, setLocations] = useState<any[]>([]);
@@ -108,11 +143,12 @@ export default function NewBooking() {
         thoi_gian_nhan: formData.checkIn,
         thoi_gian_tra: formData.checkOut,
         so_khach: formData.numberOfGuests || 1,
-        // send both keys for compatibility
         ghi_chu: formData.notes || null,
         ghi_chu_khach: formData.notes || null,
         kenh_dat: formData.bookingSource || 'phone',
-        trang_thai: 'da_coc'
+        trang_thai: 'da_coc',
+        cccd_mat_truoc: formData.cccdFront || null,
+        cccd_mat_sau: formData.cccdBack || null
       };
 
       const response = await fetch(
@@ -145,7 +181,9 @@ export default function NewBooking() {
           numberOfGuests: 2,
           notes: '',
           bookingSource: 'facebook',
-          paymentMethod: 'transfer'
+          paymentMethod: 'transfer',
+          cccdFront: '',
+          cccdBack: ''
         });
       } else {
         toast.error('Đặt phòng thất bại: ' + (data.error || 'Lỗi không xác định'));
@@ -207,6 +245,34 @@ export default function NewBooking() {
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                 placeholder="email@example.com"
               />
+            </div>
+            <div>
+              <label className="block text-gray-700 mb-2">Ảnh CCCD mặt trước</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleUploadCCCDFront}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                disabled={formData.cccdFrontUploading}
+              />
+              {formData.cccdFrontUploading && <p className="text-blue-500 text-sm mt-1">Đang tải lên...</p>}
+              {formData.cccdFront && (
+                <img src={formData.cccdFront} alt="CCCD mặt trước" className="mt-2 rounded shadow w-32" />
+              )}
+            </div>
+            <div>
+              <label className="block text-gray-700 mb-2">Ảnh CCCD mặt sau</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleUploadCCCDBack}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                disabled={formData.cccdBackUploading}
+              />
+              {formData.cccdBackUploading && <p className="text-blue-500 text-sm mt-1">Đang tải lên...</p>}
+              {formData.cccdBack && (
+                <img src={formData.cccdBack} alt="CCCD mặt sau" className="mt-2 rounded shadow w-32" />
+              )}
             </div>
           </div>
         </div>
@@ -335,8 +401,8 @@ export default function NewBooking() {
               return (
                 <div className="md:col-span-2">
                   <div className={`p-4 rounded-lg border-2 ${!isValidTime
-                      ? 'bg-red-50 border-red-300'
-                      : 'bg-blue-50 border-blue-300'
+                    ? 'bg-red-50 border-red-300'
+                    : 'bg-blue-50 border-blue-300'
                     }`}>
                     {!isValidTime ? (
                       <p className="text-red-700 text-sm font-medium">
@@ -389,7 +455,6 @@ export default function NewBooking() {
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
               >
                 <option value="transfer">Chuyển khoản</option>
-                <option value="cash">Tiền mặt</option>
                 <option value="vnpay">VNPAY QR</option>
                 <option value="momo">Momo QR</option>
               </select>
