@@ -672,13 +672,6 @@ export default function Reports() {
             <Download className="w-5 h-5" />
             <span>Xuất Excel</span>
           </button>
-          <button
-            onClick={() => handleExport('pdf')}
-            className="flex items-center space-x-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-          >
-            <Download className="w-5 h-5" />
-            <span>Xuất PDF</span>
-          </button>
         </div>
       </div>
 

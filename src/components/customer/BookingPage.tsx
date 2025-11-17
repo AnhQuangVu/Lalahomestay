@@ -539,11 +539,16 @@ export default function BookingPage() {
                     >
                       <div className="relative">
                         <RoomImageCarousel
-                          images={
-                            room.anh_chinh || (room.anh_phu && room.anh_phu.length > 0)
-                              ? [room.anh_chinh, ...(room.anh_phu || [])].filter(Boolean)
-                              : getRoomImages(room.id, 4)
-                          }
+                          images={(() => {
+                            // Lọc ảnh từ server (loại bỏ null, undefined, chuỗi rỗng)
+                            const serverImages = [room.anh_chinh, ...(room.anh_phu || [])]
+                              .filter(img => img && typeof img === 'string' && img.trim().length > 0);
+
+                            // Nếu có ảnh từ server thì dùng, không thì dùng ảnh random
+                            return serverImages.length > 0
+                              ? serverImages
+                              : getRoomImages(room.id, 4);
+                          })()}
                           alt={room.ma_phong || 'Phòng LaLa House'}
                         />
                         <div className="absolute top-3 right-3 z-10">
