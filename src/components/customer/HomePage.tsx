@@ -127,7 +127,7 @@ export default function HomePage() {
                 <div key={room.id} className="group bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all">
                   <div className="relative h-64 overflow-hidden">
                     <img
-                      src={getRoomImage(room.id)}
+                      src={room.anh_chinh || getRoomImage(room.id)}
                       alt={room.ma_phong || 'Phòng LaLa House'}
                       loading="lazy"
                       onError={(e) => {
@@ -135,7 +135,7 @@ export default function HomePage() {
                         // prevent infinite loop if fallback also fails
                         if (!img.dataset.fallbackApplied) {
                           img.dataset.fallbackApplied = '1';
-                          img.src = getRoomImage(null); // default image
+                          img.src = getRoomImage(room.id); // fallback to consistent random image
                         }
                       }}
                       className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
