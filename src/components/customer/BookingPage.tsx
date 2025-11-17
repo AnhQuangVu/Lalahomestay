@@ -335,7 +335,7 @@ export default function BookingPage() {
         tong_tien: calculateTotal(),
         coc_csvc: DEPOSIT_AMOUNT,
         kenh_dat: 'website',
-        trang_thai: 'da_coc',
+        // Do not set `trang_thai` here — let server default to 'cho_coc' (Chờ cọc)
         ghi_chu: notes || null,
         // also send legacy field name to be safe
         ghi_chu_khach: notes || null
@@ -369,7 +369,8 @@ export default function BookingPage() {
         // Store booking data for QR dialog
         setBookingData({
           bookingCode: bookingCode,
-          amount: calculateTotal() + DEPOSIT_AMOUNT,
+          // Show deposit amount for payment QR (customer should pay deposit)
+          amount: DEPOSIT_AMOUNT,
           bookingDetails: {
             roomName: `${selectedRoom.loai_phong?.ten_loai} - ${selectedRoom.ma_phong}`,
             checkIn: new Date(checkIn).toLocaleString('vi-VN'),

@@ -383,6 +383,15 @@ export default function RoomManagement() {
     return <Badge variant={variants[status] || 'secondary'}>{labels[status] || status}</Badge>;
   };
 
+  const getCleanStatusLabel = (status: string) => {
+    const labels: { [key: string]: string } = {
+      'sach': 'Sạch',
+      'dang_don': 'Đang dọn',
+      'chua_don': 'Chưa dọn'
+    };
+    return labels[status] || status;
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -456,7 +465,7 @@ export default function RoomManagement() {
                         <TableCell>{room.loai_phong?.ten_loai || '-'}</TableCell>
                         <TableCell>{room.loai_phong?.co_so?.ten_co_so || '-'}</TableCell>
                         <TableCell>{getRoomStatusBadge(room.trang_thai)}</TableCell>
-                        <TableCell>{room.tinh_trang_vesinh}</TableCell>
+                        <TableCell>{getCleanStatusLabel(room.tinh_trang_vesinh)}</TableCell>
                         <TableCell className="max-w-xs truncate">{room.ghi_chu || '-'}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex gap-2 justify-end">

@@ -75,6 +75,15 @@ export function DatabaseViewer() {
     return new Date(dateStr).toLocaleString('vi-VN');
   };
 
+  const getCleanStatusLabel = (status: string) => {
+    const labels: Record<string, string> = {
+      'sach': 'Sạch',
+      'dang_don': 'Đang dọn',
+      'chua_don': 'Chưa dọn'
+    };
+    return labels[status] || status;
+  };
+
   const exportToCSV = (data: any[], filename: string) => {
     if (!data || data.length === 0) return;
 
@@ -295,7 +304,7 @@ export function DatabaseViewer() {
                             {item.trang_thai}
                           </Badge>
                         </TableCell>
-                        <TableCell>{item.tinh_trang_vesinh}</TableCell>
+                        <TableCell>{getCleanStatusLabel(item.tinh_trang_vesinh)}</TableCell>
                         <TableCell>{item.ghi_chu || '-'}</TableCell>
                       </TableRow>
                     ))}

@@ -562,13 +562,24 @@ app.put('/make-server-faeb1932/dat-phong/:id', async (c) => {
       const roomId = data?.id_phong || body.id_phong || (data?.phong && data.phong.id);
 
       if (roomId && newStatus) {
-        // Map booking statuses -> room statuses
+        // Map booking statuses -> room statuses (support both old and new status names)
         // When booking is checked out or cancelled, free the room
-        if (newStatus === 'checkout' || newStatus === 'da_tra' || newStatus === 'da_huy') {
+        if (
+          newStatus === 'checkout' ||
+          newStatus === 'da_tra' ||
+          newStatus === 'da_tra_phong' ||
+          newStatus === 'da_huy' ||
+          newStatus === 'huy'
+        ) {
           await sql.updatePhong(roomId, { trang_thai: 'trong' });
         }
         // When booking is checked in or occupied, mark room as in-use
-        else if (newStatus === 'checkin' || newStatus === 'dang_o' || newStatus === 'da_tt') {
+        else if (
+          newStatus === 'checkin' ||
+          newStatus === 'dang_o' ||
+          newStatus === 'da_nhan_phong' ||
+          newStatus === 'da_tt'
+        ) {
           await sql.updatePhong(roomId, { trang_thai: 'dang_dung' });
         }
         // other statuses: do not change room status here
@@ -633,9 +644,10 @@ app.get('/make-server-faeb1932/bookings/lookup', async (c) => {
           totalAmount: booking.tong_tien,
           paymentStatus: 'pending',
           bookingStatus: booking.trang_thai === 'da_coc' ? 'confirmed' :
-            booking.trang_thai === 'dang_o' ? 'checked-in' :
-              booking.trang_thai === 'da_tra' ? 'checked-out' :
-                booking.trang_thai === 'da_huy' ? 'cancelled' : 'pending',
+            (booking.trang_thai === 'da_nhan_phong' || booking.trang_thai === 'dang_o') ? 'checked-in' :
+              (booking.trang_thai === 'da_tra_phong' || booking.trang_thai === 'da_tra' || booking.trang_thai === 'checkout') ? 'checked-out' :
+                (booking.trang_thai === 'da_huy' || booking.trang_thai === 'huy') ? 'cancelled' :
+                  (booking.trang_thai === 'cho_coc' ? 'pending' : 'pending'),
           createdAt: booking.created_at
         }];
       }
@@ -657,9 +669,10 @@ app.get('/make-server-faeb1932/bookings/lookup', async (c) => {
           totalAmount: booking.tong_tien,
           paymentStatus: 'pending',
           bookingStatus: booking.trang_thai === 'da_coc' ? 'confirmed' :
-            booking.trang_thai === 'dang_o' ? 'checked-in' :
-              booking.trang_thai === 'da_tra' ? 'checked-out' :
-                booking.trang_thai === 'da_huy' ? 'cancelled' : 'pending',
+            (booking.trang_thai === 'da_nhan_phong' || booking.trang_thai === 'dang_o') ? 'checked-in' :
+              (booking.trang_thai === 'da_tra_phong' || booking.trang_thai === 'da_tra' || booking.trang_thai === 'checkout') ? 'checked-out' :
+                (booking.trang_thai === 'da_huy' || booking.trang_thai === 'huy') ? 'cancelled' :
+                  (booking.trang_thai === 'cho_coc' ? 'pending' : 'pending'),
           createdAt: booking.created_at
         }));
       }
