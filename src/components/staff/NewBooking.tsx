@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Calendar, Users } from 'lucide-react';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { toast } from 'sonner';
+
+const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-faeb1932`;
 
 export default function NewBooking() {
   const [formData, setFormData] = useState({
@@ -20,6 +22,77 @@ export default function NewBooking() {
   });
 
   const [loading, setLoading] = useState(false);
+  const [locations, setLocations] = useState<any[]>([]);
+  const [concepts, setConcepts] = useState<any[]>([]);
+  const [rooms, setRooms] = useState<any[]>([]);
+  const [filteredConcepts, setFilteredConcepts] = useState<any[]>([]);
+  const [filteredRooms, setFilteredRooms] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  useEffect(() => {
+    // Filter concepts by selected location
+    if (formData.location) {
+      const filtered = concepts.filter(c => c.id_co_so === formData.location);
+      setFilteredConcepts(filtered);
+    } else {
+      setFilteredConcepts([]);
+    }
+    // Reset concept and room when location changes
+    setFormData(prev => ({ ...prev, concept: '', room: '' }));
+  }, [formData.location, concepts]);
+
+  useEffect(() => {
+    // Filter rooms by selected concept and only show available rooms
+    if (formData.concept) {
+      const filtered = rooms.filter(r =>
+        r.id_loai_phong === formData.concept &&
+        r.trang_thai === 'trong'
+      );
+      setFilteredRooms(filtered);
+    } else {
+      setFilteredRooms([]);
+    }
+    // Reset room when concept changes
+    setFormData(prev => ({ ...prev, room: '' }));
+  }, [formData.concept, rooms]);
+
+  const fetchData = async () => {
+    try {
+      const [locRes, conceptRes, roomRes] = await Promise.all([
+        fetch(`${API_URL}/co-so`, {
+          headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        }),
+        fetch(`${API_URL}/loai-phong`, {
+          headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        }),
+        fetch(`${API_URL}/phong`, {
+          headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        })
+      ]);
+
+      const [locData, conceptData, roomData] = await Promise.all([
+        locRes.json(),
+        conceptRes.json(),
+        roomRes.json()
+      ]);
+
+      if (locData.success) setLocations(locData.data || []);
+      if (conceptData.success) setConcepts(conceptData.data || []);
+      if (roomData.success) {
+        // Lọc bỏ phòng đình chỉ và bảo trì - staff chỉ đặt phòng hoạt động
+        const availableRooms = (roomData.data || []).filter(
+          (r: any) => r.trang_thai !== 'dinh_chi' && r.trang_thai !== 'bao_tri'
+        );
+        setRooms(availableRooms);
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      toast.error('Không thể tải dữ liệu. Vui lòng thử lại.');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -153,9 +226,9 @@ export default function NewBooking() {
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
               >
                 <option value="">-- Chọn cơ sở --</option>
-                <option value="dqh">Dương Quảng Hàm</option>
-                <option value="km">Kim Mã</option>
-                <option value="nt">Nghi Tàm</option>
+                {locations.map(loc => (
+                  <option key={loc.id} value={loc.id}>{loc.ten_co_so}</option>
+                ))}
               </select>
             </div>
 
@@ -168,11 +241,12 @@ export default function NewBooking() {
                 value={formData.concept}
                 onChange={(e) => setFormData({ ...formData, concept: e.target.value })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                disabled={!formData.location}
               >
                 <option value="">-- Chọn loại phòng --</option>
-                <option value="matcha">Matcha</option>
-                <option value="mellow">Mellow</option>
-                <option value="andrea">Andrea</option>
+                {filteredConcepts.map(concept => (
+                  <option key={concept.id} value={concept.id}>{concept.ten_loai}</option>
+                ))}
               </select>
             </div>
 
@@ -180,14 +254,23 @@ export default function NewBooking() {
               <label className="block text-gray-700 mb-2">
                 Phòng cụ thể <span className="text-red-500">*</span>
               </label>
-              <input
-                type="text"
+              <select
                 required
                 value={formData.room}
                 onChange={(e) => setFormData({ ...formData, room: e.target.value })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                placeholder="101"
-              />
+                disabled={!formData.concept}
+              >
+                <option value="">-- Chọn phòng --</option>
+                {filteredRooms.map(room => (
+                  <option key={room.id} value={room.id}>
+                    {room.ma_phong} - {room.trang_thai === 'trong' ? 'Còn trống' : 'Đang dùng'}
+                  </option>
+                ))}
+              </select>
+              {formData.concept && filteredRooms.length === 0 && (
+                <p className="text-sm text-amber-600 mt-1">Không có phòng trống cho loại này</p>
+              )}
             </div>
 
             <div>
