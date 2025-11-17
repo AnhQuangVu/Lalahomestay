@@ -7,8 +7,9 @@ import { Textarea } from '../ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Badge } from '../ui/badge';
-import { Search, Plus, Edit, Eye, RefreshCw, Phone, Mail, MapPin, Image as ImageIcon } from 'lucide-react';
+import { Search, Plus, Edit, Eye, RefreshCw, Phone, Mail, MapPin, Image as ImageIcon, Upload, X } from 'lucide-react';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { uploadToCloudinary } from '../../utils/cloudinary';
 import { toast } from 'sonner@2.0.3';
 
 const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-faeb1932`;
@@ -32,8 +33,16 @@ export default function CustomerManagement() {
     sdt: '',
     email: '',
     dia_chi: '',
-    ghi_chu: ''
+    ghi_chu: '',
+    cccd_mat_truoc: '',
+    cccd_mat_sau: ''
   });
+
+  // Image upload states
+  const [cccdTruocFile, setCccdTruocFile] = useState<File | null>(null);
+  const [cccdSauFile, setCccdSauFile] = useState<File | null>(null);
+  const [cccdTruocPreview, setCccdTruocPreview] = useState<string>('');
+  const [cccdSauPreview, setCccdSauPreview] = useState<string>('');
 
   useEffect(() => {
     fetchCustomers();
@@ -97,13 +106,33 @@ export default function CustomerManagement() {
 
     setLoading(true);
     try {
+      // Upload CCCD images to Cloudinary if provided
+      let cccdTruocUrl = formData.cccd_mat_truoc;
+      let cccdSauUrl = formData.cccd_mat_sau;
+
+      if (cccdTruocFile) {
+        toast.info('Đang upload ảnh CCCD mặt trước...');
+        cccdTruocUrl = await uploadToCloudinary(cccdTruocFile, 'customers');
+      }
+
+      if (cccdSauFile) {
+        toast.info('Đang upload ảnh CCCD mặt sau...');
+        cccdSauUrl = await uploadToCloudinary(cccdSauFile, 'customers');
+      }
+
+      const payload = {
+        ...formData,
+        cccd_mat_truoc: cccdTruocUrl,
+        cccd_mat_sau: cccdSauUrl
+      };
+
       const response = await fetch(`${API_URL}/khach-hang`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${publicAnonKey}`
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       });
 
       const result = await response.json();
@@ -132,13 +161,33 @@ export default function CustomerManagement() {
 
     setLoading(true);
     try {
+      // Upload CCCD images to Cloudinary if new files provided
+      let cccdTruocUrl = formData.cccd_mat_truoc;
+      let cccdSauUrl = formData.cccd_mat_sau;
+
+      if (cccdTruocFile) {
+        toast.info('Đang upload ảnh CCCD mặt trước...');
+        cccdTruocUrl = await uploadToCloudinary(cccdTruocFile, 'customers');
+      }
+
+      if (cccdSauFile) {
+        toast.info('Đang upload ảnh CCCD mặt sau...');
+        cccdSauUrl = await uploadToCloudinary(cccdSauFile, 'customers');
+      }
+
+      const payload = {
+        ...formData,
+        cccd_mat_truoc: cccdTruocUrl,
+        cccd_mat_sau: cccdSauUrl
+      };
+
       const response = await fetch(`${API_URL}/khach-hang/${selectedCustomer.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${publicAnonKey}`
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       });
 
       const result = await response.json();
@@ -172,8 +221,15 @@ export default function CustomerManagement() {
       sdt: customer.sdt,
       email: customer.email || '',
       dia_chi: customer.dia_chi || '',
-      ghi_chu: customer.ghi_chu || ''
+      ghi_chu: customer.ghi_chu || '',
+      cccd_mat_truoc: customer.cccd_mat_truoc || '',
+      cccd_mat_sau: customer.cccd_mat_sau || ''
     });
+    // Clear file inputs but keep existing URLs for preview
+    setCccdTruocFile(null);
+    setCccdSauFile(null);
+    setCccdTruocPreview('');
+    setCccdSauPreview('');
     setShowEditDialog(true);
   };
 
@@ -183,9 +239,15 @@ export default function CustomerManagement() {
       sdt: '',
       email: '',
       dia_chi: '',
-      ghi_chu: ''
+      ghi_chu: '',
+      cccd_mat_truoc: '',
+      cccd_mat_sau: ''
     });
     setSelectedCustomer(null);
+    setCccdTruocFile(null);
+    setCccdSauFile(null);
+    setCccdTruocPreview('');
+    setCccdSauPreview('');
   };
 
   const formatDate = (dateStr: string) => {
@@ -401,6 +463,107 @@ export default function CustomerManagement() {
                 placeholder="Ghi chú về khách hàng..."
               />
             </div>
+
+            {/* CCCD Images */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* CCCD Mặt trước */}
+              <div>
+                <Label>Ảnh CCCD mặt trước</Label>
+                <div className="mt-2">
+                  {cccdTruocPreview || formData.cccd_mat_truoc ? (
+                    <div className="relative border rounded-lg p-2">
+                      <img
+                        src={cccdTruocPreview || formData.cccd_mat_truoc}
+                        alt="CCCD trước"
+                        className="w-full h-32 object-cover rounded"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCccdTruocFile(null);
+                          setCccdTruocPreview('');
+                          setFormData({ ...formData, cccd_mat_truoc: '' });
+                        }}
+                        className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full hover:bg-red-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="border-2 border-dashed border-gray-300 rounded-lg p-4 flex flex-col items-center justify-center cursor-pointer hover:border-gray-400 transition-colors h-32">
+                      <Upload className="w-8 h-8 text-gray-400 mb-2" />
+                      <span className="text-sm text-gray-500">Tải ảnh lên</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            if (file.size > 10 * 1024 * 1024) {
+                              toast.error('Kích thước ảnh không được vượt quá 10MB');
+                              return;
+                            }
+                            setCccdTruocFile(file);
+                            const url = URL.createObjectURL(file);
+                            setCccdTruocPreview(url);
+                          }
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              {/* CCCD Mặt sau */}
+              <div>
+                <Label>Ảnh CCCD mặt sau</Label>
+                <div className="mt-2">
+                  {cccdSauPreview || formData.cccd_mat_sau ? (
+                    <div className="relative border rounded-lg p-2">
+                      <img
+                        src={cccdSauPreview || formData.cccd_mat_sau}
+                        alt="CCCD sau"
+                        className="w-full h-32 object-cover rounded"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCccdSauFile(null);
+                          setCccdSauPreview('');
+                          setFormData({ ...formData, cccd_mat_sau: '' });
+                        }}
+                        className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full hover:bg-red-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="border-2 border-dashed border-gray-300 rounded-lg p-4 flex flex-col items-center justify-center cursor-pointer hover:border-gray-400 transition-colors h-32">
+                      <Upload className="w-8 h-8 text-gray-400 mb-2" />
+                      <span className="text-sm text-gray-500">Tải ảnh lên</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            if (file.size > 10 * 1024 * 1024) {
+                              toast.error('Kích thước ảnh không được vượt quá 10MB');
+                              return;
+                            }
+                            setCccdSauFile(file);
+                            const url = URL.createObjectURL(file);
+                            setCccdSauPreview(url);
+                          }
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setShowAddDialog(false); resetForm(); }}>
@@ -463,6 +626,107 @@ export default function CustomerManagement() {
                 value={formData.ghi_chu}
                 onChange={(e) => setFormData({ ...formData, ghi_chu: e.target.value })}
               />
+            </div>
+
+            {/* CCCD Images */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* CCCD Mặt trước */}
+              <div>
+                <Label>Ảnh CCCD mặt trước</Label>
+                <div className="mt-2">
+                  {cccdTruocPreview || formData.cccd_mat_truoc ? (
+                    <div className="relative border rounded-lg p-2">
+                      <img
+                        src={cccdTruocPreview || formData.cccd_mat_truoc}
+                        alt="CCCD trước"
+                        className="w-full h-32 object-cover rounded"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCccdTruocFile(null);
+                          setCccdTruocPreview('');
+                          setFormData({ ...formData, cccd_mat_truoc: '' });
+                        }}
+                        className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full hover:bg-red-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="border-2 border-dashed border-gray-300 rounded-lg p-4 flex flex-col items-center justify-center cursor-pointer hover:border-gray-400 transition-colors h-32">
+                      <Upload className="w-8 h-8 text-gray-400 mb-2" />
+                      <span className="text-sm text-gray-500">Tải ảnh lên</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            if (file.size > 10 * 1024 * 1024) {
+                              toast.error('Kích thước ảnh không được vượt quá 10MB');
+                              return;
+                            }
+                            setCccdTruocFile(file);
+                            const url = URL.createObjectURL(file);
+                            setCccdTruocPreview(url);
+                          }
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              {/* CCCD Mặt sau */}
+              <div>
+                <Label>Ảnh CCCD mặt sau</Label>
+                <div className="mt-2">
+                  {cccdSauPreview || formData.cccd_mat_sau ? (
+                    <div className="relative border rounded-lg p-2">
+                      <img
+                        src={cccdSauPreview || formData.cccd_mat_sau}
+                        alt="CCCD sau"
+                        className="w-full h-32 object-cover rounded"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCccdSauFile(null);
+                          setCccdSauPreview('');
+                          setFormData({ ...formData, cccd_mat_sau: '' });
+                        }}
+                        className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full hover:bg-red-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="border-2 border-dashed border-gray-300 rounded-lg p-4 flex flex-col items-center justify-center cursor-pointer hover:border-gray-400 transition-colors h-32">
+                      <Upload className="w-8 h-8 text-gray-400 mb-2" />
+                      <span className="text-sm text-gray-500">Tải ảnh lên</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            if (file.size > 10 * 1024 * 1024) {
+                              toast.error('Kích thước ảnh không được vượt quá 10MB');
+                              return;
+                            }
+                            setCccdSauFile(file);
+                            const url = URL.createObjectURL(file);
+                            setCccdSauPreview(url);
+                          }
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
           <DialogFooter>

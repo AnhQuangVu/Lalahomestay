@@ -187,7 +187,76 @@ const galleryImages = room.anh_phu?.length > 0
 
 | Ngày | Migration | Mô tả |
 |------|-----------|-------|
-| 2025-11-17 | `add_room_images.sql` | Thêm cột `anh_chinh` (text) và `anh_phu` (text[]) |
+| 2025-11-17 | `add_room_images.sql` | Thêm cột `anh_chinh` (text) và `anh_phu` (text[]) vào bảng `phong` |
+| 2025-11-17 | `add_dinh_chi_status.sql` | Thêm trạng thái 'dinh_chi' vào CHECK constraint của `phong.trang_thai` |
+| 2025-11-17 | `add_customer_cccd_images.sql` | Thêm cột `cccd_mat_truoc` và `cccd_mat_sau` vào bảng `khach_hang` |
+
+---
+
+## Bảng: `khach_hang` (Khách hàng)
+
+### Schema hiện tại (sau migration `add_customer_cccd_images.sql`)
+
+```sql
+CREATE TABLE public.khach_hang (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  auth_id uuid NULL,
+  ho_ten text NOT NULL,
+  sdt text NOT NULL,
+  email text NULL,
+  dia_chi text NULL,
+  ghi_chu text NULL,
+  ngay_tao timestamp without time zone NULL DEFAULT now(),
+  cccd_mat_truoc text NULL,              -- ✨ MỚI: URL ảnh CCCD mặt trước (Cloudinary)
+  cccd_mat_sau text NULL,                -- ✨ MỚI: URL ảnh CCCD mặt sau (Cloudinary)
+  
+  CONSTRAINT khach_hang_pkey PRIMARY KEY (id),
+  CONSTRAINT khach_hang_auth_id_fkey FOREIGN KEY (auth_id) 
+    REFERENCES auth.users (id) ON DELETE SET NULL
+) TABLESPACE pg_default;
+```
+
+### Các trường (Fields)
+
+| Tên trường | Kiểu | Nullable | Mặc định | Mô tả |
+|------------|------|----------|----------|-------|
+| `id` | uuid | NO | `gen_random_uuid()` | Primary key |
+| `auth_id` | uuid | YES | NULL | Foreign key tới `auth.users` (nếu có tài khoản) |
+| `ho_ten` | text | NO | - | Họ và tên khách hàng |
+| `sdt` | text | NO | - | Số điện thoại |
+| `email` | text | YES | NULL | Email |
+| `dia_chi` | text | YES | NULL | Địa chỉ |
+| `ghi_chu` | text | YES | NULL | Ghi chú |
+| `ngay_tao` | timestamp | YES | `now()` | Ngày tạo |
+| **`cccd_mat_truoc`** | **text** | **YES** | **NULL** | **URL ảnh CCCD mặt trước (Cloudinary)** |
+| **`cccd_mat_sau`** | **text** | **YES** | **NULL** | **URL ảnh CCCD mặt sau (Cloudinary)** |
+
+### Ví dụ dữ liệu
+
+```json
+{
+  "id": "abc-123-...",
+  "auth_id": null,
+  "ho_ten": "Nguyễn Văn A",
+  "sdt": "0912345678",
+  "email": "nguyenvana@email.com",
+  "dia_chi": "Hà Nội",
+  "ghi_chu": "Khách VIP",
+  "ngay_tao": "2025-11-17T10:00:00Z",
+  "cccd_mat_truoc": "https://res.cloudinary.com/dumxzdunu/image/upload/v1234/customers/cccd-front-123.jpg",
+  "cccd_mat_sau": "https://res.cloudinary.com/dumxzdunu/image/upload/v1234/customers/cccd-back-123.jpg"
+}
+```
+
+---
+
+## Migration History
+
+| Ngày | Migration | Mô tả |
+|------|-----------|-------|
+| 2025-11-17 | `add_room_images.sql` | Thêm cột `anh_chinh` (text) và `anh_phu` (text[]) vào bảng `phong` |
+| 2025-11-17 | `add_dinh_chi_status.sql` | Thêm trạng thái 'dinh_chi' vào CHECK constraint của `phong.trang_thai` |
+| 2025-11-17 | `add_customer_cccd_images.sql` | Thêm cột `cccd_mat_truoc` và `cccd_mat_sau` vào bảng `khach_hang` |
 
 ## Notes
 
