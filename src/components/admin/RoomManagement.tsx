@@ -1172,178 +1172,188 @@ export default function RoomManagement() {
 
       {/* Location Dialog */}
       <Dialog open={showLocationDialog} onOpenChange={setShowLocationDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>{editMode ? 'Chỉnh sửa cơ sở' : 'Thêm cơ sở mới'}</DialogTitle>
             <DialogDescription>
               {editMode ? 'Cập nhật thông tin cơ sở' : 'Thêm địa điểm cơ sở mới'}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>Tên cơ sở *</Label>
-              <Input
-                value={locationForm.ten_co_so}
-                onChange={(e) => setLocationForm({ ...locationForm, ten_co_so: e.target.value })}
-                placeholder="LaLa House Dương Quảng Hàm"
-              />
-            </div>
-            <div>
-              <Label>Địa chỉ *</Label>
-              <Input
-                value={locationForm.dia_chi}
-                onChange={(e) => setLocationForm({ ...locationForm, dia_chi: e.target.value })}
-                placeholder="123 Dương Quảng Hàm, Hà Nội"
-              />
-            </div>
-            <div>
-              <Label>Hotline</Label>
-              <Input
-                value={locationForm.hotline}
-                onChange={(e) => setLocationForm({ ...locationForm, hotline: e.target.value })}
-                placeholder="0987654321"
-              />
-            </div>
-            <div>
-              <Label>Mô tả</Label>
-              <Textarea
-                value={locationForm.mo_ta}
-                onChange={(e) => setLocationForm({ ...locationForm, mo_ta: e.target.value })}
-              />
-            </div>
 
-            {/* Location Images */}
-            <div className="space-y-4">
-              {/* Main Image */}
-              <div>
-                <Label>Ảnh đại diện cơ sở</Label>
-                <div className="mt-2">
-                  {locationImagePreview || locationForm.anh_dai_dien ? (
-                    <div className="relative border rounded-lg p-2">
-                      <img
-                        src={locationImagePreview || locationForm.anh_dai_dien}
-                        alt="Cơ sở"
-                        className="w-full h-40 object-cover rounded"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLocationImageFile(null);
-                          setLocationImagePreview('');
-                          setLocationForm({ ...locationForm, anh_dai_dien: '' });
-                        }}
-                        className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full hover:bg-red-600"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <label className="border-2 border-dashed border-gray-300 rounded-lg p-4 flex flex-col items-center justify-center cursor-pointer hover:border-gray-400 transition-colors h-40">
-                      <Upload className="w-8 h-8 text-gray-400 mb-2" />
-                      <span className="text-sm text-gray-500">Tải ảnh đại diện</span>
+          <div className="overflow-y-auto flex-1 pr-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Left Column - Basic Info */}
+              <div className="space-y-4">
+                <div>
+                  <Label>Tên cơ sở *</Label>
+                  <Input
+                    value={locationForm.ten_co_so}
+                    onChange={(e) => setLocationForm({ ...locationForm, ten_co_so: e.target.value })}
+                    placeholder="LaLa House Dương Quảng Hàm"
+                  />
+                </div>
+                <div>
+                  <Label>Địa chỉ *</Label>
+                  <Input
+                    value={locationForm.dia_chi}
+                    onChange={(e) => setLocationForm({ ...locationForm, dia_chi: e.target.value })}
+                    placeholder="123 Dương Quảng Hàm, Hà Nội"
+                  />
+                </div>
+                <div>
+                  <Label>Hotline</Label>
+                  <Input
+                    value={locationForm.hotline}
+                    onChange={(e) => setLocationForm({ ...locationForm, hotline: e.target.value })}
+                    placeholder="0987654321"
+                  />
+                </div>
+                <div>
+                  <Label>Mô tả</Label>
+                  <Textarea
+                    value={locationForm.mo_ta}
+                    onChange={(e) => setLocationForm({ ...locationForm, mo_ta: e.target.value })}
+                    className="min-h-[120px]"
+                    placeholder="Mô tả về cơ sở, vị trí, tiện ích..."
+                  />
+                </div>
+              </div>
+
+              {/* Right Column - Images */}
+              <div className="space-y-4">
+                {/* Main Image */}
+                <div>
+                  <Label>Ảnh đại diện cơ sở</Label>
+                  <div className="mt-2">
+                    {locationImagePreview || locationForm.anh_dai_dien ? (
+                      <div className="relative border rounded-lg p-2 bg-gray-50">
+                        <img
+                          src={locationImagePreview || locationForm.anh_dai_dien}
+                          alt="Cơ sở"
+                          className="w-full h-48 object-cover rounded"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLocationImageFile(null);
+                            setLocationImagePreview('');
+                            setLocationForm({ ...locationForm, anh_dai_dien: '' });
+                          }}
+                          className="absolute top-3 right-3 bg-red-500 text-white p-1.5 rounded-full hover:bg-red-600 shadow-lg"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="border-2 border-dashed border-gray-300 rounded-lg p-6 flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all h-48">
+                        <Upload className="w-10 h-10 text-gray-400 mb-2" />
+                        <span className="text-sm font-medium text-gray-600">Tải ảnh đại diện</span>
+                        <span className="text-xs text-gray-400 mt-1">PNG, JPG, WEBP (Max 10MB)</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              if (file.size > 10 * 1024 * 1024) {
+                                toast.error('Kích thước ảnh không được vượt quá 10MB');
+                                return;
+                              }
+                              setLocationImageFile(file);
+                              const url = URL.createObjectURL(file);
+                              setLocationImagePreview(url);
+                            }
+                          }}
+                        />
+                      </label>
+                    )}
+                  </div>
+                </div>
+
+                {/* Gallery */}
+                <div>
+                  <Label>Ảnh gallery cơ sở</Label>
+                  <div className="mt-2 space-y-2">
+                    {/* Existing images */}
+                    {locationForm.anh_phu && locationForm.anh_phu.length > 0 && (
+                      <div className="grid grid-cols-3 gap-2">
+                        {locationForm.anh_phu.map((url, idx) => (
+                          <div key={idx} className="relative border rounded-lg p-1 bg-gray-50 group">
+                            <img src={url} alt={`Gallery ${idx + 1}`} className="w-full h-24 object-cover rounded" />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newList = locationForm.anh_phu.filter((_, i) => i !== idx);
+                                setLocationForm({ ...locationForm, anh_phu: newList });
+                              }}
+                              className="absolute -top-1 -right-1 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* New selected files preview */}
+                    {locationGalleryPreviews.length > 0 && (
+                      <div className="grid grid-cols-3 gap-2">
+                        {locationGalleryPreviews.map((url, idx) => (
+                          <div key={idx} className="relative border-2 rounded-lg p-1 border-blue-400 bg-blue-50 group">
+                            <img src={url} alt={`New ${idx + 1}`} className="w-full h-24 object-cover rounded" />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const files = [...locationGalleryFiles];
+                                const previews = [...locationGalleryPreviews];
+                                try { URL.revokeObjectURL(previews[idx]); } catch (e) { }
+                                files.splice(idx, 1);
+                                previews.splice(idx, 1);
+                                setLocationGalleryFiles(files);
+                                setLocationGalleryPreviews(previews);
+                              }}
+                              className="absolute -top-1 -right-1 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Upload button */}
+                    <label className="border-2 border-dashed border-gray-300 rounded-lg p-4 flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all">
+                      <Upload className="w-6 h-6 text-gray-400 mb-1" />
+                      <span className="text-sm font-medium text-gray-600">Thêm ảnh gallery</span>
+                      <span className="text-xs text-gray-400">Có thể chọn nhiều ảnh</span>
                       <input
                         type="file"
                         accept="image/*"
+                        multiple
                         className="hidden"
                         onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
+                          const files = Array.from(e.target.files || []);
+                          if (files.length === 0) return;
+
+                          const validFiles: File[] = [];
+                          for (const file of files) {
                             if (file.size > 10 * 1024 * 1024) {
-                              toast.error('Kích thước ảnh không được vượt quá 10MB');
-                              return;
+                              toast.error(`${file.name} vượt quá 10MB`);
+                              continue;
                             }
-                            setLocationImageFile(file);
-                            const url = URL.createObjectURL(file);
-                            setLocationImagePreview(url);
+                            validFiles.push(file);
+                          }
+
+                          if (validFiles.length > 0) {
+                            setLocationGalleryFiles([...locationGalleryFiles, ...validFiles]);
+                            const newPreviews = validFiles.map(f => URL.createObjectURL(f));
+                            setLocationGalleryPreviews([...locationGalleryPreviews, ...newPreviews]);
                           }
                         }}
                       />
                     </label>
-                  )}
-                </div>
-              </div>
-
-              {/* Gallery */}
-              <div>
-                <Label>Ảnh gallery cơ sở (tùy chọn)</Label>
-                <div className="mt-2 space-y-2">
-                  {/* Existing images */}
-                  {locationForm.anh_phu && locationForm.anh_phu.length > 0 && (
-                    <div className="grid grid-cols-3 gap-2">
-                      {locationForm.anh_phu.map((url, idx) => (
-                        <div key={idx} className="relative border rounded p-1">
-                          <img src={url} alt={`Gallery ${idx + 1}`} className="w-full h-20 object-cover rounded" />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const newList = locationForm.anh_phu.filter((_, i) => i !== idx);
-                              setLocationForm({ ...locationForm, anh_phu: newList });
-                            }}
-                            className="absolute -top-1 -right-1 bg-red-500 text-white p-1 rounded-full hover:bg-red-600"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* New selected files preview */}
-                  {locationGalleryPreviews.length > 0 && (
-                    <div className="grid grid-cols-3 gap-2">
-                      {locationGalleryPreviews.map((url, idx) => (
-                        <div key={idx} className="relative border rounded p-1 border-blue-400">
-                          <img src={url} alt={`New ${idx + 1}`} className="w-full h-20 object-cover rounded" />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const files = [...locationGalleryFiles];
-                              const previews = [...locationGalleryPreviews];
-                              try { URL.revokeObjectURL(previews[idx]); } catch (e) { }
-                              files.splice(idx, 1);
-                              previews.splice(idx, 1);
-                              setLocationGalleryFiles(files);
-                              setLocationGalleryPreviews(previews);
-                            }}
-                            className="absolute -top-1 -right-1 bg-red-500 text-white p-1 rounded-full hover:bg-red-600"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Upload button */}
-                  <label className="border-2 border-dashed border-gray-300 rounded-lg p-4 flex flex-col items-center justify-center cursor-pointer hover:border-gray-400 transition-colors">
-                    <Upload className="w-6 h-6 text-gray-400 mb-1" />
-                    <span className="text-sm text-gray-500">Thêm ảnh gallery</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      className="hidden"
-                      onChange={(e) => {
-                        const files = Array.from(e.target.files || []);
-                        if (files.length === 0) return;
-
-                        const validFiles: File[] = [];
-                        for (const file of files) {
-                          if (file.size > 10 * 1024 * 1024) {
-                            toast.error(`${file.name} vượt quá 10MB`);
-                            continue;
-                          }
-                          validFiles.push(file);
-                        }
-
-                        if (validFiles.length > 0) {
-                          setLocationGalleryFiles([...locationGalleryFiles, ...validFiles]);
-                          const newPreviews = validFiles.map(f => URL.createObjectURL(f));
-                          setLocationGalleryPreviews([...locationGalleryPreviews, ...newPreviews]);
-                        }
-                      }}
-                    />
-                  </label>
+                  </div>
                 </div>
               </div>
             </div>
