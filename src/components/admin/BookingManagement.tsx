@@ -233,7 +233,15 @@ export default function BookingManagement() {
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '-';
-    return new Date(dateStr).toLocaleString('vi-VN');
+    const date = new Date(dateStr);
+    const day = date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: '2-digit' });
+    const time = date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    return (
+      <div>
+        <div className="font-medium">{day}</div>
+        <div className="text-xs text-gray-500">{time}</div>
+      </div>
+    );
   };
 
   const formatCurrency = (amount: number) => {
@@ -313,7 +321,8 @@ export default function BookingManagement() {
                   <TableHead>Phòng</TableHead>
                   <TableHead>Check-in</TableHead>
                   <TableHead>Check-out</TableHead>
-                  <TableHead>Số khách</TableHead>
+                  <TableHead className="text-center">Thời gian</TableHead>
+                  <TableHead className="text-center">Số khách</TableHead>
                   <TableHead>Kênh đặt</TableHead>
                   <TableHead>Trạng thái</TableHead>
                   <TableHead className="text-right">Tổng tiền</TableHead>
@@ -323,14 +332,14 @@ export default function BookingManagement() {
               <TableBody>
                 {loading && filteredBookings.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8">
+                    <TableCell colSpan={11} className="text-center py-8">
                       <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-gray-400" />
                       <p className="text-gray-500">Đang tải...</p>
                     </TableCell>
                   </TableRow>
                 ) : filteredBookings.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8">
+                    <TableCell colSpan={11} className="text-center py-8">
                       <Calendar className="w-12 h-12 mx-auto mb-2 text-gray-400" />
                       <p className="text-gray-500">Chưa có đơn đặt phòng nào</p>
                       <p className="text-sm text-gray-400 mt-2">Vào /setup để khởi tạo dữ liệu mẫu</p>
@@ -354,7 +363,25 @@ export default function BookingManagement() {
                       </TableCell>
                       <TableCell className="text-sm">{formatDate(booking.thoi_gian_nhan)}</TableCell>
                       <TableCell className="text-sm">{formatDate(booking.thoi_gian_tra)}</TableCell>
-                      <TableCell>{booking.so_khach}</TableCell>
+                      <TableCell className="text-center">
+                        {(() => {
+                          if (!booking.thoi_gian_nhan || !booking.thoi_gian_tra) return '-';
+                          const start = new Date(booking.thoi_gian_nhan);
+                          const end = new Date(booking.thoi_gian_tra);
+                          const hours = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60));
+                          const startDate = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+                          const endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+                          const nights = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
+
+                          return (
+                            <div className="text-xs">
+                              <div className="font-medium">{hours}h</div>
+                              <div className="text-gray-500">({nights} {nights === 1 ? 'đêm' : 'ngày'})</div>
+                            </div>
+                          );
+                        })()}
+                      </TableCell>
+                      <TableCell className="text-center">{booking.so_khach}</TableCell>
                       <TableCell>{getChannelBadge(booking.kenh_dat)}</TableCell>
                       <TableCell>
                         <Select

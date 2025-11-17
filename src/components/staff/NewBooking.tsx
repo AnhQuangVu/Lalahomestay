@@ -294,7 +294,7 @@ export default function NewBooking() {
             <div>
               <label className="block text-gray-700 mb-2">
                 <Calendar className="w-4 h-4 inline mr-1" />
-                Check-in <span className="text-red-500">*</span>
+                Thời gian nhận phòng <span className="text-red-500">*</span>
               </label>
               <input
                 type="datetime-local"
@@ -308,7 +308,7 @@ export default function NewBooking() {
             <div>
               <label className="block text-gray-700 mb-2">
                 <Calendar className="w-4 h-4 inline mr-1" />
-                Check-out <span className="text-red-500">*</span>
+                Thời gian trả phòng <span className="text-red-500">*</span>
               </label>
               <input
                 type="datetime-local"
@@ -318,6 +318,47 @@ export default function NewBooking() {
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
               />
             </div>
+
+            {/* Hiển thị thời gian thuê */}
+            {formData.checkIn && formData.checkOut && (() => {
+              const start = new Date(formData.checkIn);
+              const end = new Date(formData.checkOut);
+              const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+              const roundedHours = Math.ceil(hours);
+
+              const startDate = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+              const endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+              const nights = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
+
+              const isValidTime = start < end;
+
+              return (
+                <div className="md:col-span-2">
+                  <div className={`p-4 rounded-lg border-2 ${!isValidTime
+                      ? 'bg-red-50 border-red-300'
+                      : 'bg-blue-50 border-blue-300'
+                    }`}>
+                    {!isValidTime ? (
+                      <p className="text-red-700 text-sm font-medium">
+                        ⚠️ Thời gian trả phòng phải sau thời gian nhận phòng
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-700 font-medium">Thời gian thuê:</span>
+                          <span className="text-blue-700 font-semibold">
+                            {roundedHours} giờ ({nights} {nights === 1 ? 'đêm' : 'ngày'})
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-600">
+                          💡 Gợi ý: Thuê theo giờ nếu &lt; 24h, thuê theo ngày nếu ≥ 1 đêm
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             <div>
               <label className="block text-gray-700 mb-2">

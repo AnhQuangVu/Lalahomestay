@@ -639,7 +639,7 @@ export default function BookingPage() {
               </div>
             </div>
 
-            <div className="p-4 bg-gray-50 rounded-lg">
+            <div className="p-4 rounded-lg" style={{ backgroundColor: 'rgba(15, 112, 114, 0.05)', border: '2px solid rgba(15, 112, 114, 0.2)' }}>
               {checkIn && checkOut && (() => {
                 const start = new Date(checkIn);
                 const end = new Date(checkOut);
@@ -651,29 +651,50 @@ export default function BookingPage() {
                 const endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate());
                 const nights = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
 
+                const isValidTime = start < end;
+
                 return (
-                  <div className="flex justify-between mb-2 text-sm text-gray-600">
-                    <span>Thời gian:</span>
-                    <span>
-                      {bookingType === 'gio'
-                        ? `${roundedHours} giờ`
-                        : `${nights} đêm`
-                      }
-                    </span>
+                  <div className={`mb-3 pb-3 border-b ${!isValidTime ? 'border-red-300' : 'border-gray-200'
+                    }`}>
+                    {!isValidTime ? (
+                      <div className="text-red-600 text-sm font-medium">
+                        ⚠️ Thời gian không hợp lệ
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="flex justify-between mb-2">
+                          <span className="text-sm text-gray-700 font-medium">Thời gian thuê:</span>
+                          <span className="text-sm font-semibold" style={{ color: '#0f7072' }}>
+                            {bookingType === 'gio'
+                              ? `${roundedHours} giờ`
+                              : `${nights} ${nights === 1 ? 'đêm' : 'ngày'}`
+                            }
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-600">
+                          📅 {new Date(checkIn).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}
+                          {' → '}
+                          {new Date(checkOut).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })()}
               <div className="flex justify-between mb-2">
                 <span className="text-gray-700">Tiền phòng:</span>
-                <span className="text-gray-900">{formatCurrency(calculateTotal())}</span>
+                <span className="text-gray-900 font-medium">{formatCurrency(calculateTotal())}</span>
               </div>
               <div className="flex justify-between mb-2">
                 <span className="text-gray-700">Cọc cơ sở vật chất:</span>
-                <span className="text-gray-900">{formatCurrency(DEPOSIT_AMOUNT)}</span>
+                <span className="text-gray-900 font-medium">{formatCurrency(DEPOSIT_AMOUNT)}</span>
               </div>
-              <div className="flex justify-between pt-2 border-t">
-                <span className="text-gray-900">Tổng cộng:</span>
-                <span className="text-xl" style={{ color: '#0f7072' }}>{formatCurrency(calculateTotal() + DEPOSIT_AMOUNT)}</span>
+              <div className="flex justify-between pt-3 border-t-2" style={{ borderColor: 'rgba(15, 112, 114, 0.3)' }}>
+                <span className="text-gray-900 font-semibold">Tổng thanh toán:</span>
+                <span className="text-2xl font-bold" style={{ color: '#0f7072' }}>{formatCurrency(calculateTotal() + DEPOSIT_AMOUNT)}</span>
+              </div>
+              <div className="mt-3 text-xs text-gray-600 bg-white p-2 rounded">
+                💳 Thanh toán trước {formatCurrency(DEPOSIT_AMOUNT)} để giữ phòng
               </div>
             </div>
           </div>
