@@ -265,26 +265,45 @@ export default function RoomManagement() {
 
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/phong/${deleteTarget.id}`, {
+      let endpoint = '';
+      let fetchFunction = null;
+
+      switch (deleteTarget.type) {
+        case 'room':
+          endpoint = `${API_URL}/phong/${deleteTarget.id}`;
+          fetchFunction = fetchRooms;
+          break;
+        case 'concept':
+          endpoint = `${API_URL}/loai-phong/${deleteTarget.id}`;
+          fetchFunction = fetchConcepts;
+          break;
+        case 'location':
+          endpoint = `${API_URL}/co-so/${deleteTarget.id}`;
+          fetchFunction = fetchLocations;
+          break;
+      }
+
+      const response = await fetch(endpoint, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
       });
 
       const result = await response.json();
       if (result.success) {
-        if (result.suspended) {
+        if (deleteTarget.type === 'room' && result.suspended) {
           toast.warning(`Phòng "${deleteTarget.name}" có giao dịch nên đã chuyển sang trạng thái đình chỉ thay vì xóa hẳn.`, {
             duration: 5000
           });
         } else {
-          toast.success(`Đã xóa phòng "${deleteTarget.name}" hoàn toàn khỏi hệ thống!`);
+          const typeLabel = deleteTarget.type === 'room' ? 'phòng' : deleteTarget.type === 'concept' ? 'loại phòng' : 'cơ sở';
+          toast.success(`Đã xóa ${typeLabel} "${deleteTarget.name}" thành công!`);
         }
-        fetchRooms();
+        if (fetchFunction) fetchFunction();
       } else {
-        toast.error(result.error || 'Không thể xóa phòng.');
+        toast.error(result.error || 'Không thể xóa.');
       }
     } catch (error) {
-      console.error('Error deleting room:', error);
+      console.error('Error deleting:', error);
       toast.error('Không thể kết nối với server');
     } finally {
       setLoading(false);
@@ -336,8 +355,12 @@ export default function RoomManagement() {
     }
   };
 
+  const handleDeleteConceptClick = (concept: any) => {
+    setDeleteTarget({ id: concept.id, name: concept.ten_loai, type: 'concept' });
+    setShowDeleteDialog(true);
+  };
+
   const handleDeleteConcept = async (id: string) => {
-    if (!confirm('Bạn có chắc muốn xóa loại phòng này?')) return;
 
     setLoading(true);
     try {
@@ -423,8 +446,12 @@ export default function RoomManagement() {
     }
   };
 
+  const handleDeleteLocationClick = (location: any) => {
+    setDeleteTarget({ id: location.id, name: location.ten_co_so, type: 'location' });
+    setShowDeleteDialog(true);
+  };
+
   const handleDeleteLocation = async (id: string) => {
-    if (!confirm('Bạn có chắc muốn xóa cơ sở này?')) return;
 
     setLoading(true);
     try {
@@ -770,7 +797,7 @@ export default function RoomManagement() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleDeleteConcept(concept.id)}
+                            onClick={() => handleDeleteConceptClick(concept)}
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
@@ -866,7 +893,7 @@ export default function RoomManagement() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleDeleteLocation(location.id)}
+                            onClick={() => handleDeleteLocationClick(location)}
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
@@ -1381,20 +1408,27 @@ export default function RoomManagement() {
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Xác nhận xóa phòng</AlertDialogTitle>
+            <AlertDialogTitle>
+              Xác nhận xóa {deleteTarget?.type === 'room' ? 'phòng' : deleteTarget?.type === 'concept' ? 'loại phòng' : 'cơ sở'}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Bạn có chắc muốn xóa phòng <strong>"{deleteTarget?.name}"</strong>?
+              Bạn có chắc muốn xóa {deleteTarget?.type === 'room' ? 'phòng' : deleteTarget?.type === 'concept' ? 'loại phòng' : 'cơ sở'} <strong>"{deleteTarget?.name}"</strong>?
               <br /><br />
-              <span className="text-amber-600">⚠️ Lưu ý: Nếu phòng có booking đang hoạt động, thao tác này sẽ thất bại.</span>
+              {deleteTarget?.type === 'room' && (
+                <span className="text-amber-600">⚠️ Lưu ý: Nếu phòng có giao dịch, sẽ chuyển sang trạng thái đình chỉ thay vì xóa.</span>
+              )}
+              {deleteTarget?.type !== 'room' && (
+                <span className="text-red-600">⚠️ Hành động này không thể hoàn tác!</span>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Hủy</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>Hủy</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDelete}
               className="bg-red-600 hover:bg-red-700"
             >
-              Xóa phòng
+              Xóa
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

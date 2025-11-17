@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Calendar, Users } from 'lucide-react';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { toast } from 'sonner';
 
 export default function NewBooking() {
   const [formData, setFormData] = useState({
@@ -74,11 +75,11 @@ export default function NewBooking() {
           paymentMethod: 'transfer'
         });
       } else {
-        alert('Đặt phòng thất bại: ' + (data.error || 'Lỗi không xác định'));
+        toast.error('Đặt phòng thất bại: ' + (data.error || 'Lỗi không xác định'));
       }
     } catch (error) {
       console.error('Booking error:', error);
-      alert('Có lỗi xảy ra khi đặt phòng');
+      toast.error('Có lỗi xảy ra khi đặt phòng');
     } finally {
       setLoading(false);
     }

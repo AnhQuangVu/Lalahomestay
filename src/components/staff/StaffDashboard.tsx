@@ -57,8 +57,11 @@ export default function StaffDashboard() {
       const roomsFromApi = roomsData.data || [];
       const bookingsFromApi = bookingsData.success ? (bookingsData.data || []) : [];
 
+      // Lọc bỏ phòng đình chỉ - staff không cần thấy
+      const activeRooms = roomsFromApi.filter((r: any) => r.trang_thai !== 'dinh_chi');
+
       // Map backend room shape to local Room interface
-      const mapped: Room[] = roomsFromApi.map((r: any) => {
+      const mapped: Room[] = activeRooms.map((r: any) => {
         // find current booking for this room (booking where now is between checkin and checkout and not cancelled)
         const now = new Date();
         const currentBooking = bookingsFromApi.find((b: any) => {
@@ -246,8 +249,8 @@ export default function StaffDashboard() {
               key={btn.value}
               onClick={() => setFilter(btn.value)}
               className={`px-4 py-2 rounded-lg transition-all ${filter === btn.value
-                  ? btn.color + ' ring-2 ring-offset-2 ring-blue-500'
-                  : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                ? btn.color + ' ring-2 ring-offset-2 ring-blue-500'
+                : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
                 }`}
             >
               {btn.label}

@@ -5,11 +5,12 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../ui/alert-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Badge } from '../ui/badge';
 import { Search, Eye, RefreshCw, Calendar, Trash2 } from 'lucide-react';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-faeb1932`;
 
@@ -20,7 +21,11 @@ export default function BookingManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showViewDialog, setShowViewDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showConfirmPaymentDialog, setShowConfirmPaymentDialog] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
+  const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [paymentTarget, setPaymentTarget] = useState<any>(null);
 
   useEffect(() => {
     fetchBookings();
@@ -98,12 +103,17 @@ export default function BookingManagement() {
     }
   };
 
-  const handleDelete = async (bookingId: string) => {
-    if (!confirm('Bạn có chắc muốn xóa đơn đặt phòng này?')) return;
+  const handleDeleteClick = (booking: any) => {
+    setDeleteTarget(booking);
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
 
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/dat-phong/${bookingId}`, {
+      const response = await fetch(`${API_URL}/dat-phong/${deleteTarget.id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
       });
@@ -111,6 +121,8 @@ export default function BookingManagement() {
       const result = await response.json();
       if (result.success) {
         toast.success('Xóa đơn đặt phòng thành công!');
+        setShowDeleteDialog(false);
+        setDeleteTarget(null);
         fetchBookings();
       } else {
         toast.error(result.error || 'Không thể xóa đơn đặt phòng');
@@ -123,12 +135,17 @@ export default function BookingManagement() {
     }
   };
 
-  const handleConfirmPayment = async (bookingId: string) => {
-    if (!confirm('Xác nhận đã nhận được tiền cọc?')) return;
+  const handleConfirmPaymentClick = (booking: any) => {
+    setPaymentTarget(booking);
+    setShowConfirmPaymentDialog(true);
+  };
+
+  const confirmPayment = async () => {
+    if (!paymentTarget) return;
 
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/dat-phong/${bookingId}`, {
+      const response = await fetch(`${API_URL}/dat-phong/${paymentTarget.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -141,6 +158,8 @@ export default function BookingManagement() {
 
       if (result.success) {
         toast.success('Xác nhận thanh toán thành công!');
+        setShowConfirmPaymentDialog(false);
+        setPaymentTarget(null);
         fetchBookings();
       } else {
         toast.error(result.error || 'Không thể xác nhận thanh toán');
@@ -371,7 +390,7 @@ export default function BookingManagement() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleConfirmPayment(booking.id)}
+                              onClick={() => handleConfirmPaymentClick(booking)}
                               className="bg-green-50 text-green-700 hover:bg-green-100 border-green-300"
                             >
                               ✓ Xác nhận
@@ -380,7 +399,7 @@ export default function BookingManagement() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleDelete(booking.id)}
+                            onClick={() => handleDeleteClick(booking)}
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
@@ -504,6 +523,56 @@ export default function BookingManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xác nhận xóa đơn đặt phòng</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc chắn muốn xóa đơn đặt phòng <span className="font-semibold">{deleteTarget?.ma_dat}</span>?
+              <br />
+              <span className="text-red-600">Hành động này không thể hoàn tác!</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>
+              Hủy
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Xóa đơn
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirm Payment Dialog */}
+      <AlertDialog open={showConfirmPaymentDialog} onOpenChange={setShowConfirmPaymentDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xác nhận đã nhận tiền cọc</AlertDialogTitle>
+            <AlertDialogDescription>
+              Xác nhận đã nhận được tiền cọc cho đơn đặt phòng <span className="font-semibold">{paymentTarget?.ma_dat}</span>?
+              <br />
+              <span className="text-gray-600">Trạng thái sẽ chuyển sang "Đã cọc"</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPaymentTarget(null)}>
+              Hủy
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmPayment}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              Xác nhận
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
