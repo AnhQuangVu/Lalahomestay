@@ -42,14 +42,17 @@ export const ROOM_IMAGE_SETS = [
 export const ROOM_IMAGES = ROOM_IMAGE_SETS.flat();
 
 export const LOCATION_IMAGES = [
-  'https://images.unsplash.com/photo-1648634158203-199accfd7afc?w=1080',
-  'https://images.unsplash.com/photo-1611095459865-47682ae3c41c?w=1080',
-  'https://images.unsplash.com/photo-1578683010236-d716f9a3f461?w=1080',
-  'https://images.unsplash.com/photo-1654075309556-14a41021eedb?w=1080',
-  'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=1080',
-  'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=1080',
-  'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?w=1080',
-  'https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=1080'
+  // Ảnh các toà nhà, khách sạn, homestay - từ Unsplash với quality cao
+  'https://images.unsplash.com/photo-1648634158203-199accfd7afc?w=1080&q=80',
+  'https://images.unsplash.com/photo-1611095459865-47682ae3c41c?w=1080&q=80',
+  'https://images.unsplash.com/photo-1578683010236-d716f9a3f461?w=1080&q=80',
+  'https://images.unsplash.com/photo-1654075309556-14a41021eedb?w=1080&q=80',
+  'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=1080&q=80',
+  'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=1080&q=80',
+  'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?w=1080&q=80',
+  'https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=1080&q=80',
+  'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=1080&q=80',
+  'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=1080&q=80'
 ];
 
 // Hash string thành số để chọn ảnh nhất quán

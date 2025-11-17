@@ -220,7 +220,7 @@ export default function HomePage() {
                 <div key={location.id} className="group bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-shadow">
                   <div className="relative h-64 overflow-hidden">
                     <img
-                      src={getLocationImage(location.id)}
+                      src={location.anh_dai_dien || getLocationImage(location.id)}
                       alt={location.ten_co_so}
                       className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                     />

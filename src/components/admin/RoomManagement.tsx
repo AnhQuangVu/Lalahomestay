@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Search, Plus, Edit, RefreshCw, Home, Tag, Building2, Trash2, Upload, X } from 'lucide-react';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { uploadToCloudinary } from '../../utils/cloudinary';
-import { getRoomImage } from '../../utils/imageUtils';
+import { getRoomImage, getLocationImage } from '../../utils/imageUtils';
 import { toast } from 'sonner';
 
 const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-faeb1932`;
@@ -809,6 +809,7 @@ export default function RoomManagement() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Ảnh</TableHead>
                     <TableHead>Tên cơ sở</TableHead>
                     <TableHead>Địa chỉ</TableHead>
                     <TableHead>Hotline</TableHead>
@@ -820,6 +821,13 @@ export default function RoomManagement() {
                 <TableBody>
                   {locations.map((location) => (
                     <TableRow key={location.id}>
+                      <TableCell>
+                        <img
+                          src={location.anh_dai_dien || getLocationImage(location.id)}
+                          alt={location.ten_co_so}
+                          className="w-16 h-16 object-cover rounded-lg"
+                        />
+                      </TableCell>
                       <TableCell>{location.ten_co_so}</TableCell>
                       <TableCell>{location.dia_chi}</TableCell>
                       <TableCell>{location.hotline || '-'}</TableCell>
