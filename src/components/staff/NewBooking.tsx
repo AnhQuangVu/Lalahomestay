@@ -57,7 +57,7 @@ export default function NewBooking() {
 
       if (data.success) {
         const maDat = data.data?.ma_dat || data.data?.maDat || data.bookingCode || '';
-        alert(`Đặt phòng thành công!\nMã đặt phòng: ${maDat}`);
+        toast.success(`Đặt phòng thành công! Mã đặt phòng: ${maDat}`);
         // Reset form
         setFormData({
           customerName: '',
@@ -101,7 +101,7 @@ export default function NewBooking() {
                 type="text"
                 required
                 value={formData.customerName}
-                onChange={(e) => setFormData({...formData, customerName: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                 placeholder="Nguyễn Văn A"
               />
@@ -115,7 +115,7 @@ export default function NewBooking() {
                 type="tel"
                 required
                 value={formData.customerPhone}
-                onChange={(e) => setFormData({...formData, customerPhone: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, customerPhone: e.target.value })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                 placeholder="0912345678"
               />
@@ -129,7 +129,7 @@ export default function NewBooking() {
                 type="email"
                 required
                 value={formData.customerEmail}
-                onChange={(e) => setFormData({...formData, customerEmail: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, customerEmail: e.target.value })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                 placeholder="email@example.com"
               />
@@ -148,7 +148,7 @@ export default function NewBooking() {
               <select
                 required
                 value={formData.location}
-                onChange={(e) => setFormData({...formData, location: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
               >
                 <option value="">-- Chọn cơ sở --</option>
@@ -165,7 +165,7 @@ export default function NewBooking() {
               <select
                 required
                 value={formData.concept}
-                onChange={(e) => setFormData({...formData, concept: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, concept: e.target.value })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
               >
                 <option value="">-- Chọn loại phòng --</option>
@@ -183,7 +183,7 @@ export default function NewBooking() {
                 type="text"
                 required
                 value={formData.room}
-                onChange={(e) => setFormData({...formData, room: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, room: e.target.value })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                 placeholder="101"
               />
@@ -201,7 +201,7 @@ export default function NewBooking() {
                 value={formData.numberOfGuests}
                 onChange={(e) => {
                   const value = parseInt(e.target.value);
-                  setFormData({...formData, numberOfGuests: isNaN(value) ? 1 : value});
+                  setFormData({ ...formData, numberOfGuests: isNaN(value) ? 1 : value });
                 }}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
               />
@@ -216,7 +216,7 @@ export default function NewBooking() {
                 type="datetime-local"
                 required
                 value={formData.checkIn}
-                onChange={(e) => setFormData({...formData, checkIn: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, checkIn: e.target.value })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
               />
             </div>
@@ -230,7 +230,7 @@ export default function NewBooking() {
                 type="datetime-local"
                 required
                 value={formData.checkOut}
-                onChange={(e) => setFormData({...formData, checkOut: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, checkOut: e.target.value })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
               />
             </div>
@@ -242,7 +242,7 @@ export default function NewBooking() {
               <select
                 required
                 value={formData.bookingSource}
-                onChange={(e) => setFormData({...formData, bookingSource: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, bookingSource: e.target.value })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
               >
                 <option value="facebook">Facebook</option>
@@ -260,7 +260,7 @@ export default function NewBooking() {
               <select
                 required
                 value={formData.paymentMethod}
-                onChange={(e) => setFormData({...formData, paymentMethod: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
               >
                 <option value="transfer">Chuyển khoản</option>
@@ -276,7 +276,7 @@ export default function NewBooking() {
               </label>
               <textarea
                 value={formData.notes}
-                onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                 rows={3}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                 placeholder="Ghi chú yêu cầu đặc biệt..."

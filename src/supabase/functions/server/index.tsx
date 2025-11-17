@@ -242,10 +242,11 @@ app.put('/make-server-faeb1932/phong/:id', async (c) => {
 app.delete('/make-server-faeb1932/phong/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    await sql.deletePhong(id);
+    const result = await sql.deletePhong(id);
     return c.json({
       success: true,
-      message: 'Xóa phòng thành công'
+      suspended: result.suspended,
+      message: result.message
     });
   } catch (error) {
     console.error('Error deleting phong:', error);

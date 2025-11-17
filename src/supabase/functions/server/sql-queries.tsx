@@ -127,6 +127,9 @@ export async function getAllPhong(filters?: { loaiPhongId?: string, trangThai?: 
 }
 
 export async function createPhong(phong: any) {
+  // Accepts: ma_phong, id_loai_phong, trang_thai, tinh_trang_vesinh, anh_chinh, anh_phu, ghi_chu
+  // anh_chinh: text (Cloudinary URL)
+  // anh_phu: text[] (array of Cloudinary URLs)
   const { data, error } = await supabase
     .from('phong')
     .insert(phong)
@@ -144,6 +147,7 @@ export async function createPhong(phong: any) {
 }
 
 export async function updatePhong(id: string, updates: any) {
+  // Accepts all phong fields including anh_chinh (text) and anh_phu (text[])
   const { data, error } = await supabase
     .from('phong')
     .update(updates)
@@ -162,12 +166,49 @@ export async function updatePhong(id: string, updates: any) {
 }
 
 export async function deletePhong(id: string) {
-  const { error } = await supabase
+  // Kiểm tra xem phòng có booking nào không
+  const { data: bookings, error: checkError } = await supabase
+    .from('dat_phong')
+    .select('id')
+    .eq('id_phong', id)
+    .limit(1);
+
+  if (checkError) throw checkError;
+
+  // Nếu có booking (phát sinh giao dịch) → cập nhật trạng thái thành "đình chỉ"
+  if (bookings && bookings.length > 0) {
+    // Lấy ghi_chu hiện tại của phòng
+    const { data: roomData } = await supabase
+      .from('phong')
+      .select('ghi_chu')
+      .eq('id', id)
+      .single();
+
+    const currentNote = roomData?.ghi_chu || '';
+    const newNote = currentNote ? `${currentNote} [Đã đình chỉ]` : '[Đã đình chỉ]';
+
+    const { error: updateError } = await supabase
+      .from('phong')
+      .update({
+        trang_thai: 'dinh_chi',
+        ghi_chu: newNote
+      })
+      .eq('id', id);
+
+    if (updateError) throw updateError;
+
+    return { suspended: true, message: 'Phòng có giao dịch nên đã chuyển sang trạng thái đình chỉ' };
+  }
+
+  // Nếu không có booking → xóa hẳn
+  const { error: deleteError } = await supabase
     .from('phong')
     .delete()
     .eq('id', id);
 
-  if (error) throw error;
+  if (deleteError) throw deleteError;
+
+  return { suspended: false, message: 'Đã xóa phòng hoàn toàn' };
 }
 
 // ==================== KHÁCH HÀNG (CUSTOMERS) ====================

@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { format, subDays } from 'date-fns';
 import { vi } from 'date-fns/locale';
+import { toast } from 'sonner';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import OverviewReport from './reports/OverviewReport';
 import RevenueReport from './reports/RevenueReport';
@@ -139,7 +140,7 @@ export default function Reports() {
   // Requires: npm install xlsx
   const exportExcelClient = async (type: string = reportType) => {
     if (!reportData) {
-      alert('Không có dữ liệu để xuất. Vui lòng tải báo cáo trước.');
+      toast.error('Không có dữ liệu để xuất. Vui lòng tải báo cáo trước.');
       return;
     }
 

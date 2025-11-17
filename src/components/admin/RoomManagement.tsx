@@ -6,12 +6,15 @@ import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../ui/alert-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Badge } from '../ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Search, Plus, Edit, RefreshCw, Home, Tag, Building2, Trash2 } from 'lucide-react';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
-import { toast } from 'sonner@2.0.3';
+import { uploadToCloudinary } from '../../utils/cloudinary';
+import { getRoomImage } from '../../utils/imageUtils';
+import { toast } from 'sonner';
 
 const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-faeb1932`;
 
@@ -28,6 +31,8 @@ export default function RoomManagement() {
   const [showRoomDialog, setShowRoomDialog] = useState(false);
   const [showConceptDialog, setShowConceptDialog] = useState(false);
   const [showLocationDialog, setShowLocationDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string, name: string, type: 'room' | 'concept' | 'location' } | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any>(null);
 
@@ -37,8 +42,16 @@ export default function RoomManagement() {
     id_loai_phong: '',
     trang_thai: 'trong',
     tinh_trang_vesinh: 'sach',
+    anh_chinh: '',
+    anh_phu: [] as string[],
     ghi_chu: ''
   });
+
+  // Image upload states
+  const [mainImageFile, setMainImageFile] = useState<File | null>(null);
+  const [galleryFiles, setGalleryFiles] = useState<File[]>([]);
+  const [mainImagePreview, setMainImagePreview] = useState<string>('');
+  const [galleryPreviews, setGalleryPreviews] = useState<string[]>([]);
 
   const [conceptForm, setConceptForm] = useState({
     ten_loai: '',
@@ -122,14 +135,86 @@ export default function RoomManagement() {
 
   // Room CRUD
   const handleSaveRoom = async () => {
-    if (!roomForm.ma_phong || !roomForm.id_loai_phong) {
-      toast.error('Vui lòng nhập đầy đủ thông tin');
+    // Validation
+    if (!roomForm.ma_phong?.trim()) {
+      toast.error('Vui lòng nhập mã phòng');
       return;
+    }
+
+    if (roomForm.ma_phong.length > 20) {
+      toast.error('Mã phòng không được quá 20 ký tự');
+      return;
+    }
+
+    // Kiểm tra mã phòng trùng (chỉ khi thêm mới hoặc đổi mã khi edit)
+    const isDuplicate = rooms.some(r =>
+      r.ma_phong.toLowerCase() === roomForm.ma_phong.trim().toLowerCase() &&
+      (!editMode || r.id !== selectedItem?.id)
+    );
+
+    if (isDuplicate) {
+      toast.error(`Mã phòng "${roomForm.ma_phong}" đã tồn tại`);
+      return;
+    }
+
+    if (!roomForm.id_loai_phong) {
+      toast.error('Vui lòng chọn loại phòng');
+      return;
+    }
+
+    // Validate main image file size (max 10MB)
+    if (mainImageFile && mainImageFile.size > 10 * 1024 * 1024) {
+      toast.error('Ảnh chính không được vượt quá 10MB');
+      return;
+    }
+
+    // Validate gallery files
+    if (galleryFiles && galleryFiles.length > 0) {
+      const maxGallerySize = 10 * 1024 * 1024; // 10MB per file
+      const oversizedFile = galleryFiles.find(f => f.size > maxGallerySize);
+      if (oversizedFile) {
+        toast.error(`File ${oversizedFile.name} vượt quá 10MB`);
+        return;
+      }
+
+      if (galleryFiles.length > 20) {
+        toast.error('Tối đa 20 ảnh gallery');
+        return;
+      }
     }
 
     setLoading(true);
     try {
-      const url = editMode ? `${API_URL}/phong/${selectedItem.id}` : `${API_URL}/phong`;
+      // prepare payload and upload images if selected
+      const payload: any = { ...roomForm };
+
+      if (mainImageFile) {
+        try {
+          toast.info('Đang upload ảnh chính...');
+          const url = await uploadToCloudinary(mainImageFile, 'rooms');
+          payload.anh_chinh = url;
+        } catch (e) {
+          console.error('Error uploading main image:', e);
+          toast.error('Không thể upload ảnh chính');
+          setLoading(false);
+          return;
+        }
+      }
+
+      if (galleryFiles && galleryFiles.length > 0) {
+        try {
+          toast.info(`Đang upload ${galleryFiles.length} ảnh gallery...`);
+          const urls = await Promise.all(galleryFiles.map((f) => uploadToCloudinary(f, 'rooms')));
+          payload.anh_phu = ([...(payload.anh_phu || [])] as string[]).concat(urls);
+        } catch (e) {
+          console.error('Error uploading gallery images:', e);
+          toast.error('Không thể upload ảnh phụ');
+          setLoading(false);
+          return;
+        }
+      }
+
+      const url = editMode ? `${API_URL}/phong/${selectedItem?.id}` : `${API_URL}/phong`;
       const method = editMode ? 'PUT' : 'POST';
 
       const response = await fetch(url, {
@@ -138,7 +223,7 @@ export default function RoomManagement() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${publicAnonKey}`
         },
-        body: JSON.stringify(roomForm)
+        body: JSON.stringify(payload)
       });
 
       const result = await response.json();
@@ -160,31 +245,45 @@ export default function RoomManagement() {
   };
 
   const handleDeleteRoom = async (id: string) => {
-    if (!confirm('Bạn có chắc muốn xóa phòng này?')) return;
+    const room = rooms.find(r => r.id === id);
+    const roomName = room?.ma_phong || 'phòng này';
+
+    setDeleteTarget({ id, name: roomName, type: 'room' });
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
 
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/phong/${id}`, {
+      const response = await fetch(`${API_URL}/phong/${deleteTarget.id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
       });
 
       const result = await response.json();
       if (result.success) {
-        toast.success('Xóa phòng thành công!');
+        if (result.suspended) {
+          toast.warning(`Phòng "${deleteTarget.name}" có giao dịch nên đã chuyển sang trạng thái đình chỉ thay vì xóa hẳn.`, {
+            duration: 5000
+          });
+        } else {
+          toast.success(`Đã xóa phòng "${deleteTarget.name}" hoàn toàn khỏi hệ thống!`);
+        }
         fetchRooms();
       } else {
-        toast.error(result.error || 'Không thể xóa phòng');
+        toast.error(result.error || 'Không thể xóa phòng.');
       }
     } catch (error) {
       console.error('Error deleting room:', error);
       toast.error('Không thể kết nối với server');
     } finally {
       setLoading(false);
+      setShowDeleteDialog(false);
+      setDeleteTarget(null);
     }
-  };
-
-  // Concept CRUD
+  };  // Concept CRUD
   const handleSaveConcept = async () => {
     if (!conceptForm.ten_loai || !conceptForm.gia_gio || !conceptForm.gia_dem || !conceptForm.id_co_so) {
       toast.error('Vui lòng nhập đầy đủ thông tin');
@@ -325,10 +424,59 @@ export default function RoomManagement() {
       id_loai_phong: '',
       trang_thai: 'trong',
       tinh_trang_vesinh: 'sach',
+      anh_chinh: '',
+      anh_phu: [],
       ghi_chu: ''
     });
     setEditMode(false);
     setSelectedItem(null);
+    setMainImageFile(null);
+    setGalleryFiles([]);
+    setMainImagePreview('');
+    setGalleryPreviews([]);
+  };
+
+  // Image management helpers
+  const removeExistingMainImage = () => {
+    // remove stored main image URL
+    setRoomForm({ ...roomForm, anh_chinh: '' });
+    setMainImageFile(null);
+    if (mainImagePreview) {
+      try { URL.revokeObjectURL(mainImagePreview); } catch (e) { }
+    }
+    setMainImagePreview('');
+  };
+
+  const removeExistingGalleryImage = (url: string) => {
+    const newList = (roomForm.anh_phu || []).filter((u) => u !== url);
+    setRoomForm({ ...roomForm, anh_phu: newList });
+    // if the url was used as a preview from createObjectURL it would be in galleryPreviews
+    const idx = galleryPreviews.indexOf(url);
+    if (idx >= 0) {
+      try { URL.revokeObjectURL(galleryPreviews[idx]); } catch (e) { }
+      const gp = [...galleryPreviews]; gp.splice(idx, 1); setGalleryPreviews(gp);
+    }
+  };
+
+  const removeSelectedGalleryFile = (index: number) => {
+    const files = [...galleryFiles];
+    const previews = [...galleryPreviews];
+    const p = previews[index];
+    if (p) {
+      try { URL.revokeObjectURL(p); } catch (e) { }
+    }
+    files.splice(index, 1);
+    previews.splice(index, 1);
+    setGalleryFiles(files);
+    setGalleryPreviews(previews);
+  };
+
+  const removeSelectedMainFile = () => {
+    if (mainImagePreview) {
+      try { URL.revokeObjectURL(mainImagePreview); } catch (e) { }
+    }
+    setMainImageFile(null);
+    setMainImagePreview('');
   };
 
   const resetConceptForm = () => {
@@ -369,7 +517,8 @@ export default function RoomManagement() {
       'dang_dung': 'destructive',
       'sap_nhan': 'secondary',
       'sap_tra': 'secondary',
-      'bao_tri': 'secondary'
+      'bao_tri': 'secondary',
+      'dinh_chi': 'destructive'
     };
 
     const labels: any = {
@@ -377,7 +526,8 @@ export default function RoomManagement() {
       'dang_dung': 'Đang dùng',
       'sap_nhan': 'Sắp nhận',
       'sap_tra': 'Sắp trả',
-      'bao_tri': 'Bảo trì'
+      'bao_tri': 'Bảo trì',
+      'dinh_chi': 'Đình chỉ'
     };
 
     return <Badge variant={variants[status] || 'secondary'}>{labels[status] || status}</Badge>;
@@ -479,8 +629,15 @@ export default function RoomManagement() {
                                   id_loai_phong: room.id_loai_phong,
                                   trang_thai: room.trang_thai,
                                   tinh_trang_vesinh: room.tinh_trang_vesinh,
+                                  anh_chinh: room.anh_chinh || '',
+                                  anh_phu: room.anh_phu || [],
                                   ghi_chu: room.ghi_chu || ''
                                 });
+                                // populate previews from existing urls
+                                setMainImageFile(null);
+                                setGalleryFiles([]);
+                                setMainImagePreview(room.anh_chinh || '');
+                                setGalleryPreviews(room.anh_phu || []);
                                 setEditMode(true);
                                 setShowRoomDialog(true);
                               }}
@@ -675,69 +832,218 @@ export default function RoomManagement() {
 
       {/* Room Dialog */}
       <Dialog open={showRoomDialog} onOpenChange={setShowRoomDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editMode ? 'Chỉnh sửa phòng' : 'Thêm phòng mới'}</DialogTitle>
             <DialogDescription>
               {editMode ? 'Cập nhật thông tin phòng' : 'Thêm phòng mới vào hệ thống'}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>Mã phòng *</Label>
-              <Input
-                value={roomForm.ma_phong}
-                onChange={(e) => setRoomForm({ ...roomForm, ma_phong: e.target.value })}
-                placeholder="101"
-              />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Left Column - Thông tin cơ bản */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-gray-700 border-b pb-2">Thông tin cơ bản</h3>
+              <div>
+                <Label>Mã phòng *</Label>
+                <Input
+                  value={roomForm.ma_phong}
+                  onChange={(e) => setRoomForm({ ...roomForm, ma_phong: e.target.value })}
+                  placeholder="101"
+                />
+              </div>
+              <div>
+                <Label>Loại phòng *</Label>
+                <Select value={roomForm.id_loai_phong} onValueChange={(v: string) => setRoomForm({ ...roomForm, id_loai_phong: v })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Chọn loại phòng" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {concepts.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.ten_loai} - {c.co_so?.ten_co_so}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Trạng thái</Label>
+                  <Select value={roomForm.trang_thai} onValueChange={(v: string) => setRoomForm({ ...roomForm, trang_thai: v })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="trong">Trống</SelectItem>
+                      <SelectItem value="dang_dung">Đang dùng</SelectItem>
+                      <SelectItem value="sap_nhan">Sắp nhận</SelectItem>
+                      <SelectItem value="sap_tra">Sắp trả</SelectItem>
+                      <SelectItem value="bao_tri">Bảo trì</SelectItem>
+                      <SelectItem value="dinh_chi">Đình chỉ</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Vệ sinh</Label>
+                  <Select value={roomForm.tinh_trang_vesinh} onValueChange={(v: string) => setRoomForm({ ...roomForm, tinh_trang_vesinh: v })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sach">Sạch</SelectItem>
+                      <SelectItem value="dang_don">Đang dọn</SelectItem>
+                      <SelectItem value="chua_don">Chưa dọn</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div>
+                <Label>Ghi chú</Label>
+                <Textarea
+                  value={roomForm.ghi_chu}
+                  onChange={(e) => setRoomForm({ ...roomForm, ghi_chu: e.target.value })}
+                  placeholder="Thông tin thêm về phòng..."
+                  rows={3}
+                />
+              </div>
             </div>
-            <div>
-              <Label>Loại phòng *</Label>
-              <Select value={roomForm.id_loai_phong} onValueChange={(v) => setRoomForm({ ...roomForm, id_loai_phong: v })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Chọn loại phòng" />
-                </SelectTrigger>
-                <SelectContent>
-                  {concepts.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.ten_loai} - {c.co_so?.ten_co_so}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Trạng thái</Label>
-              <Select value={roomForm.trang_thai} onValueChange={(v) => setRoomForm({ ...roomForm, trang_thai: v })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="trong">Trống</SelectItem>
-                  <SelectItem value="dang_dung">Đang dùng</SelectItem>
-                  <SelectItem value="sap_nhan">Sắp nhận</SelectItem>
-                  <SelectItem value="sap_tra">Sắp trả</SelectItem>
-                  <SelectItem value="bao_tri">Bảo trì</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Tình trạng vệ sinh</Label>
-              <Select value={roomForm.tinh_trang_vesinh} onValueChange={(v) => setRoomForm({ ...roomForm, tinh_trang_vesinh: v })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="sach">Sạch</SelectItem>
-                  <SelectItem value="dang_don">Đang dọn</SelectItem>
-                  <SelectItem value="chua_don">Chưa dọn</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Ghi chú</Label>
-              <Textarea
-                value={roomForm.ghi_chu}
-                onChange={(e) => setRoomForm({ ...roomForm, ghi_chu: e.target.value })}
-              />
+
+            {/* Right Column - Hình ảnh */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-gray-700 border-b pb-2">Hình ảnh</h3>
+
+              {/* Ảnh chính */}
+              <div>
+                <Label className="mb-2 block">Ảnh chính</Label>
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-gray-400 transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    id="main-image-upload"
+                    onChange={(e: any) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setMainImageFile(file);
+                        if (mainImagePreview) { try { URL.revokeObjectURL(mainImagePreview); } catch (e) { } }
+                        setMainImagePreview(URL.createObjectURL(file));
+                        if (roomForm.anh_chinh) setRoomForm({ ...roomForm, anh_chinh: '' });
+                      } else {
+                        setMainImageFile(null);
+                        if (mainImagePreview) { try { URL.revokeObjectURL(mainImagePreview); } catch (e) { } }
+                        setMainImagePreview('');
+                      }
+                    }}
+                  />
+                  {mainImagePreview || roomForm.anh_chinh ? (
+                    <div className="relative">
+                      <img
+                        src={mainImagePreview || roomForm.anh_chinh}
+                        alt="Main"
+                        className="w-full h-40 object-cover rounded-lg"
+                      />
+                      <button
+                        className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 shadow-lg"
+                        onClick={() => mainImagePreview ? removeSelectedMainFile() : removeExistingMainImage()}
+                        type="button"
+                      >
+                        ✕
+                      </button>
+                      <label
+                        htmlFor="main-image-upload"
+                        className="absolute bottom-2 right-2 bg-white text-gray-700 px-3 py-1 rounded-md text-xs cursor-pointer hover:bg-gray-100 shadow"
+                      >
+                        Đổi ảnh
+                      </label>
+                    </div>
+                  ) : (
+                    <label htmlFor="main-image-upload" className="flex flex-col items-center justify-center h-40 cursor-pointer">
+                      <div className="text-gray-400 text-center">
+                        <svg className="mx-auto h-12 w-12 mb-2" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                          <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                        <p className="text-sm">Click để chọn ảnh chính</p>
+                        <p className="text-xs mt-1">PNG, JPG tối đa 10MB</p>
+                      </div>
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              {/* Ảnh phụ */}
+              <div>
+                <Label className="mb-2 block">Ảnh phụ (Gallery)</Label>
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-gray-400 transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    id="gallery-upload"
+                    onChange={(e: any) => {
+                      const files = Array.from(e.target.files || []) as File[];
+                      if (files.length > 0) {
+                        // Thêm vào danh sách hiện có thay vì thay thế
+                        const newFiles = [...galleryFiles, ...files];
+                        const newPreviews = files.map((f) => URL.createObjectURL(f));
+                        setGalleryFiles(newFiles);
+                        setGalleryPreviews([...galleryPreviews, ...newPreviews]);
+                      }
+                      // Reset input để có thể chọn cùng file lần nữa
+                      e.target.value = '';
+                    }}
+                  />
+
+                  {/* Display existing and new images */}
+                  {(roomForm.anh_phu?.length > 0 || galleryPreviews.length > 0) ? (
+                    <div className="grid grid-cols-3 gap-2">
+                      {/* Existing stored images */}
+                      {roomForm.anh_phu?.map((url, idx) => (
+                        <div key={`stored-${idx}`} className="relative group">
+                          <img src={url} alt={`Stored ${idx}`} className="w-full h-20 object-cover rounded" />
+                          <button
+                            className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs"
+                            onClick={() => removeExistingGalleryImage(url)}
+                            type="button"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                      {/* New previews */}
+                      {galleryPreviews.map((p, i) => (
+                        <div key={`preview-${i}`} className="relative group">
+                          <img src={p} alt={`Preview ${i}`} className="w-full h-20 object-cover rounded" />
+                          <button
+                            className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs"
+                            onClick={() => removeSelectedGalleryFile(i)}
+                            type="button"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <label htmlFor="gallery-upload" className="flex flex-col items-center justify-center h-32 cursor-pointer">
+                      <div className="text-gray-400 text-center">
+                        <svg className="mx-auto h-10 w-10 mb-2" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                          <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                        <p className="text-sm">Click để chọn nhiều ảnh</p>
+                        <p className="text-xs mt-1">Có thể chọn nhiều file</p>
+                      </div>
+                    </label>
+                  )}
+
+                  {(roomForm.anh_phu?.length > 0 || galleryPreviews.length > 0) && (
+                    <label
+                      htmlFor="gallery-upload"
+                      className="block mt-3 text-center bg-gray-100 text-gray-700 px-3 py-2 rounded text-sm cursor-pointer hover:bg-gray-200"
+                    >
+                      + Thêm ảnh
+                    </label>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -771,7 +1077,7 @@ export default function RoomManagement() {
             </div>
             <div>
               <Label>Cơ sở *</Label>
-              <Select value={conceptForm.id_co_so} onValueChange={(v) => setConceptForm({ ...conceptForm, id_co_so: v })}>
+              <Select value={conceptForm.id_co_so} onValueChange={(v: string) => setConceptForm({ ...conceptForm, id_co_so: v })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Chọn cơ sở" />
                 </SelectTrigger>
@@ -873,6 +1179,29 @@ export default function RoomManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xác nhận xóa phòng</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc muốn xóa phòng <strong>"{deleteTarget?.name}"</strong>?
+              <br /><br />
+              <span className="text-amber-600">⚠️ Lưu ý: Nếu phòng có booking đang hoạt động, thao tác này sẽ thất bại.</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Xóa phòng
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

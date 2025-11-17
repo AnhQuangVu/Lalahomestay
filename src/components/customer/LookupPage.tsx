@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Search, Calendar, CreditCard, User, Phone, Mail } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
+import { toast } from 'sonner';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 
 interface Booking {
@@ -45,17 +46,16 @@ export default function LookupPage() {
 
   const handleSearchWithValue = async (value: string, type: 'code' | 'phone') => {
     if (!value.trim()) {
-      alert('Vui lòng nhập thông tin tra cứu');
+      toast.error('Vui lòng nhập thông tin tra cứu');
       return;
     }
 
     setLoading(true);
     setSearched(true);
-    
+
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-faeb1932/bookings/lookup?${
-          type === 'code' ? 'code=' : 'phone='
+        `https://${projectId}.supabase.co/functions/v1/make-server-faeb1932/bookings/lookup?${type === 'code' ? 'code=' : 'phone='
         }${value}`,
         {
           headers: {
@@ -66,7 +66,7 @@ export default function LookupPage() {
 
       const data = await response.json();
       console.log('Lookup response:', data);
-      
+
       if (data.success) {
         setBookings(data.bookings || []);
       } else {
@@ -92,7 +92,7 @@ export default function LookupPage() {
       'checked-out': 'bg-gray-100 text-gray-800',
       'cancelled': 'bg-red-100 text-red-800'
     };
-    
+
     const labels: { [key: string]: string } = {
       'pending': 'Chờ xác nhận',
       'confirmed': 'Đã xác nhận',
@@ -100,7 +100,7 @@ export default function LookupPage() {
       'checked-out': 'Đã trả phòng',
       'cancelled': 'Đã hủy'
     };
-    
+
     return (
       <span className={`px-3 py-1 rounded-full text-sm ${styles[status] || styles.pending}`}>
         {labels[status] || status}
@@ -114,13 +114,13 @@ export default function LookupPage() {
       'paid': 'bg-green-100 text-green-800',
       'failed': 'bg-red-100 text-red-800'
     };
-    
+
     const labels: { [key: string]: string } = {
       'pending': 'Chờ thanh toán',
       'paid': 'Đã thanh toán',
       'failed': 'Thanh toán thất bại'
     };
-    
+
     return (
       <span className={`px-3 py-1 rounded-full text-sm ${styles[status] || styles.pending}`}>
         {labels[status] || status}
@@ -133,26 +133,24 @@ export default function LookupPage() {
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
           <h1 className="text-gray-900 mb-6">Tra cứu đặt phòng</h1>
-          
+
           {/* Search Type */}
           <div className="flex space-x-4 mb-4">
             <button
               onClick={() => setSearchType('code')}
-              className={`px-4 py-2 rounded-lg transition-colors ${
-                searchType === 'code'
+              className={`px-4 py-2 rounded-lg transition-colors ${searchType === 'code'
                   ? 'bg-blue-600 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+                }`}
             >
               Tra cứu theo mã đặt phòng
             </button>
             <button
               onClick={() => setSearchType('phone')}
-              className={`px-4 py-2 rounded-lg transition-colors ${
-                searchType === 'phone'
+              className={`px-4 py-2 rounded-lg transition-colors ${searchType === 'phone'
                   ? 'bg-blue-600 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+                }`}
             >
               Tra cứu theo số điện thoại
             </button>
@@ -203,7 +201,7 @@ export default function LookupPage() {
                 <h2 className="text-gray-900 mb-4">
                   Tìm thấy {bookings.length} đơn đặt phòng
                 </h2>
-                
+
                 {bookings.map((booking) => (
                   <div
                     key={booking.code}
@@ -224,7 +222,7 @@ export default function LookupPage() {
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div className="flex items-center space-x-2 text-gray-600">
                         <Calendar className="w-4 h-4" />

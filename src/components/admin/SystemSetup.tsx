@@ -32,9 +32,9 @@ export default function SystemSetup() {
       setResults(prev => ({ ...prev, users: result }));
     } catch (error) {
       console.error('Error initializing users:', error);
-      setResults(prev => ({ 
-        ...prev, 
-        users: { success: false, error: 'Không thể kết nối với server' } 
+      setResults(prev => ({
+        ...prev,
+        users: { success: false, error: 'Không thể kết nối với server' }
       }));
     } finally {
       setLoading(false);
@@ -56,9 +56,9 @@ export default function SystemSetup() {
       setResults(prev => ({ ...prev, data: result }));
     } catch (error) {
       console.error('Error initializing data:', error);
-      setResults(prev => ({ 
-        ...prev, 
-        data: { success: false, error: 'Không thể kết nối với server' } 
+      setResults(prev => ({
+        ...prev,
+        data: { success: false, error: 'Không thể kết nối với server' }
       }));
     } finally {
       setLoading(false);
@@ -81,9 +81,9 @@ export default function SystemSetup() {
       setResults(prev => ({ ...prev, bookings: result }));
     } catch (error) {
       console.error('Error initializing demo bookings:', error);
-      setResults(prev => ({ 
-        ...prev, 
-        bookings: { success: false, error: 'Không thể kết nối với server' } 
+      setResults(prev => ({
+        ...prev,
+        bookings: { success: false, error: 'Không thể kết nối với server' }
       }));
     } finally {
       setLoading(false);
@@ -106,9 +106,9 @@ export default function SystemSetup() {
       setResults(prev => ({ ...prev, demoData: result }));
     } catch (error) {
       console.error('Error initializing demo data:', error);
-      setResults(prev => ({ 
-        ...prev, 
-        demoData: { success: false, error: 'Không thể kết nối với server' } 
+      setResults(prev => ({
+        ...prev,
+        demoData: { success: false, error: 'Không thể kết nối với server' }
       }));
     } finally {
       setLoading(false);
@@ -126,13 +126,16 @@ export default function SystemSetup() {
 
       const result = await response.json();
       if (result.status === 'ok') {
-        alert('✅ Kết nối thành công với Supabase!\n\n' + JSON.stringify(result, null, 2));
+        toast.success('✅ Kết nối thành công với Supabase!');
+        console.log('Server response:', result);
       } else {
-        alert('⚠️ Server phản hồi nhưng có vấn đề:\n\n' + JSON.stringify(result, null, 2));
+        toast.warning('⚠️ Server phản hồi nhưng có vấn đề');
+        console.log('Server response:', result);
       }
     } catch (error) {
       console.error('Connection test failed:', error);
-      alert('❌ Không thể kết nối với server:\n\n' + error);
+      toast.error('❌ Không thể kết nối với server');
+      console.error('Connection error:', error);
     } finally {
       setLoading(false);
     }
@@ -159,8 +162,8 @@ export default function SystemSetup() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button 
-            onClick={testConnection} 
+          <Button
+            onClick={testConnection}
             disabled={loading}
             variant="outline"
           >
@@ -192,8 +195,8 @@ export default function SystemSetup() {
             </ul>
           </div>
 
-          <Button 
-            onClick={initializeUsers} 
+          <Button
+            onClick={initializeUsers}
             disabled={loading}
           >
             {loading ? 'Đang khởi tạo...' : 'Khởi tạo tài khoản'}
@@ -235,8 +238,8 @@ export default function SystemSetup() {
             </ul>
           </div>
 
-          <Button 
-            onClick={initializeData} 
+          <Button
+            onClick={initializeData}
             disabled={loading}
           >
             {loading ? 'Đang khởi tạo...' : 'Khởi tạo dữ liệu cơ sở'}
@@ -284,8 +287,8 @@ export default function SystemSetup() {
             </ul>
           </div>
 
-          <Button 
-            onClick={initializeDemoBookings} 
+          <Button
+            onClick={initializeDemoBookings}
             disabled={loading}
             className="bg-purple-600 hover:bg-purple-700"
           >
@@ -345,8 +348,8 @@ export default function SystemSetup() {
             </ul>
           </div>
 
-          <Button 
-            onClick={initializeDemoDataSQL} 
+          <Button
+            onClick={initializeDemoDataSQL}
             disabled={loading}
             className="bg-green-600 hover:bg-green-700 w-full"
             size="lg"
