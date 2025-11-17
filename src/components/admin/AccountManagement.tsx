@@ -5,6 +5,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../ui/alert-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Badge } from '../ui/badge';
 import { Search, Plus, Edit, RefreshCw, Shield, Trash2 } from 'lucide-react';
@@ -23,7 +24,9 @@ export default function AccountManagement() {
   // Dialog states
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<any>(null);
+  const [deleteTarget, setDeleteTarget] = useState<any>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -151,12 +154,17 @@ export default function AccountManagement() {
     }
   };
 
-  const handleDelete = async (accountId: string) => {
-    if (!confirm('Bạn có chắc muốn xóa tài khoản này?')) return;
+  const handleDeleteClick = (account: any) => {
+    setDeleteTarget(account);
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
 
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/tai-khoan/${accountId}`, {
+      const response = await fetch(`${API_URL}/tai-khoan/${deleteTarget.id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
       });
@@ -164,6 +172,8 @@ export default function AccountManagement() {
       const result = await response.json();
       if (result.success) {
         toast.success('Xóa tài khoản thành công!');
+        setShowDeleteDialog(false);
+        setDeleteTarget(null);
         fetchAccounts();
       } else {
         toast.error(result.error || 'Không thể xóa tài khoản');
@@ -321,7 +331,7 @@ export default function AccountManagement() {
                           <Button variant="ghost" size="sm" onClick={() => handleEditClick(account)}>
                             <Edit className="w-4 h-4" />
                           </Button>
-                          <Button variant="ghost" size="sm" onClick={() => handleDelete(account.id)}>
+                          <Button variant="ghost" size="sm" onClick={() => handleDeleteClick(account)}>
                             <Trash2 className="w-4 h-4" />
                           </Button>
                         </div>
@@ -477,6 +487,31 @@ export default function AccountManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xác nhận xóa tài khoản</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc chắn muốn xóa tài khoản <span className="font-semibold">{deleteTarget?.ho_ten}</span>?
+              <br />
+              <span className="text-red-600">Hành động này không thể hoàn tác!</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>
+              Hủy
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Xóa tài khoản
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
