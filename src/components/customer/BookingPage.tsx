@@ -1,15 +1,241 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Calendar, Users, MapPin, Home, Filter, RefreshCw, Upload, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Users, MapPin, Home, Filter, RefreshCw, Upload, X, Clock } from 'lucide-react';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { getRoomImage, getRoomImages, formatCurrency } from '../../utils/imageUtils';
 import { uploadToCloudinary } from '../../utils/cloudinary';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import PaymentQRDialog from '../PaymentQRDialog';
 import RoomImageCarousel from './RoomImageCarousel';
 
 const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-faeb1932`;
 const DEPOSIT_AMOUNT = 500000;
+
+// Time slot selector component
+function TimeSlotSelector({
+  roomId,
+  selectedDate,
+  selectedSlots,
+  onSlotsChange
+}: {
+  roomId: string;
+  selectedDate: string;
+  selectedSlots: { start: string, end: string } | null;
+  onSlotsChange: (slots: { start: string, end: string } | null) => void;
+}) {
+  const [bookings, setBookings] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // Fetch bookings for the selected date
+  useEffect(() => {
+    console.log('TimeSlotSelector useEffect - selectedDate:', selectedDate, 'roomId:', roomId);
+    fetchBookingsForDate();
+  }, [selectedDate, roomId]);
+
+  const fetchBookingsForDate = async () => {
+    setLoading(true);
+    try {
+      const startOfDay = `${selectedDate}T00:00:00`;
+      const endOfDay = `${selectedDate}T23:59:59`;
+
+      const response = await fetch(
+        `${API_URL}/dat-phong?start_date=${startOfDay}&end_date=${endOfDay}`,
+        { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
+      );
+
+      const data = await response.json();
+      if (data.success) {
+        // Filter bookings for this specific room
+        const roomBookings = data.data.filter((booking: any) =>
+          booking.id_phong === roomId && booking.trang_thai !== 'da_huy'
+        );
+        setBookings(roomBookings);
+      }
+    } catch (error) {
+      console.error('Error fetching bookings:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Generate timeline: 06:00 ngày N đến 06:00 ngày N+1 (30 phút/slot)
+  const generateTimeSlots = () => {
+    const slots = [];
+    let date = new Date(`${selectedDate}T06:00:00`);
+    for (let i = 0; i < 48; i++) {
+      slots.push({
+        label: date.toTimeString().slice(0, 5),
+        date: new Date(date),
+      });
+      date = new Date(date.getTime() + 30 * 60 * 1000);
+    }
+    return slots;
+  };
+
+  // Kiểm tra selectedDate hợp lệ
+  const isValidDate = selectedDate && !isNaN(new Date(`${selectedDate}T06:00:00`).getTime());
+  const timeSlots = isValidDate ? generateTimeSlots() : [];
+
+  // Check if a time slot is available (not in any buffer region)
+  const isTimeSlotAvailable = (slot: { label: string, date: Date }) => {
+    const slotStart = slot.date;
+    const slotEnd = new Date(slot.date.getTime() + 30 * 60 * 1000); // 30 phút sau
+    for (const booking of bookings) {
+      const bookingStart = new Date(booking.thoi_gian_nhan);
+      const bookingEnd = new Date(booking.thoi_gian_tra);
+      const bufferStart = new Date(bookingStart.getTime() - 30 * 60 * 1000);
+      const bufferEnd = new Date(bookingEnd.getTime() + 30 * 60 * 1000);
+      // Kiểm tra giao thoa giữa slot và buffer
+      const overlaps = slotStart < bufferEnd && slotEnd > bufferStart;
+      if (overlaps) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  // Get slot background color (inline style)
+  const getSlotBgColor = (slot: { label: string, date: Date }) => {
+    if (!isTimeSlotAvailable(slot)) return '#9ca3af'; // gray
+    const hour = slot.date.getHours();
+    const minute = slot.date.getMinutes();
+    if ((hour > 6 || (hour === 6 && minute >= 30)) && (hour < 21 || (hour === 21 && minute < 30))) return '#fde047'; // yellow
+    if (hour >= 22 || hour < 6) return '#60a5fa'; // blue
+    return '#9ca3af'; // gray
+  };
+
+  const handleSlotClick = (slot: { label: string, date: Date }) => {
+    if (!isTimeSlotAvailable(slot)) return;
+
+    const slotDateTime = slot.date.toISOString();
+
+    if (!selectedSlots) {
+      // Start selection
+      onSlotsChange({ start: slotDateTime, end: slotDateTime });
+    } else if (selectedSlots.start === slotDateTime && selectedSlots.end === slotDateTime) {
+      // Deselect single slot
+      onSlotsChange(null);
+    } else {
+      // End selection
+      const startTime = new Date(selectedSlots.start);
+      const endTime = new Date(slotDateTime);
+
+      // Đảm bảo startTime <= endTime
+      let from = startTime < endTime ? startTime : endTime;
+      let to = startTime < endTime ? endTime : startTime;
+
+      // Lấy tất cả các slot trong khoảng from -> to
+      const slotsInRange = timeSlots.filter(s => s.date >= from && s.date <= to);
+      const allAvailable = slotsInRange.every(s => isTimeSlotAvailable(s));
+      if (!allAvailable) {
+        toast.error('Khung giờ chọn phải liên tục, không được chứa slot không khả dụng.');
+        return;
+      }
+
+      if (endTime > startTime) {
+        onSlotsChange({ start: selectedSlots.start, end: slotDateTime });
+      } else {
+        // Reset and start new selection
+        onSlotsChange({ start: slotDateTime, end: slotDateTime });
+      }
+    }
+  };
+
+  const isSlotSelected = (timeString: string) => {
+    if (!selectedSlots) return false;
+    const slotDateTime = `${selectedDate}T${timeString}:00`;
+    const slotTime = new Date(slotDateTime);
+    const startTime = new Date(selectedSlots.start);
+    const endTime = new Date(selectedSlots.end);
+    return slotTime >= startTime && slotTime <= endTime;
+  };
+
+  if (!isValidDate || loading) {
+    console.log('selectedDate:', selectedDate, 'isValidDate:', isValidDate);
+  }
+  return (
+    <div className="space-y-4">
+      {/* Legend */}
+      <div className="flex flex-wrap gap-4 text-sm">
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-yellow-400 rounded"></div>
+          <span>Giờ ban ngày (06:30-21:30)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-blue-400 rounded"></div>
+          <span>Giờ qua đêm (22:00-06:00)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-gray-400 rounded"></div>
+          <span>Không khả dụng</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-green-400 rounded"></div>
+          <span>Đã chọn</span>
+        </div>
+      </div>
+
+      {/* Time slots grid */}
+      <div className="border border-gray-200 rounded-lg p-4 max-h-96 overflow-y-auto bg-white">
+        {/* Move debug log outside JSX */}
+        {!isValidDate || loading ? (
+          <div className="text-center py-8">
+            <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2" style={{ color: '#0f7072' }} />
+            <p className="text-gray-600">Đang tải lịch...</p>
+          </div>
+        ) : (
+          <>
+            {console.log('Rendering time slots:', timeSlots.length, timeSlots.map(s => s.date.toISOString()))}
+            <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
+              {timeSlots.map((slot) => {
+                const isAvailable = isTimeSlotAvailable(slot);
+                const isSelected = selectedSlots && slot.date >= new Date(selectedSlots.start) && slot.date <= new Date(selectedSlots.end);
+                let bgColor = getSlotBgColor(slot);
+                let textColor = '#fff';
+                if (isSelected) {
+                  bgColor = '#4ade80'; // green
+                  textColor = '#fff';
+                } else if (!isAvailable) {
+                  bgColor = '#9ca3af'; // gray
+                  textColor = '#1f2937';
+                } else if (bgColor === '#9ca3af') {
+                  textColor = '#1f2937';
+                } else if (bgColor === '#fde047' || bgColor === '#60a5fa') {
+                  textColor = '#fff';
+                }
+
+                // Log từng slot để debug
+                console.log('Slot:', slot.label, slot.date.toISOString(), 'BgColor:', bgColor, 'Available:', isAvailable);
+
+                return (
+                  <button
+                    key={slot.label + slot.date.toISOString()}
+                    onClick={() => handleSlotClick(slot)}
+                    disabled={!isAvailable}
+                    className={`px-2 py-2 text-xs font-medium rounded-lg border-2 border-gray-200 shadow-sm transition-all duration-150 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-[#0f7072]`}
+                    style={{ backgroundColor: bgColor, color: textColor }}
+                    title={`${slot.label} ${isAvailable ? '(Có thể đặt)' : '(Không khả dụng)'}`}
+                  >
+                    {slot.label}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Selected slots summary */}
+      {selectedSlots && (
+        <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+          <p className="text-sm text-green-800">
+            🕐 Đã chọn: {new Date(selectedSlots.start).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - {new Date(selectedSlots.end).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function BookingPage() {
   const navigate = useNavigate();
@@ -35,7 +261,17 @@ export default function BookingPage() {
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
   const [numberOfGuests, setNumberOfGuests] = useState(2);
-  const [bookingType, setBookingType] = useState<'gio' | 'dem'>('dem');
+  const [bookingType, setBookingType] = useState<'ngay' | 'gio'>('ngay'); // Changed from 'dem' to 'ngay'
+  const [selectedDate, setSelectedDate] = useState(''); // For ngày mode
+  const [selectedTimeSlots, setSelectedTimeSlots] = useState<{ start: string, end: string } | null>(null); // For giờ mode
+
+  // Ensure selectedDate is always set when switching to 'gio' mode
+  useEffect(() => {
+    if (step === 2 && bookingType === 'gio' && !selectedDate) {
+      const today = new Date().toISOString().split('T')[0];
+      setSelectedDate(today);
+    }
+  }, [step, bookingType, selectedDate]);
 
   // Step 3: Customer Info
   const [fullName, setFullName] = useState('');
@@ -51,8 +287,16 @@ export default function BookingPage() {
   const [uploadingCccd, setUploadingCccd] = useState(false);
 
   // Payment QR Dialog
+  const [bookingData, setBookingData] = useState<{
+    bookingCode: string;
+    amount: number;
+    bookingDetails: {
+      roomName: string;
+      checkIn: string;
+      checkOut: string;
+    };
+  } | null>(null);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
-  const [bookingData, setBookingData] = useState<any>(null);
 
   useEffect(() => {
     fetchData();
@@ -69,6 +313,56 @@ export default function BookingPage() {
   useEffect(() => {
     filterRooms();
   }, [allRooms, selectedLocation, selectedConcept, priceRange, statusFilter]);
+
+  // Check if day booking is available for selected date
+  const isDayBookingAvailable = async (date: string) => {
+    if (!date || !selectedRoom) return false;
+
+    try {
+      const checkInDateTime = new Date(date);
+      checkInDateTime.setHours(14, 0, 0, 0); // 14:00
+
+      const checkOutDateTime = new Date(date);
+      checkOutDateTime.setDate(checkOutDateTime.getDate() + 1);
+      checkOutDateTime.setHours(12, 0, 0, 0); // 12:00 trưa hôm sau
+
+      // Fetch bookings for the selected date range
+      const startOfPeriod = checkInDateTime.toISOString();
+      const endOfPeriod = checkOutDateTime.toISOString();
+
+      const response = await fetch(
+        `${API_URL}/dat-phong?start_date=${startOfPeriod}&end_date=${endOfPeriod}`,
+        { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
+      );
+
+      const data = await response.json();
+      if (data.success) {
+        // Filter bookings for this specific room
+        const roomBookings = data.data.filter((booking: any) =>
+          booking.id_phong === selectedRoom.id && booking.trang_thai !== 'da_huy'
+        );
+
+        // Check for conflicting bookings
+        for (const booking of roomBookings) {
+          const bookingStart = new Date(booking.thoi_gian_nhan);
+          const bookingEnd = new Date(booking.thoi_gian_tra);
+
+          // Check if booking overlaps with day booking period
+          if (bookingStart < checkOutDateTime && bookingEnd > checkInDateTime) {
+            return false;
+          }
+        }
+
+        return true;
+      } else {
+        console.error('Failed to fetch bookings for availability check');
+        return false;
+      }
+    } catch (error) {
+      console.error('Error checking day booking availability:', error);
+      return false;
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -163,74 +457,98 @@ export default function BookingPage() {
   };
 
   const calculateTotal = () => {
-    if (!selectedRoom || !checkIn || !checkOut) return 0;
+    if (!selectedRoom) return 0;
 
-    const start = new Date(checkIn);
-    const end = new Date(checkOut);
-    const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-
-    const price = bookingType === 'gio' ? selectedRoom.loai_phong?.gia_gio : selectedRoom.loai_phong?.gia_dem;
-
-    if (bookingType === 'gio') {
-      // Theo giờ: làm tròn lên số giờ
+    if (bookingType === 'ngay' && selectedDate) {
+      // Đặt theo ngày: luôn 1 ngày
+      return selectedRoom.loai_phong?.gia_dem || 0;
+    } else if (bookingType === 'gio' && selectedTimeSlots) {
+      // Đặt theo giờ: tính số giờ
+      const start = new Date(selectedTimeSlots.start);
+      const end = new Date(selectedTimeSlots.end);
+      const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+      const price = selectedRoom.loai_phong?.gia_gio || 0;
       return price * Math.ceil(hours);
-    } else {
-      // Theo ngày: tính số đêm (số ngày giữa check-in và check-out)
-      // VD: 14:00 ngày 1 → 12:00 ngày 2 = 1 đêm
-      // VD: 14:00 ngày 1 → 14:00 ngày 3 = 2 đêm
-      const startDate = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-      const endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate());
-      const nights = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
-      return price * nights;
-    }
-  };
-
-  const handleNextStep = () => {
-    if (step === 1) {
-      if (!selectedRoom) {
-        toast.error('Vui lòng chọn phòng');
-        return;
-      }
-      setStep(2);
-    } else if (step === 2) {
-      if (!checkIn || !checkOut) {
-        toast.error('Vui lòng chọn thời gian nhận và trả phòng');
-        return;
-      }
-
+    } else if (checkIn && checkOut) {
+      // Fallback cho datetime inputs (legacy)
       const start = new Date(checkIn);
       const end = new Date(checkOut);
       const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
 
-      if (start >= end) {
-        toast.error('Thời gian trả phòng phải sau thời gian nhận phòng');
-        return;
-      }
+      const price = bookingType === 'gio' ? selectedRoom.loai_phong?.gia_gio : selectedRoom.loai_phong?.gia_dem;
 
-      // Validation theo loại thuê
       if (bookingType === 'gio') {
-        if (hours < 1) {
-          toast.error('Thời gian thuê theo giờ tối thiểu là 1 giờ');
-          return;
-        }
-        if (hours > 24) {
-          toast.error('Thuê trên 24 giờ vui lòng chọn "Theo ngày"');
-          return;
-        }
+        return price * Math.ceil(hours);
       } else {
-        // Theo ngày: kiểm tra ít nhất phải qua ngày
         const startDate = new Date(start.getFullYear(), start.getMonth(), start.getDate());
         const endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate());
-        const daysDiff = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
+        const nights = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
+        return price * nights;
+      }
+    }
 
-        if (daysDiff < 1) {
-          toast.error('Thuê theo ngày phải từ ít nhất 1 đêm (qua ngày hôm sau)');
+    return 0;
+  };
+
+  const handleNextStep = async () => {
+    if (step === 1) {
+      if (!selectedRoom) {
+        toast.error('Bạn phải chọn phòng trước khi tiếp tục.');
+        return;
+      }
+      setStep(2);
+    } else if (step === 2) {
+      // Validation cho đặt theo ngày
+      if (bookingType === 'ngay') {
+        if (!selectedDate) {
+          toast.error('Bạn phải chọn ngày nhận phòng.');
           return;
         }
+
+        const selectedDateTime = new Date(selectedDate);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        if (selectedDateTime < today) {
+          toast.error('Không thể đặt phòng cho ngày trong quá khứ.');
+          return;
+        }
+
+        // Check if day booking is available for selected date
+        if (!(await isDayBookingAvailable(selectedDate))) {
+          toast.error('Phòng đã được đặt cho ngày này. Vui lòng chọn ngày khác.');
+          return;
+        }
+
+        // Set check-in và check-out cho ngày mode
+        const checkInDateTime = new Date(selectedDate);
+        checkInDateTime.setHours(14, 0, 0, 0); // 14:00
+
+        const checkOutDateTime = new Date(selectedDate);
+        checkOutDateTime.setDate(checkOutDateTime.getDate() + 1);
+        checkOutDateTime.setHours(12, 0, 0, 0); // 12:00 trưa hôm sau
+
+        setCheckIn(checkInDateTime.toISOString().slice(0, 16));
+        setCheckOut(checkOutDateTime.toISOString().slice(0, 16));
+
+      } else if (bookingType === 'gio') {
+        // Validation cho đặt theo giờ
+        if (!selectedTimeSlots) {
+          toast.error('Bạn phải chọn khung giờ thuê phòng.');
+          return;
+        }
+
+        // Set check-in và check-out từ selectedTimeSlots
+        setCheckIn(selectedTimeSlots.start);
+        setCheckOut(selectedTimeSlots.end);
       }
 
       if (numberOfGuests < 1) {
-        toast.error('Số khách phải ít nhất là 1');
+        toast.error('Số khách phải ít nhất là 1.');
+        return;
+      }
+      if (numberOfGuests > 10) {
+        toast.error('Số khách vượt quá giới hạn phòng (tối đa 10).');
         return;
       }
 
@@ -275,15 +593,19 @@ export default function BookingPage() {
   };
 
   const handleSubmitBooking = async () => {
-    if (!fullName || !phone) {
-      toast.error('Vui lòng nhập đầy đủ họ tên và số điện thoại');
+    if (!fullName) {
+      toast.error('Bạn phải nhập họ tên.');
+      return;
+    }
+    if (!phone) {
+      toast.error('Bạn phải nhập số điện thoại.');
       return;
     }
 
     // Validate số điện thoại Việt Nam (10-11 số, bắt đầu bằng 0)
     const phoneRegex = /^0[0-9]{9,10}$/;
     if (!phoneRegex.test(phone)) {
-      toast.error('Số điện thoại không hợp lệ (phải có 10-11 số và bắt đầu bằng 0)');
+      toast.error('Số điện thoại không hợp lệ (phải có 10-11 số và bắt đầu bằng 0).');
       return;
     }
 
@@ -291,7 +613,7 @@ export default function BookingPage() {
     if (email) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email)) {
-        toast.error('Email không hợp lệ');
+        toast.error('Email không hợp lệ.');
         return;
       }
     }
@@ -450,7 +772,7 @@ export default function BookingPage() {
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0f7072] outline-none"
                   >
                     <option value="all">Tất cả cơ sở</option>
-                    {locations.map(loc => (
+                    {(Array.isArray(locations) ? locations.slice(0, 3) : []).map(loc => (
                       <option key={loc.id} value={loc.id}>{loc.ten_co_so}</option>
                     ))}
                   </select>
@@ -595,19 +917,51 @@ export default function BookingPage() {
               <p className="text-sm text-gray-600">{selectedRoom.loai_phong?.co_so?.ten_co_so}</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <div>
-                <label className="block text-sm text-gray-700 mb-2">Loại thuê</label>
-                <select
-                  value={bookingType}
-                  onChange={(e) => setBookingType(e.target.value as 'gio' | 'dem')}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0f7072] outline-none"
+            {/* Booking Type Selection */}
+            <div className="mb-6">
+              <label className="block text-sm text-gray-700 mb-4">Chọn hình thức đặt phòng</label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div
+                  onClick={() => setBookingType('ngay')}
+                  className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${bookingType === 'ngay'
+                    ? 'border-[#0f7072] bg-green-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                    }`}
                 >
-                  <option value="gio">Theo giờ - {formatCurrency(selectedRoom.loai_phong?.gia_gio || 0)}/giờ</option>
-                  <option value="dem">Theo ngày - {formatCurrency(selectedRoom.loai_phong?.gia_dem || 0)}/ngày</option>
-                </select>
-              </div>
+                  <div className="flex items-center mb-2">
+                    <Calendar className="w-5 h-5 mr-2" style={{ color: '#0f7072' }} />
+                    <span className="font-medium text-gray-900">Đặt theo ngày</span>
+                  </div>
+                  <p className="text-sm text-gray-600 mb-2">
+                    🗓️ Check-in: 14:00, Check-out: 12:00 trưa hôm sau
+                  </p>
+                  <p className="text-sm font-medium" style={{ color: '#0f7072' }}>
+                    {formatCurrency(selectedRoom.loai_phong?.gia_dem || 0)}/ngày
+                  </p>
+                </div>
 
+                <div
+                  onClick={() => setBookingType('gio')}
+                  className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${bookingType === 'gio'
+                    ? 'border-[#0f7072] bg-green-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                >
+                  <div className="flex items-center mb-2">
+                    <Clock className="w-5 h-5 mr-2" style={{ color: '#0f7072' }} />
+                    <span className="font-medium text-gray-900">Đặt theo giờ</span>
+                  </div>
+                  <p className="text-sm text-gray-600 mb-2">
+                    ⏰ Linh hoạt theo khung giờ 24h
+                  </p>
+                  <p className="text-sm font-medium" style={{ color: '#0f7072' }}>
+                    {formatCurrency(selectedRoom.loai_phong?.gia_gio || 0)}/giờ
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               <div>
                 <label className="block text-sm text-gray-700 mb-2">Số khách</label>
                 <input
@@ -623,85 +977,117 @@ export default function BookingPage() {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm text-gray-700 mb-2">Thời gian nhận phòng</label>
-                <input
-                  type="datetime-local"
-                  value={checkIn}
-                  onChange={(e) => setCheckIn(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0f7072] outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm text-gray-700 mb-2">Thời gian trả phòng</label>
-                <input
-                  type="datetime-local"
-                  value={checkOut}
-                  onChange={(e) => setCheckOut(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0f7072] outline-none"
-                />
-              </div>
+              {bookingType === 'ngay' ? (
+                <div>
+                  <label className="block text-sm text-gray-700 mb-2">Ngày nhận phòng</label>
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#0f7072] outline-none"
+                  />
+                </div>
+              ) : (
+                <div className="md:col-span-2">
+                  <label className="block text-sm text-gray-700 mb-2">Chọn khung giờ</label>
+                  <div className="text-sm text-gray-600 mb-2">
+                    Chọn khoảng thời gian bạn muốn thuê phòng
+                  </div>
+                  {selectedDate ? (
+                    <TimeSlotSelector
+                      roomId={selectedRoom.id}
+                      selectedDate={selectedDate}
+                      selectedSlots={selectedTimeSlots}
+                      onSlotsChange={setSelectedTimeSlots}
+                    />
+                  ) : (
+                    <div className="text-center py-8">
+                      <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2" style={{ color: '#0f7072' }} />
+                      <p className="text-gray-600">Đang tải lịch...</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
-            <div className="p-4 rounded-lg" style={{ backgroundColor: 'rgba(15, 112, 114, 0.05)', border: '2px solid rgba(15, 112, 114, 0.2)' }}>
-              {checkIn && checkOut && (() => {
-                const start = new Date(checkIn);
-                const end = new Date(checkOut);
-                const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-                const roundedHours = Math.ceil(hours);
+            {/* Booking Summary */}
+            {(bookingType === 'ngay' && selectedDate) && (
+              <div className="p-4 rounded-lg" style={{ backgroundColor: 'rgba(15, 112, 114, 0.05)', border: '2px solid rgba(15, 112, 114, 0.2)' }}>
+                <div className="mb-3 pb-3 border-b border-gray-200">
+                  <div className="flex justify-between mb-2">
+                    <span className="text-sm text-gray-700 font-medium">Thời gian thuê:</span>
+                    <span className="text-sm font-semibold" style={{ color: '#0f7072' }}>
+                      1 ngày (14:00 → 12:00 trưa hôm sau)
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-600">
+                    📅 {new Date(selectedDate).toLocaleDateString('vi-VN')} 14:00 → {new Date(new Date(selectedDate).getTime() + 24 * 60 * 60 * 1000).toLocaleDateString('vi-VN')} 12:00
+                  </div>
+                </div>
+                <div className="flex justify-between mb-2">
+                  <span className="text-gray-700">Tiền phòng:</span>
+                  <span className="text-gray-900 font-medium">{formatCurrency(selectedRoom.loai_phong?.gia_dem || 0)}</span>
+                </div>
+                <div className="flex justify-between mb-2">
+                  <span className="text-gray-700">Cọc cơ sở vật chất:</span>
+                  <span className="text-gray-900 font-medium">{formatCurrency(DEPOSIT_AMOUNT)}</span>
+                </div>
+                <div className="flex justify-between pt-3 border-t-2" style={{ borderColor: 'rgba(15, 112, 114, 0.3)' }}>
+                  <span className="text-gray-900 font-semibold">Tổng thanh toán:</span>
+                  <span className="text-2xl font-bold" style={{ color: '#0f7072' }}>{formatCurrency((selectedRoom.loai_phong?.gia_dem || 0) + DEPOSIT_AMOUNT)}</span>
+                </div>
+                <div className="mt-3 text-xs text-gray-600 bg-white p-2 rounded">
+                  💳 Thanh toán trước {formatCurrency(DEPOSIT_AMOUNT)} để giữ phòng
+                </div>
+              </div>
+            )}
 
-                // Tính số đêm (dựa trên ngày, không tính giờ)
-                const startDate = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-                const endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate());
-                const nights = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
+            {bookingType === 'gio' && selectedTimeSlots && (
+              <div className="p-4 rounded-lg" style={{ backgroundColor: 'rgba(15, 112, 114, 0.05)', border: '2px solid rgba(15, 112, 114, 0.2)' }}>
+                {(() => {
+                  const start = new Date(selectedTimeSlots.start);
+                  const end = new Date(selectedTimeSlots.end);
+                  const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+                  const roundedHours = Math.ceil(hours);
+                  const price = selectedRoom.loai_phong?.gia_gio || 0;
+                  const roomTotal = price * roundedHours;
 
-                const isValidTime = start < end;
-
-                return (
-                  <div className={`mb-3 pb-3 border-b ${!isValidTime ? 'border-red-300' : 'border-gray-200'
-                    }`}>
-                    {!isValidTime ? (
-                      <div className="text-red-600 text-sm font-medium">
-                        ⚠️ Thời gian không hợp lệ
-                      </div>
-                    ) : (
-                      <div>
+                  return (
+                    <>
+                      <div className="mb-3 pb-3 border-b border-gray-200">
                         <div className="flex justify-between mb-2">
                           <span className="text-sm text-gray-700 font-medium">Thời gian thuê:</span>
                           <span className="text-sm font-semibold" style={{ color: '#0f7072' }}>
-                            {bookingType === 'gio'
-                              ? `${roundedHours} giờ`
-                              : `${nights} ${nights === 1 ? 'đêm' : 'ngày'}`
-                            }
+                            {roundedHours} giờ
                           </span>
                         </div>
                         <div className="text-xs text-gray-600">
-                          📅 {new Date(checkIn).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}
+                          🕐 {start.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}
                           {' → '}
-                          {new Date(checkOut).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}
+                          {end.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}
                         </div>
                       </div>
-                    )}
-                  </div>
-                );
-              })()}
-              <div className="flex justify-between mb-2">
-                <span className="text-gray-700">Tiền phòng:</span>
-                <span className="text-gray-900 font-medium">{formatCurrency(calculateTotal())}</span>
+                      <div className="flex justify-between mb-2">
+                        <span className="text-gray-700">Tiền phòng:</span>
+                        <span className="text-gray-900 font-medium">{formatCurrency(roomTotal)}</span>
+                      </div>
+                      <div className="flex justify-between mb-2">
+                        <span className="text-gray-700">Cọc cơ sở vật chất:</span>
+                        <span className="text-gray-900 font-medium">{formatCurrency(DEPOSIT_AMOUNT)}</span>
+                      </div>
+                      <div className="flex justify-between pt-3 border-t-2" style={{ borderColor: 'rgba(15, 112, 114, 0.3)' }}>
+                        <span className="text-gray-900 font-semibold">Tổng thanh toán:</span>
+                        <span className="text-2xl font-bold" style={{ color: '#0f7072' }}>{formatCurrency(roomTotal + DEPOSIT_AMOUNT)}</span>
+                      </div>
+                      <div className="mt-3 text-xs text-gray-600 bg-white p-2 rounded">
+                        💳 Thanh toán trước {formatCurrency(DEPOSIT_AMOUNT)} để giữ phòng
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
-              <div className="flex justify-between mb-2">
-                <span className="text-gray-700">Cọc cơ sở vật chất:</span>
-                <span className="text-gray-900 font-medium">{formatCurrency(DEPOSIT_AMOUNT)}</span>
-              </div>
-              <div className="flex justify-between pt-3 border-t-2" style={{ borderColor: 'rgba(15, 112, 114, 0.3)' }}>
-                <span className="text-gray-900 font-semibold">Tổng thanh toán:</span>
-                <span className="text-2xl font-bold" style={{ color: '#0f7072' }}>{formatCurrency(calculateTotal() + DEPOSIT_AMOUNT)}</span>
-              </div>
-              <div className="mt-3 text-xs text-gray-600 bg-white p-2 rounded">
-                💳 Thanh toán trước {formatCurrency(DEPOSIT_AMOUNT)} để giữ phòng
-              </div>
-            </div>
+            )}
           </div>
         )}
 
