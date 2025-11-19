@@ -211,14 +211,7 @@ export default function DailyReport() {
               className="w-full px-4 py-3 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-white focus:border-white outline-none text-gray-900 font-medium"
             />
           </div>
-          <div className="flex items-end">
-            <button
-              onClick={fetchReportData}
-              className="px-8 py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-blue-50 transition-all shadow-md hover:shadow-lg"
-            >
-              Xem báo cáo
-            </button>
-          </div>
+          {/* Đã bỏ nút Xem báo cáo */}
         </div>
       </div>
 

@@ -213,14 +213,7 @@ export default function StaffReports() {
             />
           </div>
 
-          <div className="flex items-end">
-            <button
-              onClick={fetchReportData}
-              className="w-full md:w-auto px-8 py-3 bg-white text-purple-600 font-semibold rounded-lg hover:bg-purple-50 transition-all shadow-md hover:shadow-lg"
-            >
-              Xem báo cáo
-            </button>
-          </div>
+          {/* Đã bỏ nút Xem báo cáo */}
         </div>
       </div>
 
