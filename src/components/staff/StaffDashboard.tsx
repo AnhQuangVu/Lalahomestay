@@ -1,9 +1,32 @@
+// Việt hóa trạng thái đơn đặt phòng
+const getBookingStatusLabel = (status: string) => {
+  const map: Record<string, string> = {
+    'da_coc': 'Đã đặt cọc',
+    'da_tra': 'Đã trả phòng',
+    'dang_o': 'Đang ở',
+    'dang_dung': 'Đang sử dụng',
+    'da_huy': 'Đã hủy',
+    'cho_xac_nhan': 'Chờ xác nhận',
+    'checkout': 'Đã checkout',
+    'sap_nhan': 'Sắp nhận',
+    'sap_tra': 'Sắp trả',
+    'trong': 'Trống',
+    '': 'Không xác định'
+  };
+  return map[status] || status;
+};
 import { useState, useEffect } from 'react';
-import { Plus, MoreVertical, Clock } from 'lucide-react';
+import { Toaster, toast } from 'sonner';
+import {
+  MoreVertical, Clock, UserCheck, LogOut, Sparkles,
+  FileText, Settings, User, CalendarRange, Plus, X,
+  CreditCard, MapPin, Phone, StickyNote
+} from 'lucide-react';
 import { format, differenceInHours } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 
+// --- INTERFACES ---
 interface Room {
   id: string;
   number: string;
@@ -22,21 +45,31 @@ interface Room {
 }
 
 export default function StaffDashboard() {
+  // --- STATE ---
   const [rooms, setRooms] = useState<Room[]>([]);
   const [filter, setFilter] = useState<string>('all');
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+
+  // Edit States
+  const [editStatus, setEditStatus] = useState<string | null>(null);
+  const [editClean, setEditClean] = useState<string | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
+
+  // Sub-modals
+  const [bookingDetail, setBookingDetail] = useState<any | null>(null);
+  const [showBookingForm, setShowBookingForm] = useState(false);
 
   useEffect(() => {
     loadRooms();
-    // Refresh every 30 seconds
-    const interval = setInterval(loadRooms, 30000);
+    const interval = setInterval(loadRooms, 15000);
     return () => clearInterval(interval);
   }, []);
 
+  // --- DATA LOADING ---
   const loadRooms = async () => {
     try {
-      // Fetch rooms and active bookings from real backend endpoints
       const [roomsRes, bookingsRes] = await Promise.all([
         fetch(`https://${projectId}.supabase.co/functions/v1/make-server-faeb1932/phong`, {
           headers: { 'Authorization': `Bearer ${publicAnonKey}` }
@@ -48,210 +81,222 @@ export default function StaffDashboard() {
 
       const [roomsData, bookingsData] = await Promise.all([roomsRes.json(), bookingsRes.json()]);
 
-      if (!roomsData.success) {
-        console.warn('rooms endpoint did not return success, falling back to mock');
-        setRooms(getMockRooms());
-        return;
-      }
+      if (!roomsData.success) { setRooms([]); return; }
 
       const roomsFromApi = roomsData.data || [];
       const bookingsFromApi = bookingsData.success ? (bookingsData.data || []) : [];
-
-      // Lọc bỏ phòng đình chỉ - staff không cần thấy
       const activeRooms = roomsFromApi.filter((r: any) => r.trang_thai !== 'dinh_chi');
 
-      // Map backend room shape to local Room interface
       const mapped: Room[] = activeRooms.map((r: any) => {
-        // find current booking for this room (booking where now is between checkin and checkout and not cancelled)
         const now = new Date();
         const currentBooking = bookingsFromApi.find((b: any) => {
-          if (!b || !b.id_phong) return false;
-          if (b.id_phong !== r.id) return false;
-          if (b.trang_thai === 'da_huy') return false;
+          if (!b || !b.id_phong || b.id_phong !== r.id) return false;
+          if (['da_huy', 'da_tra', 'checkout'].includes(b.trang_thai)) return false;
+
+          // Nếu trạng thái đang ở -> lấy luôn
+          if (b.trang_thai === 'dang_o' || b.trang_thai === 'dang_dung') return true;
+
+          // Logic thời gian
           const start = new Date(b.thoi_gian_nhan);
           const end = new Date(b.thoi_gian_tra);
-          return now >= start && now <= end;
+          if (r.trang_thai === 'dang_dung') return true;
+          return now <= end && (now >= start || differenceInHours(start, now) <= 2);
         });
 
-        // map statuses
-        const statusMap: any = {
-          'trong': 'available',
-          'dang_dung': 'occupied',
-          'sap_nhan': 'checkin-soon',
-          'sap_tra': 'checkout-soon',
-          'bao_tri': 'maintenance'
-        };
+        const statusMap: any = { 'trong': 'available', 'dang_dung': 'occupied', 'sap_nhan': 'checkin-soon', 'sap_tra': 'checkout-soon', 'bao_tri': 'maintenance' };
+        const cleanMap: any = { 'sach': 'clean', 'dang_don': 'cleaning', 'chua_don': 'dirty' };
 
-        const cleanMap: any = {
-          'sach': 'clean',
-          'dang_don': 'cleaning',
-          'chua_don': 'dirty'
-        };
+        let derivedStatus = statusMap[r.trang_thai] || 'available';
+        if (currentBooking && derivedStatus === 'available') {
+          if (new Date() >= new Date(currentBooking.thoi_gian_nhan)) {
+            derivedStatus = 'occupied';
+          } else {
+            derivedStatus = 'checkin-soon';
+          }
+        }
 
         return {
           id: r.id,
           number: r.ma_phong,
           concept: r.loai_phong?.ten_loai || '',
           location: r.loai_phong?.co_so?.ten_co_so || '',
-          status: statusMap[r.trang_thai] || 'available',
+          status: derivedStatus,
           cleanStatus: cleanMap[r.tinh_trang_vesinh] || 'clean',
           price2h: r.loai_phong?.gia_gio || 0,
           priceNight: r.loai_phong?.gia_dem || 0,
           currentBooking: currentBooking ? {
             code: currentBooking.ma_dat,
-            customerName: currentBooking.khach_hang?.ho_ten || currentBooking.ho_ten || '',
+            customerName: currentBooking.khach_hang?.ho_ten || currentBooking.ho_ten || 'Khách vãng lai',
             checkIn: currentBooking.thoi_gian_nhan,
             checkOut: currentBooking.thoi_gian_tra
           } : undefined
         } as Room;
       });
-
       setRooms(mapped);
-    } catch (error) {
-      console.error('Load rooms error:', error);
-      setRooms(getMockRooms());
+    } catch (error) { console.error(error); setRooms([]); } finally { setLoading(false); }
+  };
+
+  // --- API ACTIONS ---
+  const updateRoomStatusApi = async (roomId: string, status: string, cleanStatus: string) => {
+    const statusMap: any = { 'available': 'trong', 'occupied': 'dang_dung', 'checkout-soon': 'sap_tra', 'checkin-soon': 'sap_nhan', 'maintenance': 'bao_tri' };
+    const cleanMap: any = { 'clean': 'sach', 'cleaning': 'dang_don', 'dirty': 'chua_don' };
+    await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-faeb1932/phong/${roomId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
+      body: JSON.stringify({ trang_thai: statusMap[status] || 'trong', tinh_trang_vesinh: cleanMap[cleanStatus] || 'sach' })
+    });
+  };
+
+  // --- ACTION: TRẢ PHÒNG (ĐÃ ĐƠN GIẢN HÓA) ---
+  const handleCheckout = async () => {
+    if (!selectedRoom?.currentBooking) return;
+
+    if (!window.confirm(`Xác nhận trả phòng cho khách ${selectedRoom.currentBooking.customerName}?`)) return;
+
+    const toastId = toast.loading('Đang xử lý trả phòng...');
+
+    try {
+      setEditLoading(true);
+      const bookingRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-faeb1932/dat-phong/ma/${selectedRoom.currentBooking.code}`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } });
+      const bookingData = await bookingRes.json();
+
+      if (bookingData.success) {
+        await Promise.all([
+          fetch(`https://${projectId}.supabase.co/functions/v1/make-server-faeb1932/dat-phong/${bookingData.data.id}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
+            body: JSON.stringify({ trang_thai: 'da_tra', thoi_gian_tra_thuc_te: new Date().toISOString() })
+          }),
+          updateRoomStatusApi(selectedRoom.id, 'available', 'dirty')
+        ]);
+
+        toast.success('Trả phòng thành công!', { id: toastId });
+        setSelectedRoom(null);
+        loadRooms();
+      } else {
+        toast.error('Không tìm thấy đơn đặt phòng', { id: toastId });
+      }
+    } catch (e) {
+      toast.error('Lỗi hệ thống', { id: toastId });
     } finally {
-      setLoading(false);
+      setEditLoading(false);
     }
   };
 
-  const getMockRooms = (): Room[] => {
-    const now = new Date();
-    const in2Hours = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-    const in4Hours = new Date(now.getTime() + 4 * 60 * 60 * 1000);
+  const handleCleanRoom = async () => {
+    if (!selectedRoom) return;
+    const toastId = toast.loading('Đang cập nhật...');
+    try {
+      setEditLoading(true);
+      await updateRoomStatusApi(selectedRoom.id, 'available', 'clean');
+      toast.success('Phòng đã sạch sẽ!', { id: toastId });
+      setSelectedRoom(null); loadRooms();
+    } catch (e) { toast.error('Lỗi kết nối', { id: toastId }); } finally { setEditLoading(false); }
+  };
 
-    return [
-      {
-        id: '1',
-        number: '101',
-        concept: 'Matcha',
-        location: 'Dương Quảng Hàm',
-        status: 'available',
-        cleanStatus: 'clean',
-        price2h: 200000,
-        priceNight: 600000
-      },
-      {
-        id: '2',
-        number: '102',
-        concept: 'Matcha',
-        location: 'Dương Quảng Hàm',
-        status: 'occupied',
-        cleanStatus: 'dirty',
-        price2h: 200000,
-        priceNight: 600000,
-        currentBooking: {
-          code: 'LALA-20251108-0001',
-          customerName: 'Nguyễn Văn A',
-          checkIn: now.toISOString(),
-          checkOut: in4Hours.toISOString()
-        }
-      },
-      {
-        id: '3',
-        number: '103',
-        concept: 'Matcha',
-        location: 'Dương Quảng Hàm',
-        status: 'checkout-soon',
-        cleanStatus: 'dirty',
-        price2h: 200000,
-        priceNight: 600000,
-        currentBooking: {
-          code: 'LALA-20251108-0002',
-          customerName: 'Trần Thị B',
-          checkIn: now.toISOString(),
-          checkOut: in2Hours.toISOString()
-        }
-      },
-      {
-        id: '4',
-        number: '201',
-        concept: 'Mellow',
-        location: 'Dương Quảng Hàm',
-        status: 'maintenance',
-        cleanStatus: 'cleaning',
-        price2h: 180000,
-        priceNight: 550000
-      },
-      {
-        id: '5',
-        number: '101',
-        concept: 'Andrea',
-        location: 'Kim Mã',
-        status: 'available',
-        cleanStatus: 'clean',
-        price2h: 250000,
-        priceNight: 700000
+  const handleCheckIn = async () => {
+    if (!selectedRoom) return;
+    const toastId = toast.loading('Đang nhận phòng...');
+    try {
+      setEditLoading(true);
+      await updateRoomStatusApi(selectedRoom.id, 'occupied', selectedRoom.cleanStatus);
+      toast.success('Nhận phòng thành công!', { id: toastId });
+      setSelectedRoom(null); loadRooms();
+    } catch (e) { toast.error('Lỗi kết nối', { id: toastId }); } finally { setEditLoading(false); }
+  };
+
+  const handleSaveManual = async () => {
+    if (!selectedRoom) return;
+    const toastId = toast.loading('Đang lưu...');
+    try {
+      setEditLoading(true);
+      await updateRoomStatusApi(selectedRoom.id, editStatus || selectedRoom.status, editClean || selectedRoom.cleanStatus);
+      toast.success('Cập nhật thành công', { id: toastId });
+      setSelectedRoom(null); loadRooms();
+    } catch (e) { toast.error('Lỗi kết nối', { id: toastId }); } finally { setEditLoading(false); }
+  };
+
+  const handleShowDetail = async () => {
+    if (!selectedRoom?.currentBooking) return;
+    try {
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-faeb1932/dat-phong/ma/${selectedRoom.currentBooking.code}`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } });
+      const data = await res.json();
+      if (data.success) {
+        console.log('bookingDetail:', data.data);
+        setBookingDetail(data.data);
+      } else {
+        toast.error('Không tìm thấy chi tiết');
       }
-    ];
+    } catch (e) {
+      toast.error('Lỗi kết nối');
+    }
   };
 
-  const getStatusConfig = (status: string) => {
-    const configs: { [key: string]: { bg: string; text: string; label: string } } = {
-      'available': { bg: 'bg-green-100', text: 'text-green-800', label: 'Trống' },
-      'occupied': { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Đang sử dụng' },
-      'checkout-soon': { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Sắp trả' },
-      'checkin-soon': { bg: 'bg-orange-100', text: 'text-orange-800', label: 'Sắp nhận' },
-      'overdue': { bg: 'bg-red-100', text: 'text-red-800', label: 'Quá giờ trả' },
-      'maintenance': { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Bảo trì' }
-    };
-    return configs[status] || configs.available;
+  // --- STYLES & HELPERS ---
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
   };
 
-  const getCleanStatusLabel = (status: string) => {
-    const labels: { [key: string]: string } = {
-      'clean': 'Sạch',
-      'dirty': 'Chưa dọn',
-      'cleaning': 'Đang dọn'
-    };
-    return labels[status] || status;
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'occupied': return { bg: '#eff6ff', border: '#bfdbfe', text: '#1d4ed8', label: 'Đang ở' };
+      case 'available': return { bg: '#ffffff', border: '#bbf7d0', text: '#15803d', label: 'Trống' };
+      case 'checkin-soon': return { bg: '#fff7ed', border: '#fed7aa', text: '#c2410c', label: 'Sắp nhận' };
+      case 'checkout-soon': return { bg: '#fefce8', border: '#fef08a', text: '#a16207', label: 'Sắp trả' };
+      case 'maintenance': return { bg: '#f3f4f6', border: '#e5e7eb', text: '#4b5563', label: 'Bảo trì' };
+      default: return { bg: '#fff', border: '#e5e7eb', text: '#000', label: 'Unknown' };
+    }
   };
 
   const getTimeRemaining = (checkOut: string) => {
     const hours = differenceInHours(new Date(checkOut), new Date());
     if (hours < 0) return 'Quá giờ';
-    if (hours < 1) return `${Math.round(hours * 60)} phút`;
-    return `${Math.round(hours)} giờ`;
+    if (hours === 0) return '< 1h';
+    return `${hours}h`;
   };
 
   const filteredRooms = filter === 'all' ? rooms : rooms.filter(r => r.status === filter);
 
-  const filterButtons = [
-    { value: 'all', label: 'Tất cả', color: 'bg-gray-100 text-gray-700' },
-    { value: 'available', label: 'Đang trống', color: 'bg-green-100 text-green-700' },
-    { value: 'checkin-soon', label: 'Sắp nhận', color: 'bg-orange-100 text-orange-700' },
-    { value: 'occupied', label: 'Đang sử dụng', color: 'bg-blue-100 text-blue-700' },
-    { value: 'checkout-soon', label: 'Sắp trả', color: 'bg-yellow-100 text-yellow-700' },
-    { value: 'overdue', label: 'Quá giờ', color: 'bg-red-100 text-red-700' },
-    { value: 'maintenance', label: 'Bảo trì', color: 'bg-gray-100 text-gray-700' }
-  ];
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Đang tải...</p>
-        </div>
-      </div>
-    );
-  }
+  // --- MAIN RENDER ---
+  if (loading) return (
+    <div style={{ display: 'flex', justifyContent: 'center', padding: '80px' }}>
+      <div style={{ width: '40px', height: '40px', border: '4px solid #e5e7eb', borderTopColor: '#2563eb', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
 
   return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-gray-900 mb-4">Lịch đặt phòng</h1>
+    <div style={{ maxWidth: '1280px', margin: '0 auto', paddingBottom: '80px', padding: '20px', fontFamily: 'sans-serif' }}>
 
-        {/* Filters */}
-        <div className="flex flex-wrap gap-2">
-          {filterButtons.map((btn) => (
+      <Toaster position="top-right" richColors closeButton />
+
+      {/* Header */}
+      <div style={{ marginBottom: '32px' }}>
+        <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#111827', marginBottom: '16px' }}>Lịch đặt phòng</h1>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+          {[
+            { val: 'all', label: 'Tất cả', bg: '#1f2937', text: '#fff' },
+            { val: 'available', label: 'Phòng Trống', bg: '#16a34a', text: '#fff' },
+            { val: 'occupied', label: 'Đang ở', bg: '#2563eb', text: '#fff' },
+            { val: 'checkin-soon', label: 'Sắp nhận', bg: '#f97316', text: '#fff' },
+            { val: 'checkout-soon', label: 'Sắp trả', bg: '#eab308', text: '#fff' },
+            { val: 'maintenance', label: 'Bảo trì', bg: '#6b7280', text: '#fff' }
+          ].map(btn => (
             <button
-              key={btn.value}
-              onClick={() => setFilter(btn.value)}
-              className={`px-4 py-2 rounded-lg transition-all ${filter === btn.value
-                ? btn.color + ' ring-2 ring-offset-2 ring-blue-500'
-                : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-                }`}
+              key={btn.val}
+              onClick={() => setFilter(btn.val)}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                border: '1px solid transparent',
+                backgroundColor: filter === btn.val ? btn.bg : '#fff',
+                color: filter === btn.val ? btn.text : '#4b5563',
+                borderColor: filter === btn.val ? 'transparent' : '#e5e7eb',
+                boxShadow: filter === btn.val ? '0 4px 6px -1px rgba(0, 0, 0, 0.1)' : 'none',
+                transition: 'all 0.2s'
+              }}
             >
               {btn.label}
             </button>
@@ -259,146 +304,380 @@ export default function StaffDashboard() {
         </div>
       </div>
 
-      {/* Room Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {filteredRooms.map((room) => {
-          const statusConfig = getStatusConfig(room.status);
+      {/* Grid Rooms */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+        gap: '16px'
+      }}>
+        {filteredRooms.map(room => {
+          const conf = getStatusColor(room.status);
+          const isOccupied = room.status === 'occupied' || room.status === 'checkout-soon';
+
           return (
             <div
               key={room.id}
-              className={`${statusConfig.bg} rounded-xl p-4 cursor-pointer hover:shadow-lg transition-all`}
-              onClick={() => setSelectedRoom(room)}
+              onClick={() => { setSelectedRoom(room); setIsEditing(false); }}
+              style={{
+                backgroundColor: conf.bg,
+                border: `1px solid ${conf.border}`,
+                borderRadius: '12px',
+                cursor: 'pointer',
+                position: 'relative',
+                overflow: 'hidden',
+                boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)',
+                transition: 'transform 0.2s',
+                display: 'flex',
+                flexDirection: 'column',
+                minHeight: '160px'
+              }}
+              onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-4px)'}
+              onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
             >
-              <div className="flex items-start justify-between mb-3">
+              <div style={{ padding: '16px', paddingBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
-                  <h3 className="text-gray-900">P.{room.number}</h3>
-                  <p className="text-sm text-gray-600">{room.concept}</p>
+                  <h3 style={{ fontSize: '24px', fontWeight: 'bold', color: '#111827', margin: 0 }}>{room.number}</h3>
+                  <p style={{ fontSize: '12px', fontWeight: '500', color: '#6b7280', margin: 0 }}>{room.concept}</p>
                 </div>
-                <button className="p-1 hover:bg-white/50 rounded">
-                  <MoreVertical className="w-5 h-5 text-gray-600" />
-                </button>
+                <span style={{
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  fontSize: '10px',
+                  fontWeight: 'bold',
+                  textTransform: 'uppercase',
+                  backgroundColor: 'rgba(255,255,255,0.6)',
+                  border: '1px solid rgba(0,0,0,0.05)',
+                  color: conf.text
+                }}>
+                  {conf.label}
+                </span>
               </div>
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className={`px-2 py-1 rounded text-xs ${statusConfig.bg} ${statusConfig.text}`}>
-                    {statusConfig.label}
-                  </span>
-                  <span className="text-xs text-gray-600">
-                    {getCleanStatusLabel(room.cleanStatus)}
-                  </span>
-                </div>
-
+              <div style={{ padding: '16px', paddingTop: '8px', flex: 1 }}>
                 {room.currentBooking ? (
-                  <>
-                    <div className="mt-3 pt-3 border-t border-gray-300">
-                      <p className="text-sm text-gray-900">{room.currentBooking.customerName}</p>
-                      <p className="text-xs text-gray-600 mt-1">
-                        {format(new Date(room.currentBooking.checkIn), 'dd/MM HH:mm', { locale: vi })}
-                        {' → '}
-                        {format(new Date(room.currentBooking.checkOut), 'dd/MM HH:mm', { locale: vi })}
-                      </p>
-                      <div className="flex items-center space-x-1 mt-2 text-xs text-gray-600">
-                        <Clock className="w-3 h-3" />
-                        <span>Còn {getTimeRemaining(room.currentBooking.checkOut)}</span>
+                  <div style={{ marginTop: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                      <div style={{
+                        width: '32px', height: '32px', borderRadius: '50%',
+                        backgroundColor: isOccupied ? '#2563eb' : '#f97316',
+                        color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                      }}>
+                        <User size={16} />
+                      </div>
+                      <div style={{ flex: 1, overflow: 'hidden' }}>
+                        <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#111827', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {room.currentBooking.customerName}
+                        </p>
+                        <p style={{ fontSize: '10px', color: '#6b7280', fontFamily: 'monospace', margin: 0 }}>
+                          {room.currentBooking.code.slice(-6)}
+                        </p>
                       </div>
                     </div>
-                  </>
+
+                    <div style={{
+                      backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: '8px', padding: '8px',
+                      border: '1px solid rgba(0,0,0,0.05)', fontSize: '12px', color: '#4b5563',
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                    }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <span style={{ display: 'block', fontSize: '9px', textTransform: 'uppercase', color: '#9ca3af' }}>Vào</span>
+                        <span style={{ fontWeight: '600' }}>{format(new Date(room.currentBooking.checkIn), 'HH:mm')}</span>
+                      </div>
+                      <CalendarRange size={14} color="#d1d5db" />
+                      <div style={{ textAlign: 'center' }}>
+                        <span style={{ display: 'block', fontSize: '9px', textTransform: 'uppercase', color: '#9ca3af' }}>Ra</span>
+                        <span style={{ fontWeight: '600' }}>{format(new Date(room.currentBooking.checkOut), 'HH:mm')}</span>
+                      </div>
+                    </div>
+
+                    <div style={{
+                      marginTop: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+                      fontSize: '11px', fontWeight: '500', color: '#ea580c', backgroundColor: '#ffedd5',
+                      padding: '4px', borderRadius: '4px'
+                    }}>
+                      <Clock size={12} />
+                      <span>Còn {getTimeRemaining(room.currentBooking.checkOut)}</span>
+                    </div>
+                  </div>
                 ) : (
-                  <div className="mt-3 pt-3 border-t border-gray-300">
-                    <p className="text-xs text-gray-600">
-                      {room.price2h.toLocaleString('vi-VN')}đ / 2h
-                    </p>
-                    <p className="text-xs text-gray-600">
-                      {room.priceNight.toLocaleString('vi-VN')}đ / ngày
-                    </p>
+                  <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px dashed #e5e7eb' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#6b7280', marginBottom: '4px' }}>
+                      <span>2h:</span>
+                      <span style={{ fontWeight: 'bold', color: '#374151' }}>{room.price2h.toLocaleString()}đ</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#6b7280' }}>
+                      <span>Đêm:</span>
+                      <span style={{ fontWeight: 'bold', color: '#374151' }}>{room.priceNight.toLocaleString()}đ</span>
+                    </div>
+                  </div>
+                )}
+
+                {room.cleanStatus === 'dirty' && (
+                  <div style={{ position: 'absolute', top: '8px', right: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ width: '10px', height: '10px', backgroundColor: '#ef4444', borderRadius: '50%', boxShadow: '0 0 0 4px rgba(239, 68, 68, 0.2)' }}></div>
+                  </div>
+                )}
+                {room.cleanStatus === 'dirty' && (
+                  <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'center' }}>
+                    <span style={{
+                      fontSize: '10px', fontWeight: 'bold', color: '#dc2626', backgroundColor: '#fef2f2',
+                      padding: '2px 8px', borderRadius: '12px', border: '1px solid #fee2e2',
+                      display: 'flex', alignItems: 'center', gap: '4px'
+                    }}>
+                      <Sparkles size={10} /> Cần dọn dẹp
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ height: '6px', width: '100%', backgroundColor: room.cleanStatus === 'dirty' ? '#ef4444' : (isOccupied ? '#3b82f6' : '#22c55e') }}></div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* --- MODAL PHÒNG CHÍNH --- */}
+      {selectedRoom && (
+        <div style={{
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '16px'
+        }}>
+          <div style={{
+            backgroundColor: '#fff', borderRadius: '16px', width: '100%', maxWidth: '420px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            overflow: 'hidden', animation: 'fadeIn 0.2s ease-out'
+          }}>
+            <style>{`@keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }`}</style>
+
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f9fafb' }}>
+              <div>
+                <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#1f2937', margin: 0 }}>Phòng {selectedRoom.number}</h2>
+                <p style={{ fontSize: '14px', color: '#6b7280', margin: 0 }}>{selectedRoom.concept} • {selectedRoom.location}</p>
+              </div>
+              <button onClick={() => setSelectedRoom(null)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '8px', borderRadius: '50%' }}>
+                <X size={24} color="#9ca3af" />
+              </button>
+            </div>
+
+            <div style={{ padding: '24px' }}>
+              <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
+                <div style={{
+                  flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid', textAlign: 'center',
+                  backgroundColor: selectedRoom.cleanStatus === 'clean' ? '#f0fdf4' : '#fef2f2',
+                  borderColor: selectedRoom.cleanStatus === 'clean' ? '#dcfce7' : '#fee2e2',
+                  color: selectedRoom.cleanStatus === 'clean' ? '#15803d' : '#b91c1c'
+                }}>
+                  <p style={{ fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', opacity: 0.7, margin: 0, marginBottom: '4px' }}>Vệ sinh</p>
+                  <p style={{ fontSize: '16px', fontWeight: 'bold', margin: 0 }}>{selectedRoom.cleanStatus === 'clean' ? 'Sạch sẽ' : 'Cần dọn'}</p>
+                </div>
+                <div style={{
+                  flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid', textAlign: 'center',
+                  backgroundColor: getStatusColor(selectedRoom.status).bg,
+                  borderColor: getStatusColor(selectedRoom.status).border,
+                  color: getStatusColor(selectedRoom.status).text
+                }}>
+                  <p style={{ fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', opacity: 0.7, margin: 0, marginBottom: '4px' }}>Trạng thái</p>
+                  <p style={{ fontSize: '16px', fontWeight: 'bold', margin: 0 }}>{getStatusColor(selectedRoom.status).label}</p>
+                </div>
+              </div>
+
+              {selectedRoom.currentBooking && (
+                <div style={{ backgroundColor: '#eff6ff', borderRadius: '12px', padding: '16px', border: '1px solid #dbeafe', marginBottom: '24px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                    <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb' }}>
+                      <User size={20} />
+                    </div>
+                    <div>
+                      <p style={{ fontSize: '12px', color: '#6b7280', textTransform: 'uppercase', fontWeight: 'bold', margin: 0 }}>Khách hàng</p>
+                      <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#111827', margin: 0 }}>{selectedRoom.currentBooking.customerName}</p>
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', borderTop: '1px solid #dbeafe', paddingTop: '12px' }}>
+                    <div>
+                      <p style={{ fontSize: '10px', color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>Check-in</p>
+                      <p style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937' }}>{format(new Date(selectedRoom.currentBooking.checkIn), 'HH:mm dd/MM', { locale: vi })}</p>
+                    </div>
+                    <div>
+                      <p style={{ fontSize: '10px', color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>Check-out</p>
+                      <p style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937' }}>{format(new Date(selectedRoom.currentBooking.checkOut), 'HH:mm dd/MM', { locale: vi })}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'grid', gap: '12px' }}>
+                {selectedRoom.cleanStatus === 'dirty' && selectedRoom.status === 'available' && (
+                  <button
+                    onClick={handleCleanRoom}
+                    style={{ width: '100%', padding: '12px', backgroundColor: '#16a34a', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(22, 163, 74, 0.3)' }}
+                  >
+                    <Sparkles size={18} /> Xác nhận đã dọn xong
+                  </button>
+                )}
+
+                {selectedRoom.status === 'occupied' && (
+                  <>
+                    <button
+                      onClick={handleCheckout}
+                      style={{ width: '100%', padding: '12px', backgroundColor: '#ea580c', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(234, 88, 12, 0.3)' }}
+                    >
+                      <LogOut size={18} /> Trả phòng
+                    </button>
+                    <button
+                      onClick={handleShowDetail}
+                      style={{ width: '100%', padding: '12px', backgroundColor: '#fff', color: '#374151', border: '1px solid #e5e7eb', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                    >
+                      <FileText size={18} /> Xem chi tiết đơn
+                    </button>
+                  </>
+                )}
+
+                {selectedRoom.status === 'checkin-soon' && (
+                  <button
+                    onClick={handleCheckIn}
+                    style={{ width: '100%', padding: '12px', backgroundColor: '#0d9488', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(13, 148, 136, 0.3)' }}
+                  >
+                    <UserCheck size={18} /> Khách nhận phòng
+                  </button>
+                )}
+
+                {selectedRoom.status === 'available' && selectedRoom.cleanStatus === 'clean' && (
+                  <button
+                    onClick={() => setShowBookingForm(true)}
+                    style={{ width: '100%', padding: '12px', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.3)' }}
+                  >
+                    <Plus size={18} /> Tạo đơn đặt phòng mới
+                  </button>
+                )}
+              </div>
+
+              <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid #f3f4f6', textAlign: 'center' }}>
+                <button
+                  onClick={() => setIsEditing(!isEditing)}
+                  style={{ fontSize: '12px', color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', margin: '0 auto' }}
+                >
+                  <Settings size={12} /> {isEditing ? 'Ẩn tùy chỉnh' : 'Sửa trạng thái thủ công'}
+                </button>
+
+                {isEditing && (
+                  <div style={{ marginTop: '16px', padding: '16px', backgroundColor: '#f9fafb', borderRadius: '12px', animation: 'fadeIn 0.2s' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                      <select style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '14px' }} value={editStatus || selectedRoom.status} onChange={e => setEditStatus(e.target.value)}>
+                        <option value="available">Trống</option><option value="occupied">Đang ở</option><option value="maintenance">Bảo trì</option>
+                      </select>
+                      <select style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '14px' }} value={editClean || selectedRoom.cleanStatus} onChange={e => setEditClean(e.target.value)}>
+                        <option value="clean">Sạch</option><option value="dirty">Bẩn</option><option value="cleaning">Đang dọn</option>
+                      </select>
+                    </div>
+                    <button onClick={handleSaveManual} disabled={editLoading} style={{ width: '100%', padding: '8px', backgroundColor: '#1f2937', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>Lưu thay đổi</button>
                   </div>
                 )}
               </div>
             </div>
-          );
-        })}
-      </div>
-
-      {filteredRooms.length === 0 && (
-        <div className="text-center py-12 text-gray-500">
-          Không có phòng nào
-        </div>
-      )}
-
-      {/* Room Detail Modal */}
-      {selectedRoom && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-lg w-full p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-gray-900">Phòng {selectedRoom.number} - {selectedRoom.concept}</h2>
-              <button
-                onClick={() => setSelectedRoom(null)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Cơ sở:</p>
-                <p className="text-gray-900">{selectedRoom.location}</p>
-              </div>
-
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Trạng thái:</p>
-                <span className={`inline-block px-3 py-1 rounded text-sm ${getStatusConfig(selectedRoom.status).bg} ${getStatusConfig(selectedRoom.status).text}`}>
-                  {getStatusConfig(selectedRoom.status).label}
-                </span>
-              </div>
-
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Tình trạng dọn phòng:</p>
-                <p className="text-gray-900">{getCleanStatusLabel(selectedRoom.cleanStatus)}</p>
-              </div>
-
-              {selectedRoom.currentBooking && (
-                <div className="pt-4 border-t border-gray-200">
-                  <p className="text-sm text-gray-600 mb-2">Thông tin đặt phòng:</p>
-                  <div className="space-y-2 text-sm">
-                    <p className="text-gray-900">Mã: {selectedRoom.currentBooking.code}</p>
-                    <p className="text-gray-900">Khách: {selectedRoom.currentBooking.customerName}</p>
-                    <p className="text-gray-600">
-                      Check-in: {format(new Date(selectedRoom.currentBooking.checkIn), 'dd/MM/yyyy HH:mm', { locale: vi })}
-                    </p>
-                    <p className="text-gray-600">
-                      Check-out: {format(new Date(selectedRoom.currentBooking.checkOut), 'dd/MM/yyyy HH:mm', { locale: vi })}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="mt-6 pt-6 border-t border-gray-200 flex space-x-3">
-              {selectedRoom.status === 'available' && (
-                <button className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
-                  Tạo đơn mới
-                </button>
-              )}
-              {selectedRoom.status === 'occupied' && (
-                <>
-                  <button className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors">
-                    Trả phòng
-                  </button>
-                  <button className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors">
-                    Chi tiết
-                  </button>
-                </>
-              )}
-              <button
-                onClick={() => setSelectedRoom(null)}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
-              >
-                Đóng
-              </button>
-            </div>
           </div>
+
+          {/* --- MODAL CHI TIẾT HÓA ĐƠN/ĐẶT PHÒNG (ĐÃ NÂNG CẤP) --- */}
+          {bookingDetail && (
+            <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 110 }}>
+              <div style={{ backgroundColor: 'white', padding: '0', borderRadius: '20px', width: '360px', boxShadow: '0 20px 40px -5px rgba(0,0,0,0.2)', overflow: 'hidden', animation: 'fadeIn 0.2s ease-out' }}>
+
+                {/* Header */}
+                <div style={{ backgroundColor: '#1f2937', padding: '20px', color: 'white' }}>
+                  <h3 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <FileText size={18} /> Chi tiết đơn đặt
+                  </h3>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '13px', opacity: 0.8 }}>Mã: <span style={{ fontFamily: 'monospace' }}>{bookingDetail.ma_dat}</span></p>
+                </div>
+
+                <div style={{ padding: '20px' }}>
+                  {/* Customer Section */}
+                  <div style={{ marginBottom: '20px' }}>
+                    <p style={{ fontSize: '11px', fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', marginBottom: '8px' }}>Khách hàng</p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4b5563' }}>
+                        <User size={20} />
+                      </div>
+                      <div>
+                        <p style={{ fontSize: '16px', fontWeight: 'bold', color: '#111827', margin: 0 }}>{bookingDetail.khach_hang?.ho_ten || bookingDetail.ho_ten}</p>
+                        <p style={{ fontSize: '13px', color: '#6b7280', margin: 0, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Phone size={12} /> {bookingDetail.khach_hang?.sdt || bookingDetail.sdt}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Info Grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px', borderTop: '1px dashed #e5e7eb', borderBottom: '1px dashed #e5e7eb', padding: '16px 0' }}>
+                    <div>
+                      <p style={{ fontSize: '11px', color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>Phòng</p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '600', color: '#1f2937' }}>
+                        <MapPin size={14} /> {bookingDetail.phong?.ma_phong || selectedRoom.number}
+                      </div>
+                    </div>
+                    <div>
+                      <p style={{ fontSize: '11px', color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>Trạng thái</p>
+                      <span style={{ fontSize: '12px', fontWeight: 'bold', padding: '2px 8px', borderRadius: '99px', backgroundColor: '#dbeafe', color: '#1e40af' }}>
+                        {getBookingStatusLabel(bookingDetail.trang_thai)}
+                      </span>
+                    </div>
+                    <div>
+                      <p style={{ fontSize: '11px', color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>Check-in</p>
+                      <p style={{ fontSize: '13px', fontWeight: '600' }}>{format(new Date(bookingDetail.thoi_gian_nhan), 'HH:mm dd/MM', { locale: vi })}</p>
+                    </div>
+                    <div>
+                      <p style={{ fontSize: '11px', color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>Check-out</p>
+                      <p style={{ fontSize: '13px', fontWeight: '600' }}>{format(new Date(bookingDetail.thoi_gian_tra), 'HH:mm dd/MM', { locale: vi })}</p>
+                    </div>
+                  </div>
+
+                  {/* Money Section (Mockup if data missing) */}
+                  <div style={{ marginBottom: '20px' }}>
+                    <p style={{ fontSize: '11px', fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', marginBottom: '8px' }}>Thanh toán</p>
+                    <div style={{ backgroundColor: '#f9fafb', padding: '12px', borderRadius: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '13px' }}>
+                        <span style={{ color: '#4b5563' }}>Tổng tiền (dự kiến)</span>
+                        <span style={{ fontWeight: 'bold' }}>{formatCurrency(bookingDetail.tong_tien || 0)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                        <span style={{ color: '#4b5563' }}>Đã cọc</span>
+                        <span style={{ fontWeight: 'bold', color: '#059669' }}>{formatCurrency(bookingDetail.tien_coc || 0)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Note Section */}
+                  {bookingDetail.ghi_chu && (
+                    <div style={{ marginBottom: '20px' }}>
+                      <p style={{ fontSize: '11px', fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', marginBottom: '4px' }}>Ghi chú</p>
+                      <p style={{ fontSize: '13px', color: '#374151', fontStyle: 'italic', display: 'flex', gap: '6px' }}>
+                        <StickyNote size={14} style={{ marginTop: '2px' }} /> {bookingDetail.ghi_chu}
+                      </p>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => setBookingDetail(null)}
+                    style={{ width: '100%', padding: '12px', backgroundColor: '#f3f4f6', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', color: '#374151', transition: 'background 0.2s' }}
+                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#e5e7eb'}
+                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
+                  >
+                    Đóng
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showBookingForm && (
+            <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 110 }}>
+              <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '16px', width: '320px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>Tạo đơn mới</h3>
+                <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '16px' }}>Chức năng đang phát triển...</p>
+                <button onClick={() => setShowBookingForm(false)} style={{ width: '100%', padding: '8px', backgroundColor: '#f3f4f6', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Đóng</button>
+              </div>
+            </div>
+          )}
+
         </div>
       )}
     </div>

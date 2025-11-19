@@ -35,23 +35,20 @@ export default function ContactPage() {
 
         {/* Contact Cards */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
-          {locations.map((location, index) => (
+          {locations.slice(0, 3).map((location, index) => (
             <div key={index} className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow">
               <h3 className="text-gray-900 mb-4">{location.name}</h3>
-              
               <div className="space-y-3">
                 <div className="flex items-start space-x-3">
                   <MapPin className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
                   <p className="text-gray-600">{location.address}</p>
                 </div>
-                
                 <div className="flex items-center space-x-3">
                   <Phone className="w-5 h-5 text-blue-600" />
                   <a href={`tel:${location.phone}`} className="text-gray-600 hover:text-blue-600">
                     {location.phone}
                   </a>
                 </div>
-                
                 <div className="flex items-center space-x-3">
                   <Mail className="w-5 h-5 text-blue-600" />
                   <a href={`mailto:${location.email}`} className="text-gray-600 hover:text-blue-600">
@@ -124,7 +121,7 @@ export default function ContactPage() {
         {/* Contact Form */}
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h2 className="text-gray-900 mb-6">Gửi tin nhắn cho chúng tôi</h2>
-          
+
           <form className="space-y-4">
             <div className="grid md:grid-cols-2 gap-4">
               <div>
