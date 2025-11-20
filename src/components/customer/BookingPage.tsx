@@ -108,14 +108,24 @@ function CalendarDateSelector({ roomId, selectedDate, setSelectedDate, bookingTy
         }}
       />
       {bookingType === 'ngay' && selectedDate && numberOfNights > 0 && (
-        <div style={{ minWidth: '180px', padding: '16px 20px', background: '#fff7ed', borderRadius: '12px', border: '1px solid #fdba74', color: '#d97706', fontWeight: 600, fontSize: '15px', boxShadow: '0 2px 8px #fbbf2433' }}>
-          <div>Ngày trả phòng dự kiến:</div>
-          <div style={{ fontSize: '18px', fontWeight: 700, marginTop: '8px' }}>
-            {(() => {
+        <div style={{ minWidth: '220px', padding: '16px 20px', background: '#fff7ed', borderRadius: '12px', border: '1px solid #fdba74', color: '#d97706', fontWeight: 600, fontSize: '15px', boxShadow: '0 2px 8px #fbbf2433' }}>
+          <div>Thông tin lưu trú:</div>
+          <div style={{ marginTop: '8px', fontSize: '16px' }}>
+            <span>Nhận phòng: </span>
+            <b>{(() => {
+              const d = new Date(selectedDate);
+              d.setHours(14, 0, 0, 0);
+              return d.toLocaleString('vi-VN', { weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+            })()}</b>
+          </div>
+          <div style={{ marginTop: '8px', fontSize: '16px' }}>
+            <span>Trả phòng: </span>
+            <b>{(() => {
               const d = new Date(selectedDate);
               d.setDate(d.getDate() + numberOfNights);
-              return d.toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit' });
-            })()}
+              d.setHours(12, 0, 0, 0);
+              return d.toLocaleString('vi-VN', { weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+            })()}</b>
           </div>
         </div>
       )}
@@ -138,7 +148,7 @@ import { Button } from '../ui/button';
 import { cn } from '../ui/utils';
 
 const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-faeb1932`;
-const DEPOSIT_AMOUNT = 500000;
+const DEPOSIT_AMOUNT = 0;
 
 // --- COMPONENT CHỌN GIỜ (GIAO DIỆN PILL) ---
 function TimeSlotSelector({
@@ -449,13 +459,18 @@ export default function BookingPage() {
   const calculateTotal = () => {
     if (!selectedRoom) return 0;
     if (bookingType === 'ngay' && selectedDate && numberOfNights > 0) {
-      return (selectedRoom.loai_phong?.gia_dem || 0) * numberOfNights;
+      // Giá ngày
+      const price = selectedRoom.loai_phong?.gia_dem ? Number(selectedRoom.loai_phong.gia_dem) : 0;
+      return price * numberOfNights;
     } else if (bookingType === 'gio' && selectedTimeSlots) {
+      // Giá giờ
       const start = new Date(selectedTimeSlots.start);
       const end = new Date(selectedTimeSlots.end);
-      const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-      const price = selectedRoom.loai_phong?.gia_gio || 0;
-      return price * Math.ceil(hours);
+      let hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+      if (hours < 1) hours = 1;
+      else hours = Math.ceil(hours);
+      const price = selectedRoom.loai_phong?.gia_gio ? Number(selectedRoom.loai_phong.gia_gio) : 0;
+      return price * hours;
     }
     return 0;
   };
@@ -471,6 +486,7 @@ export default function BookingPage() {
         if (!selectedDate) { toast.error('Chọn ngày nhận phòng.'); return; }
         if (numberOfNights < 1) { toast.error('Số đêm tối thiểu là 1.'); return; }
 
+        // Cố định giờ check-in 14:00, check-out 12:00
         checkInDateTime = new Date(selectedDate);
         checkInDateTime.setHours(14, 0, 0, 0);
         checkOutDateTime = new Date(selectedDate);
@@ -478,8 +494,13 @@ export default function BookingPage() {
         checkOutDateTime.setHours(12, 0, 0, 0);
       } else {
         if (!selectedTimeSlots) { toast.error('Chọn khung giờ.'); return; }
+        // Đặt theo giờ: lấy đúng giờ đã chọn
         checkInDateTime = new Date(selectedTimeSlots.start);
         checkOutDateTime = new Date(selectedTimeSlots.end);
+        // Nếu chỉ chọn 1 slot thì end phải lớn hơn start ít nhất 30 phút
+        if (checkOutDateTime <= checkInDateTime) {
+          checkOutDateTime = new Date(checkInDateTime.getTime() + 30 * 60 * 1000);
+        }
       }
 
       if (new Date() > checkInDateTime && bookingType === 'ngay') { toast.error('Không thể đặt ngày trong quá khứ.'); return; }
@@ -562,11 +583,17 @@ export default function BookingPage() {
         } catch { setUploadingCccd(false); setLoading(false); return toast.error('Lỗi upload ảnh.'); }
         setUploadingCccd(false);
       }
+      let thoi_gian_nhan = checkIn;
+      let thoi_gian_tra = checkOut;
+      if (bookingType === 'gio' && selectedTimeSlots) {
+        thoi_gian_nhan = selectedTimeSlots.start;
+        thoi_gian_tra = selectedTimeSlots.end;
+      }
       const bookingPayload = {
         ho_ten: fullName, sdt: phone, email: email || null,
         cccd_mat_truoc: cccdFrontUrl, cccd_mat_sau: cccdBackUrl,
-        id_phong: selectedRoom.id, thoi_gian_nhan: checkIn, thoi_gian_tra: checkOut,
-        so_khach: numberOfGuests, tong_tien: calculateTotal(), coc_csvc: DEPOSIT_AMOUNT,
+        id_phong: selectedRoom.id, thoi_gian_nhan, thoi_gian_tra,
+        so_khach: numberOfGuests, tong_tien: calculateTotal(), coc_csvc: 0,
         kenh_dat: 'website', ghi_chu: notes || null, ghi_chu_khach: notes || null
       };
       const res = await fetch(`${API_URL}/dat-phong`, {
@@ -575,9 +602,17 @@ export default function BookingPage() {
       });
       const result = await res.json();
       if (result.success) {
+        let checkInDisplay, checkOutDisplay;
+        if (bookingType === 'gio' && selectedTimeSlots) {
+          checkInDisplay = new Date(selectedTimeSlots.start).toLocaleString('vi-VN');
+          checkOutDisplay = new Date(selectedTimeSlots.end).toLocaleString('vi-VN');
+        } else {
+          checkInDisplay = new Date(checkIn).toLocaleString('vi-VN');
+          checkOutDisplay = new Date(checkOut).toLocaleString('vi-VN');
+        }
         setBookingData({
           bookingCode: result.data.ma_dat, amount: DEPOSIT_AMOUNT,
-          bookingDetails: { roomName: `${selectedRoom.loai_phong?.ten_loai} - ${selectedRoom.ma_phong}`, checkIn: new Date(checkIn).toLocaleString('vi-VN'), checkOut: new Date(checkOut).toLocaleString('vi-VN') }
+          bookingDetails: { roomName: `${selectedRoom.loai_phong?.ten_loai} - ${selectedRoom.ma_phong}`, checkIn: checkInDisplay, checkOut: checkOutDisplay }
         });
         setShowPaymentDialog(true); toast.success('Đặt thành công!');
       } else throw new Error(result.error);
@@ -748,7 +783,7 @@ export default function BookingPage() {
 
                 <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontWeight: '600', color: '#1e293b' }}>Tổng cộng</span>
-                  <span style={{ fontSize: '20px', fontWeight: '800', color: '#0f7072' }}>{formatCurrency((calculateTotal() + DEPOSIT_AMOUNT))}</span>
+                  <span style={{ fontSize: '20px', fontWeight: '800', color: '#0f7072' }}>{formatCurrency(calculateTotal())}</span>
                 </div>
               </div>
             </div>
@@ -760,6 +795,28 @@ export default function BookingPage() {
           <div style={{ maxWidth: '800px', margin: '0 auto' }}>
             <div style={{ backgroundColor: 'white', borderRadius: '20px', padding: '32px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
               <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#1e293b', marginBottom: '24px' }}>Thông tin của bạn</h2>
+
+              {/* Thông tin đặt phòng chi tiết */}
+              <div style={{ marginBottom: '32px', background: '#fef9c3', borderRadius: '12px', padding: '20px', border: '1px solid #fde047', color: '#92400e', fontWeight: 600, fontSize: '15px' }}>
+                <h3 style={{ fontSize: '17px', fontWeight: '700', marginBottom: '12px', color: '#b45309' }}>Thông tin đặt phòng</h3>
+                <div>Loại đặt: <b>{bookingType === 'ngay' ? 'Theo ngày' : 'Theo giờ'}</b></div>
+                <div>Phòng: <b>{selectedRoom?.ma_phong}</b> ({selectedRoom?.loai_phong?.ten_loai})</div>
+                <div>Số khách: <b>{numberOfGuests}</b></div>
+                {bookingType === 'ngay' ? (
+                  <>
+                    <div>Nhận phòng: <b>{(() => { const d = new Date(selectedDate); d.setHours(14, 0, 0, 0); return d.toLocaleString('vi-VN', { weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }); })()}</b></div>
+                    <div>Trả phòng: <b>{(() => { const d = new Date(selectedDate); d.setDate(d.getDate() + numberOfNights); d.setHours(12, 0, 0, 0); return d.toLocaleString('vi-VN', { weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }); })()}</b></div>
+                    <div>Số đêm: <b>{numberOfNights}</b></div>
+                  </>
+                ) : (
+                  <>
+                    <div>Ngày sử dụng: <b>{selectedDate ? new Date(selectedDate).toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit' }) : ''}</b></div>
+                    <div>Giờ nhận: <b>{selectedTimeSlots ? new Date(selectedTimeSlots.start).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : ''}</b></div>
+                    <div>Giờ trả: <b>{selectedTimeSlots ? new Date(selectedTimeSlots.end).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : ''}</b></div>
+                  </>
+                )}
+                <div>Tổng tiền: <b>{formatCurrency(calculateTotal())}</b></div>
+              </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '32px' }}>
                 <div>
