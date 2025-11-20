@@ -437,6 +437,38 @@ app.post('/make-server-faeb1932/dat-phong', async (c) => {
   try {
     const body = await c.req.json();
 
+    // --- START: SERVER-SIDE BOOKING OVERLAP VALIDATION ---
+    if (body.id_phong && body.thoi_gian_nhan && body.thoi_gian_tra) {
+      // Thêm buffer 30 phút để tránh đặt quá sát nhau
+      const checkInTime = new Date(body.thoi_gian_nhan);
+      const checkOutTime = new Date(body.thoi_gian_tra);
+
+      const bufferInTime = new Date(checkInTime.getTime() - 30 * 60 * 1000);
+      const bufferOutTime = new Date(checkOutTime.getTime() + 30 * 60 * 1000);
+
+      const overlappingBookings = await sql.checkBookingOverlap(
+        body.id_phong,
+        bufferInTime.toISOString(),
+        bufferOutTime.toISOString()
+      );
+
+      if (overlappingBookings && overlappingBookings.length > 0) {
+        console.error('Booking overlap detected:', {
+          request: {
+            phong: body.id_phong,
+            nhan: body.thoi_gian_nhan,
+            tra: body.thoi_gian_tra,
+          },
+          overlap: overlappingBookings,
+        });
+        return c.json({
+          success: false,
+          error: 'Khung giờ này đã có người đặt hoặc quá gần với một lịch đặt khác. Vui lòng chọn lại.'
+        }, 409); // 409 Conflict
+      }
+    }
+    // --- END: SERVER-SIDE BOOKING OVERLAP VALIDATION ---
+
     console.log('Creating booking with data:', JSON.stringify(body, null, 2));
 
     // Generate booking code if not provided

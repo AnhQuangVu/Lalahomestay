@@ -1,3 +1,27 @@
+.calendar-day--checkin {
+  border: 2px solid #dc2626 !important;
+  background: #fee2e2 !important;
+  color: #dc2626 !important;
+  box-shadow: 0 0 0 2px #dc262633 !important;
+}
+
+.calendar-day--checkout {
+  border: 2px dashed #dc2626 !important;
+  background: #fee2e2 !important;
+  color: #dc2626 !important;
+  box-shadow: 0 0 0 2px #dc262633 !important;
+}
+
+/* Hiệu ứng viền đỏ cho ngày đã bị booked trên calendar */
+.calendar-day--booked,
+.rdp-day_booked {
+  border: 2px solid #dc2626 !important;
+  background: #fee2e2 !important;
+  color: #dc2626 !important;
+  opacity: 1 !important;
+  cursor: not-allowed !important;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 :root {

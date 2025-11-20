@@ -263,7 +263,9 @@ export async function getAllDatPhong(filters?: {
   trangThai?: string,
   startDate?: string,
   endDate?: string,
-  kenhDat?: string
+  kenhDat?: string,
+  roomId?: string,
+  overlapDate?: string
 }) {
   let query = supabase
     .from('dat_phong')
@@ -283,17 +285,30 @@ export async function getAllDatPhong(filters?: {
   if (filters?.trangThai) {
     query = query.eq('trang_thai', filters.trangThai);
   }
-
-  if (filters?.startDate) {
-    query = query.gte('thoi_gian_nhan', filters.startDate);
-  }
-
-  if (filters?.endDate) {
-    query = query.lte('thoi_gian_tra', filters.endDate);
-  }
-
   if (filters?.kenhDat) {
     query = query.eq('kenh_dat', filters.kenhDat);
+  }
+  if (filters?.roomId) {
+    query = query.eq('id_phong', filters.roomId);
+  }
+
+  // New overlap logic
+  if (filters?.overlapDate) {
+    const startOfDay = new Date(filters.overlapDate);
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const endOfDay = new Date(filters.overlapDate);
+    endOfDay.setUTCHours(23, 59, 59, 999);
+
+    query = query.lt('thoi_gian_nhan', endOfDay.toISOString());
+    query = query.gt('thoi_gian_tra', startOfDay.toISOString());
+  } else {
+    // Keep old logic if not using overlap
+    if (filters?.startDate) {
+      query = query.gte('thoi_gian_nhan', filters.startDate);
+    }
+    if (filters?.endDate) {
+      query = query.lte('thoi_gian_tra', filters.endDate);
+    }
   }
 
   const { data, error } = await query.order('ngay_tao', { ascending: false });
@@ -341,6 +356,19 @@ export async function getDatPhongByKhachHang(khachHangId: string) {
     `)
     .eq('id_khach_hang', khachHangId)
     .order('ngay_tao', { ascending: false });
+
+  if (error) throw error;
+  return data;
+}
+
+export async function checkBookingOverlap(id_phong: string, thoi_gian_nhan: string, thoi_gian_tra: string) {
+  const { data, error } = await supabase
+    .from('dat_phong')
+    .select('id, ma_dat, thoi_gian_nhan, thoi_gian_tra')
+    .eq('id_phong', id_phong)
+    .neq('trang_thai', 'da_huy') // Chỉ kiểm tra các booking còn hiệu lực
+    .lt('thoi_gian_nhan', thoi_gian_tra) // Lượt đặt cũ bắt đầu TRƯỚC khi lượt đặt mới kết thúc
+    .gt('thoi_gian_tra', thoi_gian_nhan); // Lượt đặt cũ kết thúc SAU khi lượt đặt mới bắt đầu
 
   if (error) throw error;
   return data;
