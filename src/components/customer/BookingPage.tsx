@@ -1,6 +1,11 @@
 // CalendarDateSelector: Hiển thị calendar, đánh dấu ngày đã bị đặt bằng màu đỏ và disable không cho chọn
 import React, { useState, useEffect, useMemo } from 'react';
 import { format, eachDayOfInterval, startOfDay } from 'date-fns';
+// Helper giữ nguyên giờ địa phương khi gửi lên backend
+function toLocalISOString(date: Date) {
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
 import { DayPicker } from 'react-day-picker';
 import 'react-day-picker/dist/style.css';
 
@@ -586,8 +591,8 @@ export default function BookingPage() {
       let thoi_gian_nhan = checkIn;
       let thoi_gian_tra = checkOut;
       if (bookingType === 'gio' && selectedTimeSlots) {
-        thoi_gian_nhan = selectedTimeSlots.start;
-        thoi_gian_tra = selectedTimeSlots.end;
+        thoi_gian_nhan = toLocalISOString(new Date(selectedTimeSlots.start));
+        thoi_gian_tra = toLocalISOString(new Date(selectedTimeSlots.end));
       }
       const bookingPayload = {
         ho_ten: fullName, sdt: phone, email: email || null,
@@ -611,7 +616,7 @@ export default function BookingPage() {
           checkOutDisplay = new Date(checkOut).toLocaleString('vi-VN');
         }
         setBookingData({
-          bookingCode: result.data.ma_dat, amount: DEPOSIT_AMOUNT,
+          bookingCode: result.data.ma_dat, amount: calculateTotal(),
           bookingDetails: { roomName: `${selectedRoom.loai_phong?.ten_loai} - ${selectedRoom.ma_phong}`, checkIn: checkInDisplay, checkOut: checkOutDisplay }
         });
         setShowPaymentDialog(true); toast.success('Đặt thành công!');

@@ -200,7 +200,7 @@ export default function HomePage() {
           <div className="text-center mb-12">
             <h2 className="text-gray-900 mb-4">Cơ sở của chúng tôi</h2>
             <p className="text-gray-600 max-w-2xl mx-auto">
-              3 cơ sở tại các vị trí đắc địa ở Hà Nội, mang đến sự lựa chọn tối ưu cho khách hàng
+              Các cơ sở tại các vị trí đắc địa ở Hà Nội, mang đến sự lựa chọn tối ưu cho khách hàng
             </p>
           </div>
 
