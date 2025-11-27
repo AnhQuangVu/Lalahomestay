@@ -576,25 +576,23 @@ export default function RoomManagement() {
   };
 
   const getRoomStatusBadge = (status: string) => {
-    const variants: any = {
-      'trong': 'default',
-      'dang_dung': 'destructive',
-      'sap_nhan': 'secondary',
-      'sap_tra': 'secondary',
-      'bao_tri': 'secondary',
-      'dinh_chi': 'destructive'
+    // Gộp các trạng thái về 'Đang dùng'
+    let displayStatus = status;
+    if (["trong", "sap_nhan", "sap_tra"].includes(status)) {
+      displayStatus = "dang_dung";
+    }
+    // Badge màu: Đang dùng (xanh), Bảo trì (vàng), Đình chỉ (đỏ)
+    const colorMap: any = {
+      'dang_dung': 'bg-green-500 text-white',
+      'bao_tri': 'bg-yellow-400 text-black',
+      'dinh_chi': 'bg-red-500 text-white'
     };
-
     const labels: any = {
-      'trong': 'Trống',
       'dang_dung': 'Đang dùng',
-      'sap_nhan': 'Sắp nhận',
-      'sap_tra': 'Sắp trả',
       'bao_tri': 'Bảo trì',
       'dinh_chi': 'Đình chỉ'
     };
-
-    return <Badge variant={variants[status] || 'secondary'}>{labels[status] || status}</Badge>;
+    return <span className={`px-2 py-1 rounded text-xs font-semibold ${colorMap[displayStatus] || 'bg-gray-300 text-black'}`}>{labels[displayStatus] || displayStatus}</span>;
   };
 
   const getCleanStatusLabel = (status: string) => {
@@ -651,7 +649,7 @@ export default function RoomManagement() {
                     <TableHead>Loại phòng</TableHead>
                     <TableHead>Cơ sở</TableHead>
                     <TableHead>Trạng thái</TableHead>
-                    <TableHead>Vệ sinh</TableHead>
+                    {/* <TableHead>Vệ sinh</TableHead> */}
                     <TableHead>Ghi chú</TableHead>
                     <TableHead className="text-right">Thao tác</TableHead>
                   </TableRow>
@@ -679,7 +677,7 @@ export default function RoomManagement() {
                         <TableCell>{room.loai_phong?.ten_loai || '-'}</TableCell>
                         <TableCell>{room.loai_phong?.co_so?.ten_co_so || '-'}</TableCell>
                         <TableCell>{getRoomStatusBadge(room.trang_thai)}</TableCell>
-                        <TableCell>{getCleanStatusLabel(room.tinh_trang_vesinh)}</TableCell>
+                        {/* <TableCell>{getCleanStatusLabel(room.tinh_trang_vesinh)}</TableCell> */}
                         <TableCell className="max-w-xs truncate">{room.ghi_chu || '-'}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex gap-2 justify-end">
@@ -691,7 +689,7 @@ export default function RoomManagement() {
                                 setRoomForm({
                                   ma_phong: room.ma_phong,
                                   id_loai_phong: room.id_loai_phong,
-                                  trang_thai: room.trang_thai,
+                                  trang_thai: ["trong","sap_nhan","sap_tra"].includes(room.trang_thai) ? "dang_dung" : room.trang_thai,
                                   tinh_trang_vesinh: room.tinh_trang_vesinh,
                                   anh_chinh: room.anh_chinh || '',
                                   anh_phu: room.anh_phu || [],
@@ -950,15 +948,13 @@ export default function RoomManagement() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="trong">Trống</SelectItem>
                       <SelectItem value="dang_dung">Đang dùng</SelectItem>
-                      <SelectItem value="sap_nhan">Sắp nhận</SelectItem>
-                      <SelectItem value="sap_tra">Sắp trả</SelectItem>
                       <SelectItem value="bao_tri">Bảo trì</SelectItem>
                       <SelectItem value="dinh_chi">Đình chỉ</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+                {/*
                 <div>
                   <Label>Vệ sinh</Label>
                   <Select value={roomForm.tinh_trang_vesinh} onValueChange={(v: string) => setRoomForm({ ...roomForm, tinh_trang_vesinh: v })}>
@@ -972,6 +968,7 @@ export default function RoomManagement() {
                     </SelectContent>
                   </Select>
                 </div>
+                */}
               </div>
               <div>
                 <Label>Ghi chú</Label>

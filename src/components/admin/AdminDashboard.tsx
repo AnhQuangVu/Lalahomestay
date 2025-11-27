@@ -1,4 +1,16 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+
+// Simple real-time date/time display component
+function CurrentDateTime() {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <span className="font-mono text-xs text-gray-700">{now.toLocaleString('vi-VN')}</span>
+  );
+}
 import { DollarSign, Calendar, Home, Users, TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
 // charts removed per user request
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
@@ -13,32 +25,60 @@ export default function AdminDashboard() {
 
   const serverUrl = `https://${projectId}.supabase.co/functions/v1/make-server-faeb1932`;
 
-  const fetchStats = async () => {
+  // Helper to get start/end date from timeFilter
+  function getDateRange(filter: string) {
+    const now = new Date();
+    let start = new Date(now);
+    let end = new Date(now);
+    if (filter === 'today') {
+      // Today
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+    } else if (filter === '7days') {
+      // Last 7 days
+      start.setDate(now.getDate() - 6);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+    } else if (filter === 'month') {
+      // This month
+      start = new Date(now.getFullYear(), now.getMonth(), 1);
+      end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      end.setHours(23, 59, 59, 999);
+    } else if (filter === 'lastmonth') {
+      // Last month
+      start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      end = new Date(now.getFullYear(), now.getMonth(), 0);
+      end.setHours(23, 59, 59, 999);
+    }
+    return {
+      start_date: start.toISOString().slice(0, 10),
+      end_date: end.toISOString().slice(0, 10)
+    };
+  }
+
+  const fetchStats = React.useCallback(async () => {
     setLoading(true);
     setError('');
-    
     try {
-      // Fetch statistics (include selected time filter so backend can return chart data)
-      const statsResponse = await fetch(`${serverUrl}/admin/statistics?filter=${encodeURIComponent(timeFilter)}`, {
+      const { start_date, end_date } = getDateRange(timeFilter);
+      const statsResponse = await fetch(`${serverUrl}/admin/statistics?start_date=${start_date}&end_date=${end_date}`, {
         headers: {
           'Authorization': `Bearer ${publicAnonKey}`
         }
       });
-  const statsResult = await statsResponse.json();
-  // store raw payload for debugging
-  setRawStats(statsResult);
-      
-      // Fetch recent bookings
-      const bookingsResponse = await fetch(`${serverUrl}/dat-phong`, {
+      const statsResult = await statsResponse.json();
+      setRawStats(statsResult);
+
+      const bookingsResponse = await fetch(`${serverUrl}/dat-phong?start_date=${start_date}&end_date=${end_date}`, {
         headers: {
           'Authorization': `Bearer ${publicAnonKey}`
         }
       });
       const bookingsResult = await bookingsResponse.json();
-      
+
       if (statsResult.success && bookingsResult.success) {
-        // Transform data for display
         const recentBookings = bookingsResult.data.slice(0, 10).map((b: any) => ({
+          createdAt: b.ngay_tao ? new Date(b.ngay_tao).toLocaleString('vi-VN') : '',
           code: b.ma_dat,
           customerName: b.khach_hang?.ho_ten || 'N/A',
           roomNumber: b.phong?.ma_phong || 'N/A',
@@ -50,18 +90,13 @@ export default function AdminDashboard() {
           totalAmount: b.tong_tien
         }));
 
-        // normalize or pick charts from returned payload if present
         const normalizeCharts = (data: any) => {
-          // Common expected shapes:
-          // 1) data.charts = { revenue: [...], channel: [...] }
           if (data?.charts && (data.charts.revenue || data.charts.channel)) {
             return {
               revenue: data.charts.revenue || [],
               channel: data.charts.channel || []
             };
           }
-
-          // 2) data.dailyRevenue || data.revenueByDay: array of { date, value }
           const mapDateArray = (arr: any[]) => arr.map((r: any) => ({ name: r.date || r.name || r.day || r.label, revenue: r.value || r.amount || r.revenue || r.total || 0 }));
           if (Array.isArray(data?.dailyRevenue) && data.dailyRevenue.length) {
             return { revenue: mapDateArray(data.dailyRevenue), channel: data.channels || [] };
@@ -69,8 +104,6 @@ export default function AdminDashboard() {
           if (Array.isArray(data?.revenueByDay) && data.revenueByDay.length) {
             return { revenue: mapDateArray(data.revenueByDay), channel: data.channels || [] };
           }
-
-          // 3) derive from bookings list (sum totalAmount by day)
           if (Array.isArray(data?.bookings) && data.bookings.length) {
             const byDay: Record<string, number> = {};
             data.bookings.forEach((b: any) => {
@@ -82,12 +115,9 @@ export default function AdminDashboard() {
             const revenue = Object.keys(byDay).sort().map(k => ({ name: k, revenue: byDay[k] }));
             return { revenue, channel: data.channels || [] };
           }
-
-          // 4) revenueSeries / series
           if (Array.isArray(data?.revenueSeries) && data.revenueSeries.length) {
             return { revenue: mapDateArray(data.revenueSeries), channel: data.channels || [] };
           }
-
           return { revenue: [], channel: [] };
         };
 
@@ -114,7 +144,6 @@ export default function AdminDashboard() {
               change: 12 // Mock
             }
           },
-          // charts derived or returned by backend
           charts,
           recentBookings
         });
@@ -127,11 +156,11 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [timeFilter, serverUrl]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     fetchStats();
-  }, [timeFilter]);
+  }, [fetchStats]);
 
   const getStatusBadge = (status: string) => {
     const styles: { [key: string]: string } = {
@@ -196,7 +225,6 @@ export default function AdminDashboard() {
     <div>
       <div className="mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-gray-900">Dashboard</h1>
           <button
             onClick={fetchStats}
             disabled={loading}
@@ -218,18 +246,25 @@ export default function AdminDashboard() {
             <pre className="whitespace-pre-wrap">{JSON.stringify(rawStats, null, 2)}</pre>
           </div>
         )}
-        {/* Filters */}
-        <div className="flex flex-wrap gap-3">
-          <select
-            value={timeFilter}
-            onChange={(e: any) => setTimeFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
-          >
-            <option value="today">Hôm nay</option>
-            <option value="7days">7 ngày</option>
-            <option value="month">Tháng này</option>
-            <option value="lastmonth">Tháng trước</option>
-          </select>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-1 bg-green-50 text-green-700 rounded text-xs">Thời gian thực</span>
+            <CurrentDateTime />
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <select
+              value={timeFilter}
+              onChange={(e) => {
+                setTimeFilter(e.target.value);
+              }}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+            >
+              <option value="today">Hôm nay</option>
+              <option value="7days">7 ngày</option>
+              <option value="month">Tháng này</option>
+              <option value="lastmonth">Tháng trước</option>
+            </select>
+          </div>
         </div>
 
         {error && (
@@ -313,6 +348,7 @@ export default function AdminDashboard() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-200">
+                  <th className="text-left py-3 px-4 text-gray-700">Thời gian tạo đơn</th>
                   <th className="text-left py-3 px-4 text-gray-700">Mã đơn</th>
                   <th className="text-left py-3 px-4 text-gray-700">Khách hàng</th>
                   <th className="text-left py-3 px-4 text-gray-700">Phòng</th>
@@ -324,6 +360,7 @@ export default function AdminDashboard() {
               <tbody>
                 {recentBookings.map((booking: any) => (
                   <tr key={booking.code} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-3 px-4 text-gray-900">{booking.createdAt}</td>
                     <td className="py-3 px-4 text-gray-900">{booking.code}</td>
                     <td className="py-3 px-4 text-gray-900">{booking.customerName}</td>
                     <td className="py-3 px-4 text-gray-900">{booking.roomNumber}</td>
@@ -343,7 +380,6 @@ export default function AdminDashboard() {
           <div className="py-12 text-center text-gray-400">
             <Calendar className="w-12 h-12 mx-auto mb-2 opacity-50" />
             <p>Chưa có đơn đặt phòng nào</p>
-            <p className="text-sm mt-2">Hãy vào <strong>/setup</strong> để tạo dữ liệu mẫu</p>
           </div>
         )}
       </div>
