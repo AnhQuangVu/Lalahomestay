@@ -34,7 +34,8 @@ export default function AccountManagement() {
     email: '',
     sdt: '',
     vai_tro: 'le_tan',
-    trang_thai: true
+    trang_thai: true,
+    mat_khau: ''
   });
 
   useEffect(() => {
@@ -87,6 +88,10 @@ export default function AccountManagement() {
   const handleAdd = async () => {
     if (!formData.ho_ten || !formData.email) {
       toast.error('Vui lòng nhập họ tên và email');
+      return;
+    }
+    if (!formData.mat_khau || formData.mat_khau.length < 6) {
+      toast.error('Vui lòng nhập mật khẩu (tối thiểu 6 ký tự)');
       return;
     }
 
@@ -204,7 +209,8 @@ export default function AccountManagement() {
       email: '',
       sdt: '',
       vai_tro: 'le_tan',
-      trang_thai: true
+      trang_thai: true,
+      mat_khau: ''
     });
     setSelectedAccount(null);
   };
@@ -278,7 +284,6 @@ export default function AccountManagement() {
                 <SelectItem value="all">Tất cả</SelectItem>
                 <SelectItem value="quan_tri">Quản trị</SelectItem>
                 <SelectItem value="le_tan">Lễ tân</SelectItem>
-                <SelectItem value="ke_toan">Kế toán</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -384,6 +389,18 @@ export default function AccountManagement() {
               />
             </div>
             <div>
+              <Label htmlFor="mat_khau">Mật khẩu *</Label>
+              <Input
+                id="mat_khau"
+                type="password"
+                value={formData.mat_khau}
+                onChange={(e) => setFormData({ ...formData, mat_khau: e.target.value })}
+                placeholder="Nhập mật khẩu tối thiểu 6 ký tự"
+                minLength={6}
+                autoComplete="new-password"
+              />
+            </div>
+            <div>
               <Label htmlFor="vai_tro">Vai trò</Label>
               <Select value={formData.vai_tro} onValueChange={(v) => setFormData({ ...formData, vai_tro: v })}>
                 <SelectTrigger>
@@ -392,7 +409,6 @@ export default function AccountManagement() {
                 <SelectContent>
                   <SelectItem value="quan_tri">Quản trị</SelectItem>
                   <SelectItem value="le_tan">Lễ tân</SelectItem>
-                  <SelectItem value="ke_toan">Kế toán</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -462,7 +478,6 @@ export default function AccountManagement() {
                 <SelectContent>
                   <SelectItem value="quan_tri">Quản trị</SelectItem>
                   <SelectItem value="le_tan">Lễ tân</SelectItem>
-                  <SelectItem value="ke_toan">Kế toán</SelectItem>
                 </SelectContent>
               </Select>
             </div>
