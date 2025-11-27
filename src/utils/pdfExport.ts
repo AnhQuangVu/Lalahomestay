@@ -1,316 +1,345 @@
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
+
+// @ts-ignore
 pdfMake.vfs = pdfFonts.vfs;
 
 // --- Helper Functions ---
-
-function safeMargin(arr: any) {
-  if (!Array.isArray(arr)) return [0, 0, 0, 0];
-  return arr.map(x => Number.isFinite(x) ? x : 0);
-}
-
-function safeWidths(arr: any[]) {
-  return arr.map(x => (typeof x === 'number' || x === 'auto' || x === '*') ? x : '*');
-}
-
-function sanitizeCell(cell: any) {
-  if (cell === null || cell === undefined) return '';
-  if (typeof cell === 'number') return Number.isFinite(cell) ? String(cell) : '0';
-  if (typeof cell === 'string') return cell;
-  if (cell instanceof Date) return cell.toLocaleDateString('vi-VN');
-  if (typeof cell === 'object') {
-    if (cell.text !== undefined) {
-      cell.text = String(cell.text || '');
-    }
-    return cell;
-  }
-  return String(cell);
-}
-
-function formatCurrency(val: any) {
+const formatCurrency = (val: any) => {
   const num = Number(val);
   return Number.isFinite(num) ? num.toLocaleString('vi-VN') + ' ₫' : '0 ₫';
-}
+};
 
-function formatDate(dateString: string) {
-    if (!dateString) return '';
-    try {
-        const date = new Date(dateString);
-        return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    } catch {
-        return dateString;
-    }
-}
+const formatPercent = (val: any) => {
+  const num = Number(val);
+  return Number.isFinite(num) ? num.toFixed(1) + '%' : '0%';
+};
 
-function getReportTypeLabel(type: string) {
-  switch (type) {
-    case 'overview': return 'Tổng quan';
-    case 'revenue': return 'Doanh thu';
-    case 'bookings': return 'Danh sách Đặt phòng'; // Updated label
-    case 'rooms': return 'Danh sách Phòng';
-    case 'occupancy': return 'Công suất phòng';
-    case 'customers': return 'Khách hàng';
-    default: return type.toUpperCase();
-  }
-}
+// Tạo tiêu đề section đẹp mắt
+const createSectionHeader = (text: string) => ({
+  text: text.toUpperCase(),
+  style: 'sectionHeader',
+  margin: [0, 15, 0, 8]
+});
 
-function translateStatus(status: string) {
-    const map: any = {
-        'cho_coc': 'Chờ cọc',
-        'da_coc': 'Đã cọc',
-        'da_nhan_phong': 'Đã nhận',
-        'dang_o': 'Đang ở',
-        'da_tra_phong': 'Đã trả',
-        'da_tra': 'Đã trả',
-        'da_tt': 'Đã thanh toán',
-        'da_huy': 'Đã hủy',
-        'huy': 'Hủy'
-    };
-    return map[status] || status;
-}
-
-// --- Table Builders ---
-
-// 1. Bảng Doanh thu (Revenue)
-function buildRevenueDetailTable(data: any) {
-  const rows = [
-    ['STT', 'Tên phòng', 'Số lượt đặt', 'Doanh thu', 'TB/lượt'].map(t => sanitizeCell({ text: t, bold: true, fillColor: '#eeeeee' }))
-  ];
-
-  // API reports thường trả về topRooms hoặc roomsRevenue
-  const rooms = Array.isArray(data.topRooms) ? data.topRooms : (Array.isArray(data.rooms) ? data.rooms : []);
-  
-  if (rooms.length > 0) {
-    rooms.forEach((room: any, idx: number) => {
-      const bookings = Number(room.bookings || 0);
-      const revenue = Number(room.revenue || 0);
-      const avg = bookings > 0 ? Math.round(revenue / bookings) : 0;
-
-      rows.push([
-        idx + 1,
-        room.name || room.roomName || 'Không tên',
-        bookings,
-        formatCurrency(revenue),
-        formatCurrency(avg)
-      ].map(c => sanitizeCell(c)));
-    });
-    
-    // Tổng cộng
-    const totalRev = rooms.reduce((acc: number, curr: any) => acc + (Number(curr.revenue) || 0), 0);
-    const totalBook = rooms.reduce((acc: number, curr: any) => acc + (Number(curr.bookings) || 0), 0);
-    
-    rows.push([
-        { text: 'Tổng cộng', bold: true, colSpan: 2 }, '',
-        { text: totalBook, bold: true },
-        { text: formatCurrency(totalRev), bold: true },
-        ''
-    ].map(c => sanitizeCell(c)));
-
-  } else {
-    rows.push(['-', 'Không có dữ liệu doanh thu', '-', '-', '-'].map(c => sanitizeCell(c)));
-  }
-
-  return rows;
-}
-
-// 2. Bảng Đặt phòng (Bookings) - MỚI THÊM
-function buildBookingDetailTable(data: any) {
-    const rows = [
-        ['STT', 'Mã Đặt', 'Khách hàng', 'Phòng', 'Ngày nhận', 'Ngày trả', 'Tổng tiền', 'Trạng thái']
-        .map(t => sanitizeCell({ text: t, bold: true, fontSize: 9, fillColor: '#eeeeee' }))
-    ];
-
-    // Xử lý nếu data là mảng (từ /dat-phong) hoặc object chứa mảng (từ /reports)
-    const list = Array.isArray(data) ? data : (Array.isArray(data.bookings) ? data.bookings : (Array.isArray(data.data) ? data.data : []));
-
-    if (list.length === 0) {
-        rows.push([{ text: 'Không có dữ liệu đặt phòng trong khoảng thời gian này', colSpan: 8, alignment: 'center' }, '', '', '', '', '', '', '']);
-    } else {
-        list.forEach((item: any, idx: number) => {
-            // Lấy tên khách từ object khach_hang hoặc string phẳng
-            const cusName = item.khach_hang?.ho_ten || item.customerName || 'Khách lẻ';
-            // Lấy tên phòng
-            const roomName = item.phong?.ma_phong || item.roomName || item.room || 'Chưa xếp';
-            
-            rows.push([
-                idx + 1,
-                { text: item.ma_dat || item.code || '', fontSize: 9 },
-                { text: cusName, fontSize: 9 },
-                { text: roomName, fontSize: 9 },
-                { text: formatDate(item.thoi_gian_nhan || item.checkIn), fontSize: 9 },
-                { text: formatDate(item.thoi_gian_tra || item.checkOut), fontSize: 9 },
-                { text: formatCurrency(item.tong_tien || item.totalAmount || 0), fontSize: 9, alignment: 'right' },
-                { text: translateStatus(item.trang_thai || item.status), fontSize: 9 }
-            ].map(c => sanitizeCell(c)));
-        });
-    }
-    return rows;
-}
-
-// 3. Bảng Khách hàng (Customers)
-function buildCustomerDetailTable(data: any) {
-  const rows = [
-    ['STT', 'Họ tên', 'SĐT', 'Email', 'SL Đặt', 'Chi tiêu'].map(t => sanitizeCell({ text: t, bold: true, fillColor: '#eeeeee' }))
-  ];
-  
-  const list = Array.isArray(data.customers) ? data.customers : (Array.isArray(data) ? data : []);
-  
-  if (list.length === 0) {
-      rows.push(['-', 'Không có dữ liệu', '-', '-', '-', '-'].map(c => sanitizeCell(c)));
-  } else {
-    list.forEach((cus: any, idx: number) => {
-      rows.push([
-        idx + 1,
-        cus.ho_ten || cus.name || '',
-        cus.sdt || cus.phone || '',
-        cus.email || '',
-        cus.totalBookings || 0,
-        formatCurrency(cus.totalSpent || 0)
-      ].map(c => sanitizeCell(c)));
-    });
-  }
-  return rows;
-}
-
-// 4. Bảng Công suất (Occupancy)
-function buildOccupancyDetailTable(data: any) {
-  const rows = [
-    ['STT', 'Phòng', 'Ngày SD', 'Ngày KD', 'Công suất (%)'].map(t => sanitizeCell({ text: t, bold: true, fillColor: '#eeeeee' }))
-  ];
-  const list = Array.isArray(data.occupancyDetails) ? data.occupancyDetails : [];
-  
-  if (list.length === 0) {
-     rows.push(['-', 'Không có dữ liệu', '-', '-', '-'].map(c => sanitizeCell(c)));
-  } else {
-    list.forEach((item: any, idx: number) => {
-      rows.push([
-        idx + 1,
-        item.room || item.name || '',
-        item.usedDays || 0,
-        item.availableDays || 0,
-        (item.occupancyRate || 0) + '%'
-      ].map(c => sanitizeCell(c)));
-    });
-  }
-  return rows;
-}
-
-// --- Main Export Function ---
-
-export function exportReportPDF({ reportData, reportType, startDate, endDate }: { reportData: any, reportType: string, startDate: string, endDate: string }) {
-  const exportTime = new Date().toLocaleString('vi-VN');
-  
-  // 1. Chuẩn hóa dữ liệu đầu vào (Quan trọng)
-  // Nếu API trả về { success: true, data: [...] }, ta cần lấy phần .data
-  let safeData = reportData || {};
-  if (safeData.data && typeof safeData.data === 'object') {
-      safeData = safeData.data;
-  }
-
-  // Debug để xem dữ liệu thực tế vào PDF là gì (bật F12 console browser)
-  console.log('PDF Export Data Normalized:', safeData);
-
-  let content: any[] = [
-    { text: 'LALA HOUSE - BÁO CÁO', style: 'header', alignment: 'center', margin: [0, 0, 0, 10] },
-    {
-      columns: [
-        { width: '*', text: [{ text: 'Loại báo cáo: ', bold: true }, getReportTypeLabel(reportType)] },
-        { width: 'auto', text: [{ text: 'Ngày xuất: ', bold: true }, exportTime], alignment: 'right' }
+// Tạo KPI Card (Hiển thị chỉ số dạng lưới)
+const createKPIGrid = (items: { label: string; value: string | number; subtext?: string; color?: string }[]) => {
+  return {
+    columns: items.map(item => ({
+      stack: [
+        { text: item.label, style: 'kpiLabel' },
+        { text: item.value, style: 'kpiValue', color: item.color || '#2c3e50' },
+        item.subtext ? { text: item.subtext, style: 'kpiSubtext' } : {}
       ],
-      margin: [0, 0, 0, 5]
+      style: 'kpiCard'
+    })),
+    columnGap: 10,
+    margin: [0, 0, 0, 15]
+  };
+};
+
+// Vẽ thanh biểu đồ đơn giản (Data Bar)
+const drawProgressBar = (percent: number, color: string = '#3498db') => {
+  const width = Math.min(Math.max(percent, 0), 100);
+  return {
+    canvas: [
+      {
+        type: 'rect',
+        x: 0, y: 0, w: width * 1.5, h: 8, // Scale width cho dễ nhìn
+        color: color
+      }
+    ]
+  };
+};
+
+// --- Report Builders ---
+
+// 1. REPORT TỔNG QUAN (Overview)
+const buildOverviewContent = (data: any) => {
+  const content: any[] = [];
+
+  // KPI Chính
+  content.push(createSectionHeader('Chỉ số kinh doanh chính'));
+  content.push(createKPIGrid([
+    { label: 'TỔNG DOANH THU', value: formatCurrency(data.totalRevenue), color: '#27ae60' },
+    { label: 'TỔNG ĐẶT PHÒNG', value: data.totalBookings + ' lượt' },
+    { label: 'KHÁCH HÀNG', value: data.totalCustomers + ' khách' },
+    { label: 'TIỀN CỌC', value: formatCurrency(data.totalDeposit) }
+  ]));
+
+  // KPI Phụ (Hiệu suất)
+  content.push(createSectionHeader('Hiệu suất vận hành'));
+  const occRate = Number(data.occupancyRate || 0);
+  const cancelRate = Number(data.cancelRate || 0);
+  
+  content.push({
+    table: {
+      widths: ['*', 'auto', 'auto', '*'],
+      body: [
+        [
+          { text: 'Chỉ số', bold: true },
+          { text: 'Giá trị', bold: true },
+          { text: 'Biểu đồ', bold: true },
+          { text: 'Đánh giá', bold: true }
+        ],
+        ['Tỷ lệ lấp đầy phòng', formatPercent(occRate), drawProgressBar(occRate, '#2980b9'), occRate > 60 ? 'Tốt' : 'Cần cải thiện'],
+        ['Tỷ lệ hủy phòng', formatPercent(cancelRate), drawProgressBar(cancelRate, '#e74c3c'), cancelRate < 10 ? 'Tốt' : 'Cao'],
+        ['Doanh thu TB/Đơn', formatCurrency(data.averageBookingValue), '', '-'],
+        ['Doanh thu TB/Đêm', formatCurrency(data.averageNightlyRate), '', '-']
+      ]
     },
-    {
-      text: [{ text: 'Kỳ báo cáo: ', bold: true }, `${startDate} - ${endDate}`],
-      margin: [0, 0, 0, 15]
-    },
-  ];
+    layout: 'lightHorizontalLines'
+  });
 
-  // 2. Xác định cấu trúc bảng dựa trên reportType
-  let tableBody: any[][] = [];
-  let colWidths: any[] = [];
-  let orientation: 'portrait' | 'landscape' = 'portrait'; // Mặc định dọc
+  return content;
+};
 
-  switch (reportType) {
-      case 'revenue':
-          tableBody = buildRevenueDetailTable(safeData);
-          colWidths = ['auto', '*', 'auto', 'auto', 'auto']; // 5 cột
-          break;
-          
-      case 'bookings':
-      case 'dat-phong': // Handle cả trường hợp key là tiếng Việt nếu có
-          orientation = 'landscape'; // Xoay ngang vì bảng này nhiều cột
-          tableBody = buildBookingDetailTable(safeData);
-          // STT, Mã, Khách, Phòng, Nhận, Trả, Tiền, Trạng thái
-          colWidths = ['auto', 'auto', '*', 'auto', 'auto', 'auto', 'auto', 'auto']; 
-          break;
+// 2. REPORT DOANH THU (Revenue)
+const buildRevenueContent = (data: any) => {
+  const content: any[] = [];
+  
+  // Tổng quan doanh thu
+  content.push(createSectionHeader('Phân tích tài chính'));
+  content.push(createKPIGrid([
+    { label: 'DOANH THU TỔNG', value: formatCurrency(data.totalRevenue), color: '#27ae60' },
+    { label: 'TB MỖI ĐÊM', value: formatCurrency(data.averageNightlyRate) },
+    { label: 'TĂNG TRƯỞNG', value: formatPercent(data.growthRate), color: data.growthRate >= 0 ? 'green' : 'red' },
+    { label: 'TỔNG SỐ ĐÊM', value: data.totalNights }
+  ]));
 
-      case 'occupancy':
-          tableBody = buildOccupancyDetailTable(safeData);
-          colWidths = ['auto', '*', 'auto', 'auto', 'auto'];
-          break;
+  // Chi tiết theo ngày
+  content.push(createSectionHeader('Chi tiết doanh thu theo ngày'));
+  const dailyRows = (data.dailyRevenue || []).map((d: any) => [
+    d.date,
+    { text: formatCurrency(d.revenue), alignment: 'right' },
+    { text: d.bookings, alignment: 'center' },
+    { text: formatCurrency(d.bookings ? Math.round(d.revenue/d.bookings) : 0), alignment: 'right' }
+  ]);
 
-      case 'customers':
-      case 'khach-hang':
-          tableBody = buildCustomerDetailTable(safeData);
-          colWidths = ['auto', '*', 'auto', 'auto', 'auto', 'auto'];
-          break;
-          
-      case 'rooms':
-          // Tận dụng bảng revenue nhưng chỉ hiển thị thông tin cơ bản nếu cần
-          tableBody = buildRevenueDetailTable(safeData);
-          colWidths = ['auto', '*', 'auto', 'auto', 'auto'];
-          break;
-
-      default:
-          // Fallback cho Overview hoặc data lạ
-          tableBody = [[sanitizeCell('Không có mẫu hiển thị cho loại báo cáo này')]];
-          colWidths = ['*'];
-          break;
-  }
-
-  // 3. Đẩy bảng vào content
   content.push({
     table: {
       headerRows: 1,
-      widths: safeWidths(colWidths),
-      body: tableBody
+      widths: ['auto', '*', 'auto', '*'],
+      body: [
+        ['Ngày', 'Doanh thu', 'Số booking', 'TB/Booking'].map(t => ({ text: t, bold: true, fillColor: '#f0f0f0' })),
+        ...dailyRows,
+        // Dòng tổng kết
+        [
+            { text: 'TỔNG CỘNG', bold: true }, 
+            { text: formatCurrency(data.totalRevenue), bold: true, alignment: 'right' },
+            { text: data.totalBookings, bold: true, alignment: 'center' }, 
+            ''
+        ]
+      ]
     },
-    layout: {
-      fillColor: function (rowIndex: number) { return rowIndex === 0 ? '#dddddd' : null; }, // Header màu xám
-      hLineWidth: function (i: number, node: any) { return (i === 0 || i === node.table.body.length) ? 1 : 1; },
-      vLineWidth: function (i: number, node: any) { return 0; }, // Bỏ kẻ dọc cho thoáng
-      hLineColor: function (i: number, node: any) { return '#aaaaaa'; },
-      paddingLeft: function(i: number) { return 4; },
-      paddingRight: function(i: number) { return 4; },
-      paddingTop: function(i: number) { return 4; },
-      paddingBottom: function(i: number) { return 4; },
-    }
+    layout: 'lightHorizontalLines'
   });
 
-  // 4. Tổng hợp footer (nếu cần)
-  if (reportType === 'revenue' && safeData.totalRevenue) {
-       content.push({
-           text: `Tổng doanh thu toàn kỳ: ${formatCurrency(safeData.totalRevenue)}`,
-           bold: true,
-           margin: [0, 10, 0, 0],
-           alignment: 'right'
-       });
+  return content;
+};
+
+// 3. REPORT PHÒNG (Rooms)
+const buildRoomsContent = (data: any) => {
+    const content: any[] = [];
+
+    // KPI Phòng
+    content.push(createSectionHeader('Tổng quan phòng'));
+    content.push(createKPIGrid([
+        { label: 'TỔNG SỐ PHÒNG', value: data.totalRooms },
+        { label: 'ĐANG SỬ DỤNG', value: data.occupiedRooms, color: '#e67e22' },
+        { label: 'PHÒNG TRỐNG', value: data.availableRooms, color: '#27ae60' },
+        { label: 'CÔNG SUẤT', value: formatPercent(data.occupancyRate) }
+    ]));
+
+    // Top Phòng
+    content.push(createSectionHeader('Xếp hạng hiệu quả phòng'));
+    const roomRows = (data.topRooms || []).map((r: any, idx: number) => {
+        let medal = '';
+        if (idx === 0) medal = '🥇 ';
+        if (idx === 1) medal = '🥈 ';
+        if (idx === 2) medal = '🥉 ';
+        
+        return [
+            medal + r.name,
+            { text: r.bookings, alignment: 'center' },
+            { text: formatCurrency(r.revenue), alignment: 'right', color: '#27ae60', bold: true },
+            drawProgressBar((r.revenue / (data.totalRevenue || 1)) * 100, '#2ecc71') // Thanh % doanh thu đóng góp
+        ];
+    });
+
+    content.push({
+        table: {
+            headerRows: 1,
+            widths: ['*', 'auto', 'auto', 100],
+            body: [
+                ['Tên phòng', 'Số lượt đặt', 'Doanh thu', 'Tỷ trọng'].map(t => ({ text: t, bold: true, fillColor: '#f0f0f0' })),
+                ...roomRows
+            ]
+        },
+        layout: 'lightHorizontalLines'
+    });
+
+    return content;
+}
+
+// 4. REPORT KHÁCH HÀNG (Customers)
+const buildCustomersContent = (data: any) => {
+    const content: any[] = [];
+    
+    // KPI
+    const newRate = data.totalCustomers ? (data.newCustomers / data.totalCustomers) * 100 : 0;
+    content.push(createSectionHeader('Phân tích khách hàng'));
+    content.push(createKPIGrid([
+        { label: 'TỔNG KHÁCH', value: data.totalCustomers },
+        { label: 'KHÁCH MỚI', value: data.newCustomers, subtext: `(${formatPercent(newRate)})` },
+        { label: 'KHÁCH CŨ', value: data.totalCustomers - data.newCustomers },
+        { label: 'DOANH THU/KHÁCH', value: formatCurrency(data.totalCustomers ? Math.round(data.totalRevenue/data.totalCustomers) : 0) }
+    ]));
+
+    // Nguồn khách
+    content.push(createSectionHeader('Nguồn đặt phòng'));
+    const totalSources = (data.bookingSources || []).reduce((sum:any, s:any) => sum + s.count, 0);
+    
+    const sourceRows = (data.bookingSources || []).map((s: any) => {
+        const percent = totalSources ? (s.count / totalSources) * 100 : 0;
+        return [
+            s.source,
+            { text: s.count, alignment: 'center' },
+            { text: formatPercent(percent), alignment: 'right' },
+            drawProgressBar(percent, '#9b59b6')
+        ];
+    });
+
+    content.push({
+        table: {
+            headerRows: 1,
+            widths: ['*', 'auto', 'auto', 150],
+            body: [
+                ['Kênh đặt phòng', 'Số lượng', 'Tỷ lệ', 'Biểu đồ'].map(t => ({ text: t, bold: true, fillColor: '#f0f0f0' })),
+                ...sourceRows
+            ]
+        },
+        layout: 'lightHorizontalLines'
+    });
+
+    return content;
+}
+
+// 5. REPORT BOOKINGS (Đặt phòng)
+const buildBookingsContent = (data: any) => {
+    const content: any[] = [];
+    
+    // KPI
+    content.push(createSectionHeader('Tổng quan đặt phòng'));
+    content.push(createKPIGrid([
+        { label: 'TỔNG BOOKING', value: data.totalBookings },
+        { label: 'ĐÃ CHECK-IN', value: data.checkedInBookings },
+        { label: 'ĐÃ CHECK-OUT', value: data.checkedOutBookings },
+        { label: 'ĐÃ HỦY', value: data.cancelledBookings, color: '#c0392b' }
+    ]));
+
+    // Trạng thái chi tiết
+    content.push(createSectionHeader('Phân bổ trạng thái'));
+    const statusRows = (data.bookingStatus || []).map((s: any) => {
+        const percent = data.totalBookings ? (s.count / data.totalBookings) * 100 : 0;
+        return [
+            s.status,
+            { text: s.count, alignment: 'center' },
+            formatPercent(percent),
+            drawProgressBar(percent, '#f1c40f')
+        ];
+    });
+
+    content.push({
+        table: {
+            headerRows: 1,
+            widths: ['*', 'auto', 'auto', 150],
+            body: [
+                ['Trạng thái', 'Số lượng', 'Tỷ lệ', 'Biểu đồ'].map(t => ({ text: t, bold: true, fillColor: '#f0f0f0' })),
+                ...statusRows
+            ]
+        },
+        layout: 'lightHorizontalLines'
+    });
+    
+    return content;
+}
+
+// --- MAIN EXPORT FUNCTION ---
+
+export const exportReportPDF = ({ reportData, reportType, startDate, endDate }: any) => {
+  const exportTime = new Date().toLocaleString('vi-VN');
+
+  // Xác định nội dung dựa trên reportType
+  let bodyContent: any[] = [];
+  let title = '';
+
+  switch (reportType) {
+    case 'overview':
+        title = 'BÁO CÁO TỔNG QUAN';
+        bodyContent = buildOverviewContent(reportData);
+        break;
+    case 'revenue':
+        title = 'BÁO CÁO DOANH THU';
+        bodyContent = buildRevenueContent(reportData);
+        break;
+    case 'bookings':
+        title = 'BÁO CÁO ĐẶT PHÒNG';
+        bodyContent = buildBookingsContent(reportData);
+        break;
+    case 'rooms':
+        title = 'BÁO CÁO HIỆU SUẤT PHÒNG';
+        bodyContent = buildRoomsContent(reportData);
+        break;
+    case 'customers':
+        title = 'BÁO CÁO KHÁCH HÀNG';
+        bodyContent = buildCustomersContent(reportData);
+        break;
+    default:
+        title = 'BÁO CÁO';
+        bodyContent = buildOverviewContent(reportData);
   }
 
   const docDefinition = {
-    pageOrientation: orientation,
-    content,
+    content: [
+      // HEADER CHUNG
+      { text: 'LALA HOUSE MANAGER', style: 'brand', alignment: 'center', margin: [0, 0, 0, 2] },
+      { text: title, style: 'header', alignment: 'center', margin: [0, 0, 0, 10] },
+      {
+        columns: [
+          { width: '*', text: `Kỳ báo cáo: ${startDate} - ${endDate}`, style: 'meta' },
+          { width: 'auto', text: `Xuất lúc: ${exportTime}`, style: 'meta', alignment: 'right' }
+        ],
+        margin: [0, 0, 0, 20]
+      },
+      { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1, lineColor: '#ddd' }] },
+      
+      // NỘI DUNG CHÍNH (Đã build ở trên)
+      ...bodyContent,
+      
+      // FOOTER
+      { text: '\n\n' },
+      { text: 'Báo cáo được tạo tự động từ hệ thống quản lý Lala House.', style: 'footer', alignment: 'center', color: '#7f8c8d', fontSize: 9 }
+    ],
+    
+    // STYLE DEFINITIONS
     styles: {
+      brand: { fontSize: 10, color: '#7f8c8d', letterSpacing: 1 },
       header: { fontSize: 18, bold: true, color: '#2c3e50' },
-      subheader: { fontSize: 14, bold: true, margin: [0, 10, 0, 5] },
+      sectionHeader: { fontSize: 12, bold: true, color: '#34495e', decoration: 'underline', decorationStyle: 'dotted' },
+      meta: { fontSize: 10, color: '#555' },
+      kpiCard: { fontSize: 10, alignment: 'center', margin: [0, 5, 0, 5] },
+      kpiLabel: { fontSize: 9, color: '#7f8c8d', bold: true },
+      kpiValue: { fontSize: 14, bold: true, margin: [0, 2, 0, 2] },
+      kpiSubtext: { fontSize: 8, color: '#95a5a6', italics: true },
       tableHeader: { bold: true, fontSize: 10, color: 'black' }
     },
     defaultStyle: {
-      font: 'Roboto', // Đảm bảo bạn đã import font Roboto cho tiếng Việt
+      font: 'Roboto',
       fontSize: 10
     }
   };
 
   // @ts-ignore
   pdfMake.createPdf(docDefinition).download(`BaoCao-${reportType}-${startDate}.pdf`);
-}
+};
