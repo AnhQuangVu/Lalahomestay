@@ -1,4 +1,23 @@
+// Mock dữ liệu hoạt động lễ tân trong ca
+interface ReceptionEvent {
+  time: string;
+  type: string;
+  code: string;
+  customer: string;
+  room: string;
+  note: string;
+}
+
+const mockReceptionEvents: ReceptionEvent[] = [
+  { time: '08:15', type: 'Tạo đơn đặt phòng', code: 'LALA-20251121-5487', customer: 'Nguyễn An', room: '101', note: '' },
+  { time: '09:00', type: 'Check-in', code: 'LALA-20251121-5487', customer: 'Nguyễn An', room: '101', note: 'Nhận phòng đúng giờ' },
+  { time: '10:20', type: 'Hủy đơn', code: 'LALA-20251121-7890', customer: 'Hoàng Tú Kiều', room: '', note: 'Khách đổi lịch' },
+  { time: '11:00', type: 'Check-out', code: 'LALA-20251121-5487', customer: 'Nguyễn An', room: '101', note: 'Trả phòng sớm' },
+];
 import { useState, useEffect } from 'react';
+import pdfMake from 'pdfmake/build/pdfmake';
+import pdfFonts from 'pdfmake/build/vfs_fonts';
+pdfMake.vfs = pdfFonts.vfs;
 import { Download, Calendar, TrendingUp, Home, CheckCircle, XCircle, Users, BarChart3 } from 'lucide-react';
 import { format, subDays } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -20,9 +39,10 @@ export default function StaffReports() {
   const [reportData, setReportData] = useState<DailyRoomStat[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    fetchReportData();
-  }, [startDate, endDate]);
+  // Chỉ fetch khi nhấn nút 'Xem báo cáo'
+  // useEffect(() => {
+  //   fetchReportData();
+  // }, [startDate, endDate]);
 
   const fetchReportData = async () => {
     setLoading(true);
@@ -174,6 +194,13 @@ export default function StaffReports() {
     );
   }
 
+  // KPI lễ tân
+  const events = mockReceptionEvents; // Thay bằng dữ liệu thực tế nếu có
+  const kpiCreated = events.filter(e => e.type.toLowerCase().includes('tạo đơn')).length;
+  const kpiCheckin = events.filter(e => e.type.toLowerCase().includes('check-in')).length;
+  const kpiCheckout = events.filter(e => e.type.toLowerCase().includes('check-out')).length;
+  const kpiCancel = events.filter(e => e.type.toLowerCase().includes('hủy')).length;
+
   return (
     <div className="max-w-7xl mx-auto">
       {/* Header với gradient */}
@@ -184,9 +211,9 @@ export default function StaffReports() {
         </div>
       </div>
 
-      {/* Date Range Card */}
+      {/* Date Range Card + Nút Xem báo cáo */}
       <div className="rounded-xl shadow-lg p-6 mb-6 text-white" style={{ background: 'linear-gradient(to bottom right, rgb(168, 85, 247), rgb(147, 51, 234))' }}>
-        <div className="flex flex-col md:flex-row gap-4">
+        <div className="flex flex-col md:flex-row gap-4 items-end">
           <div className="flex-1">
             <label className="block text-purple-100 mb-2 font-medium">
               <Calendar className="w-4 h-4 inline mr-2" />
@@ -213,7 +240,16 @@ export default function StaffReports() {
             />
           </div>
 
-          {/* Đã bỏ nút Xem báo cáo */}
+          <div className="flex-shrink-0 mt-4 md:mt-0">
+            <button
+              onClick={fetchReportData}
+              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-lg transition-all font-semibold flex items-center gap-2"
+              disabled={loading}
+            >
+              <BarChart3 className="w-5 h-5" />
+              Xem báo cáo
+            </button>
+          </div>
         </div>
       </div>
 
@@ -289,8 +325,148 @@ export default function StaffReports() {
         );
       })()}
 
-      {/* Main Report Card */}
-      <div className="bg-white rounded-xl shadow-lg p-6">
+      {/* Báo cáo hoạt động lễ tân trong ca */}
+      <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+        <h2 className="text-xl font-bold text-gray-900 mb-2">BÁO CÁO HOẠT ĐỘNG LỄ TÂN TRONG CA</h2>
+        <p className="text-gray-600 mb-4">Ca trực: Ca sáng | Thời gian: 06:00 - 14:00 | Nhân viên: Nguyễn Văn A</p>
+        {/* KPI */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="rounded-lg bg-blue-50 p-4 text-center">
+            <div className="text-2xl font-bold text-blue-700">{kpiCreated}</div>
+            <div className="text-sm text-blue-600">Đơn đã tạo</div>
+          </div>
+          <div className="rounded-lg bg-green-50 p-4 text-center">
+            <div className="text-2xl font-bold text-green-700">{kpiCheckin}</div>
+            <div className="text-sm text-green-600">Khách check-in</div>
+          </div>
+          <div className="rounded-lg bg-orange-50 p-4 text-center">
+            <div className="text-2xl font-bold text-orange-700">{kpiCheckout}</div>
+            <div className="text-sm text-orange-600">Khách check-out</div>
+          </div>
+          <div className="rounded-lg bg-red-50 p-4 text-center">
+            <div className="text-2xl font-bold text-red-700">{kpiCancel}</div>
+            <div className="text-sm text-red-600">Đơn hủy</div>
+          </div>
+        </div>
+        {/* Bảng hoạt động */}
+        <div className="overflow-x-auto rounded-lg border border-gray-200 mb-6">
+          <table className="w-full text-sm">
+            <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+              <tr>
+                <th className="py-3 px-2 text-gray-700 font-semibold">STT</th>
+                <th className="py-3 px-2 text-gray-700 font-semibold">Thời gian</th>
+                <th className="py-3 px-2 text-gray-700 font-semibold">Hoạt động</th>
+                <th className="py-3 px-2 text-gray-700 font-semibold">Mã đơn</th>
+                <th className="py-3 px-2 text-gray-700 font-semibold">Tên khách hàng</th>
+                <th className="py-3 px-2 text-gray-700 font-semibold">Phòng</th>
+                <th className="py-3 px-2 text-gray-700 font-semibold">Ghi chú / Diễn giải</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-100">
+              {events.map((e, idx) => (
+                <tr key={idx} className="hover:bg-blue-50 transition-colors">
+                  <td className="py-2 px-2 text-center">{idx + 1}</td>
+                  <td className="py-2 px-2">{e.time}</td>
+                  <td className="py-2 px-2">{e.type}</td>
+                  <td className="py-2 px-2 font-mono text-blue-700">{e.code}</td>
+                  <td className="py-2 px-2">{e.customer}</td>
+                  <td className="py-2 px-2">{e.room || '-'}</td>
+                  <td className="py-2 px-2 text-xs max-w-xs truncate">{e.note || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="bg-gradient-to-r from-gray-50 to-gray-100 font-bold">
+              <tr>
+                <td colSpan={7} className="py-3 px-2 text-gray-900">Tổng số hoạt động: {events.length} | Đơn tạo mới: {kpiCreated} | Check-in: {kpiCheckin} | Check-out: {kpiCheckout} | Đơn hủy: {kpiCancel}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        {/* Nút xuất PDF */}
+        <div className="flex items-center justify-end gap-4">
+          <button
+            onClick={() => {
+              if (events.length === 0) {
+                toast.error('Không có dữ liệu để xuất PDF');
+                return;
+              }
+              const exportTime = new Date().toLocaleString('vi-VN');
+              // Tự động xác định ca trực
+              const hour = new Date().getHours();
+              let caTruc = '';
+              if (hour >= 6 && hour < 14) caTruc = 'Ca sáng';
+              else if (hour >= 14 && hour < 22) caTruc = 'Ca chiều';
+              else caTruc = 'Ca tối';
+              const nhanVien = 'Nguyễn Văn A'; // Sửa lại nếu có dữ liệu thực tế
+              const timeRange = caTruc === 'Ca sáng' ? '06:00 - 14:00' : caTruc === 'Ca chiều' ? '14:00 - 22:00' : '22:00 - 06:00';
+              // Bảng hoạt động
+              const tableBody = [
+                ['STT', 'Thời gian', 'Hoạt động', 'Mã đơn', 'Tên khách hàng', 'Phòng', 'Ghi chú / Diễn giải'].map(t => ({ text: t, bold: true, fillColor: '#f0f0f0' })),
+                ...events.map((e, idx) => [
+                  idx + 1,
+                  e.time,
+                  e.type,
+                  e.code,
+                  e.customer,
+                  e.room || '-',
+                  e.note || '-'
+                ])
+              ];
+              // Tổng kết cuối báo cáo
+              const summaryRows = [
+                ['Tổng số hoạt động', events.length],
+                ['Số đơn tạo mới', kpiCreated],
+                ['Số check-in', kpiCheckin],
+                ['Số check-out', kpiCheckout],
+                ['Số đơn hủy', kpiCancel]
+              ];
+              // PDF
+              const docDefinition = {
+                content: [
+                  { text: 'BÁO CÁO HOẠT ĐỘNG LỄ TÂN TRONG CA', style: 'header', alignment: 'center', margin: [0,0,0,10] },
+                  { text: `Ca trực: ${caTruc} | Thời gian: ${timeRange} | Nhân viên: ${nhanVien}`, style: 'subheader', alignment: 'center', margin: [0,0,0,10] },
+                  { text: `Thời gian xuất: ${exportTime}`, style: 'subheader', alignment: 'center', margin: [0,0,0,10] },
+                  { text: 'BẢNG HOẠT ĐỘNG TRONG CA', style: 'sectionHeader', margin: [0,10,0,6] },
+                  {
+                    table: {
+                      headerRows: 1,
+                      widths: [30, 50, 80, 80, 80, 40, 100],
+                      body: tableBody
+                    },
+                    layout: 'lightHorizontalLines',
+                    fontSize: 9
+                  },
+                  { text: 'TỔNG KẾT CUỐI BÁO CÁO', style: 'sectionHeader', margin: [0,10,0,6] },
+                  {
+                    table: {
+                      widths: ['*', '*'],
+                      body: summaryRows
+                    },
+                    layout: 'lightHorizontalLines',
+                    margin: [0,0,0,10]
+                  },
+                  { text: '\nBáo cáo được tạo tự động từ hệ thống quản lý Lala House.', style: 'footer', alignment: 'center', color: '#7f8c8d', fontSize: 9 }
+                ],
+                styles: {
+                  header: { fontSize: 16, bold: true, color: '#2c3e50' },
+                  subheader: { fontSize: 11, color: '#555' },
+                  sectionHeader: { fontSize: 12, bold: true, color: '#34495e', decoration: 'underline', decorationStyle: 'dotted' },
+                  footer: { fontSize: 9, color: '#7f8c8d', italics: true }
+                },
+                defaultStyle: {
+                  font: 'Roboto',
+                  fontSize: 10
+                }
+              };
+              pdfMake.createPdf(docDefinition).download(`BaoCaoLeTan-${caTruc}-${exportTime.replace(/\D/g, '')}.pdf`);
+            }}
+            className="flex items-center space-x-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-lg transition-all hover:shadow-xl"
+          >
+            <Download className="w-5 h-5" />
+            <span className="font-medium">Xuất PDF lễ tân</span>
+          </button>
+        </div>
+      </div>
 
         {/* Header */}
         <div className="mb-6">
@@ -419,7 +595,7 @@ export default function StaffReports() {
               </div>
             </div>
 
-            <div className="flex items-center justify-end">
+            <div className="flex items-center justify-end gap-4">
               <button
                 onClick={handleExport}
                 disabled={reportData.length === 0}
@@ -427,6 +603,69 @@ export default function StaffReports() {
               >
                 <Download className="w-5 h-5" />
                 <span className="font-medium">Xuất Excel</span>
+              </button>
+              <button
+                onClick={() => {
+                  if (reportData.length === 0) {
+                    toast.error('Không có dữ liệu để xuất PDF');
+                    return;
+                  }
+                  const exportTime = new Date().toLocaleString('vi-VN');
+                  const docDefinition = {
+                    content: [
+                      { text: 'LALA HOUSE - BÁO CÁO CÔNG SUẤT PHÒNG', style: 'header', alignment: 'center', margin: [0,0,0,10] },
+                      { text: `Từ ngày: ${format(new Date(startDate), 'dd/MM/yyyy', { locale: vi })} đến ${format(new Date(endDate), 'dd/MM/yyyy', { locale: vi })}`, style: 'subheader', alignment: 'center' },
+                      { text: `Thời gian xuất: ${exportTime}`, style: 'subheader', alignment: 'center', margin: [0,0,0,10] },
+                      { text: 'CHI TIẾT CÔNG SUẤT THEO NGÀY', style: 'sectionHeader', margin: [0,10,0,6] },
+                      {
+                        table: {
+                          headerRows: 1,
+                          widths: [60, 60, 60, 60, 60, 60, 60],
+                          body: [
+                            ['Ngày', 'Phòng trống', 'Dự kiến trả', 'Dự kiến nhận', 'Đang sử dụng', 'Công suất (%)', 'Đánh giá'].map(t => ({ text: t, bold: true, fillColor: '#f0f0f0' })),
+                            ...reportData.map(r => [
+                              r.date,
+                              r.emptyRooms,
+                              r.checkouts,
+                              r.checkins,
+                              r.occupied,
+                              r.occupancy + '%',
+                              r.occupancy >= 80 ? '✓ Cao' : r.occupancy >= 60 ? '✓ Tốt' : r.occupancy >= 40 ? '⚠️ TB' : '✗ Thấp'
+                            ]),
+                            [
+                              { text: 'TỔNG / TB', bold: true },
+                              reportData.reduce((sum, r) => sum + r.emptyRooms, 0),
+                              reportData.reduce((sum, r) => sum + r.checkouts, 0),
+                              reportData.reduce((sum, r) => sum + r.checkins, 0),
+                              reportData.reduce((sum, r) => sum + r.occupied, 0),
+                              (reportData.reduce((sum, r) => sum + r.occupancy, 0) / reportData.length).toFixed(1) + '%',
+                              ''
+                            ]
+                          ]
+                        },
+                        layout: 'lightHorizontalLines',
+                        fontSize: 9
+                      },
+                      { text: '\nBáo cáo được tạo tự động từ hệ thống quản lý Lala House.', style: 'footer', alignment: 'center', color: '#7f8c8d', fontSize: 9 }
+                    ],
+                    styles: {
+                      header: { fontSize: 16, bold: true, color: '#2c3e50' },
+                      subheader: { fontSize: 11, color: '#555' },
+                      sectionHeader: { fontSize: 12, bold: true, color: '#34495e', decoration: 'underline', decorationStyle: 'dotted' },
+                      footer: { fontSize: 9, color: '#7f8c8d', italics: true }
+                    },
+                    defaultStyle: {
+                      font: 'Roboto',
+                      fontSize: 10
+                    }
+                  };
+                  pdfMake.createPdf(docDefinition).download(`BaoCaoCongSuatPhong-${startDate}-${endDate}.pdf`);
+                }}
+                disabled={reportData.length === 0}
+                className="flex items-center space-x-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-lg transition-all hover:shadow-xl disabled:bg-gray-400 disabled:cursor-not-allowed disabled:shadow-none"
+              >
+                <Download className="w-5 h-5" />
+                <span className="font-medium">Xuất PDF</span>
               </button>
             </div>
           </div>

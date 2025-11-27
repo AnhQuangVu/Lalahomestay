@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react';
+import pdfMake from 'pdfmake/build/pdfmake';
+import pdfFonts from 'pdfmake/build/vfs_fonts';
+pdfMake.vfs = pdfFonts.vfs;
 import { Download, Calendar, TrendingUp, DollarSign, Users, Clock, CreditCard, AlertCircle, CheckCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -34,9 +37,10 @@ export default function DailyReport() {
   const [reportData, setReportData] = useState<DailyReportData | null>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    fetchReportData();
-  }, [reportDate]);
+  // Chỉ fetch khi nhấn nút 'Xem báo cáo'
+  // useEffect(() => {
+  //   fetchReportData();
+  // }, [reportDate]);
 
   const fetchReportData = async () => {
     setLoading(true);
@@ -62,6 +66,7 @@ export default function DailyReport() {
   };
 
   const handleExport = async () => {
+      // ...existing code...
     if (!reportData || transactions.length === 0) {
       toast.error('Không có dữ liệu để xuất');
       return;
@@ -196,7 +201,7 @@ export default function DailyReport() {
         </div>
       </div>
 
-      {/* Date Picker Card */}
+      {/* Date Picker Card + Nút Xem báo cáo */}
       <div className="rounded-xl shadow-lg p-6 mb-6 text-white" style={{ background: 'linear-gradient(to bottom right, rgb(59, 130, 246), rgb(37, 99, 235))' }}>
         <div className="flex items-center space-x-4">
           <div className="flex-1">
@@ -211,7 +216,16 @@ export default function DailyReport() {
               className="w-full px-4 py-3 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-white focus:border-white outline-none text-gray-900 font-medium"
             />
           </div>
-          {/* Đã bỏ nút Xem báo cáo */}
+          <div className="flex-shrink-0 mt-4 md:mt-0">
+            <button
+              onClick={fetchReportData}
+              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-lg transition-all font-semibold flex items-center gap-2"
+              disabled={loading}
+            >
+              <Clock className="w-5 h-5" />
+              Xem báo cáo
+            </button>
+          </div>
         </div>
       </div>
 
@@ -371,7 +385,7 @@ export default function DailyReport() {
           </div>
 
           {/* Action buttons */}
-          <div className="flex items-center justify-end mt-6">
+          <div className="flex items-center justify-end mt-6 gap-4">
             <button
               onClick={handleExport}
               disabled={!reportData || transactions.length === 0}
@@ -379,6 +393,119 @@ export default function DailyReport() {
             >
               <Download className="w-5 h-5" />
               <span className="font-medium">Xuất Excel</span>
+            </button>
+            <button
+              onClick={() => {
+                if (!reportData || transactions.length === 0) {
+                  toast.error('Không có dữ liệu để xuất PDF');
+                  return;
+                }
+                // TÍNH KPI
+                const totalOrders = transactions.length;
+                const totalCheckin = transactions.filter(t => t.note?.toLowerCase().includes('check-in')).length;
+                const totalCheckout = transactions.filter(t => t.note?.toLowerCase().includes('check-out')).length;
+                const totalCancel = transactions.filter(t => t.note?.toLowerCase().includes('hủy')).length;
+                const totalDeposit = transactions.reduce((sum, t) => sum + (t.deposit || 0), 0);
+                const totalReceived = transactions.reduce((sum, t) => sum + (t.received || 0), 0);
+                // Giả sử có biến tổng số phòng cuối ngày (cần truyền vào nếu có)
+                const totalRooms = 20; // Sửa lại nếu có dữ liệu thực tế
+                const roomsOccupied = transactions.filter(t => t.note?.toLowerCase().includes('check-in')).length;
+                const roomsEmpty = totalRooms - roomsOccupied;
+                // Tiêu đề, ca trực, lễ tân
+                const hour = new Date().getHours();
+                let caTruc = '';
+                if (hour >= 6 && hour < 14) caTruc = 'Sáng';
+                else if (hour >= 14 && hour < 22) caTruc = 'Chiều';
+                else caTruc = 'Đêm';
+                const leTan = 'Nhân viên lễ tân'; // Sửa lại nếu có dữ liệu thực tế
+                const exportTime = new Date().toLocaleString('vi-VN');
+                const reportDateFormatted = format(new Date(reportDate), 'dd/MM/yyyy', { locale: vi });
+                // BẢNG CHI TIẾT
+                const tableBody = [
+                  ['STT', 'Mã đơn', 'Khách hàng', 'Phòng', 'Hoạt động', 'Thời gian', 'Số tiền thu', 'Ghi chú'].map(t => ({ text: t, bold: true, fillColor: '#f0f0f0' })),
+                  ...transactions.map((t, idx) => [
+                    idx + 1,
+                    t.code,
+                    t.customerName,
+                    t.room,
+                    t.note || '',
+                    t.time,
+                    formatCurrency(t.received),
+                    t.note || ''
+                  ])
+                ];
+                // TỔNG KẾT CUỐI BÁO CÁO
+                const summaryRows = [
+                  ['Tổng số đơn trong ngày', totalOrders],
+                  ['Tổng khách đến', totalCheckin],
+                  ['Tổng khách trả phòng', totalCheckout],
+                  ['Tổng đơn hủy', totalCancel],
+                  ['Tổng doanh thu thu trực tiếp trong ngày', formatCurrency(totalReceived)],
+                  ['Tiền tồn cuối ca', formatCurrency(totalDeposit)],
+                  ['Tình trạng phòng cuối ngày', `${roomsOccupied} đang ở / ${roomsEmpty} trống`]
+                ];
+                // PDF
+                const docDefinition = {
+                  content: [
+                    { text: 'BÁO CÁO CUỐI NGÀY – GIAO CA', style: 'header', alignment: 'center', margin: [0,0,0,10] },
+                    { text: `Ngày: ${reportDateFormatted}   Ca trực: ${caTruc}   Lễ tân: ${leTan}`, style: 'subheader', alignment: 'center', margin: [0,0,0,10] },
+                    { text: `Thời gian xuất: ${exportTime}`, style: 'subheader', alignment: 'center', margin: [0,0,0,10] },
+                    { text: 'KPI TỔNG HỢP', style: 'sectionHeader', margin: [0,10,0,6] },
+                    {
+                      table: {
+                        widths: ['*', '*'],
+                        body: [
+                          ['Tổng số đơn xử lý', totalOrders],
+                          ['Số khách check-in', totalCheckin],
+                          ['Số khách check-out', totalCheckout],
+                          ['Số đơn hủy', totalCancel],
+                          ['Tổng số tiền thu', formatCurrency(totalReceived)],
+                          ['Tổng số phòng đang ở', roomsOccupied],
+                          ['Tổng số phòng trống cuối ngày', roomsEmpty]
+                        ]
+                      },
+                      layout: 'lightHorizontalLines',
+                      margin: [0,0,0,10]
+                    },
+                    { text: 'BẢNG CHI TIẾT TRONG NGÀY', style: 'sectionHeader', margin: [0,10,0,6] },
+                    {
+                      table: {
+                        headerRows: 1,
+                        widths: [30, 70, 70, 40, 60, 50, 60, 80],
+                        body: tableBody
+                      },
+                      layout: 'lightHorizontalLines',
+                      fontSize: 9
+                    },
+                    { text: 'TỔNG KẾT CUỐI BÁO CÁO', style: 'sectionHeader', margin: [0,10,0,6] },
+                    {
+                      table: {
+                        widths: ['*', '*'],
+                        body: summaryRows
+                      },
+                      layout: 'lightHorizontalLines',
+                      margin: [0,0,0,10]
+                    },
+                    { text: '\nBáo cáo được tạo tự động từ hệ thống quản lý Lala House.', style: 'footer', alignment: 'center', color: '#7f8c8d', fontSize: 9 }
+                  ],
+                  styles: {
+                    header: { fontSize: 16, bold: true, color: '#2c3e50' },
+                    subheader: { fontSize: 11, color: '#555' },
+                    sectionHeader: { fontSize: 12, bold: true, color: '#34495e', decoration: 'underline', decorationStyle: 'dotted' },
+                    footer: { fontSize: 9, color: '#7f8c8d', italics: true }
+                  },
+                  defaultStyle: {
+                    font: 'Roboto',
+                    fontSize: 10
+                  }
+                };
+                pdfMake.createPdf(docDefinition).download(`BaoCaoCuoiNgay-${reportDate}.pdf`);
+              }}
+              disabled={!reportData || transactions.length === 0}
+              className="flex items-center space-x-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-lg transition-all hover:shadow-xl disabled:bg-gray-400 disabled:cursor-not-allowed disabled:shadow-none"
+            >
+              <Download className="w-5 h-5" />
+              <span className="font-medium">Xuất PDF</span>
             </button>
           </div>
         </div>
