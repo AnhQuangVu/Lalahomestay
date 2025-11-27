@@ -1,3 +1,23 @@
+// Đảm bảo dữ liệu truyền vào PDF không có NaN/null/undefined
+function sanitizeReportData(data: any) {
+  if (!data) return {};
+  const safe = { ...data };
+  [
+    'totalRevenue', 'totalBookings', 'averageBookingValue',
+    'averageNightlyRate', 'growthRate', 'totalNights'
+  ].forEach(key => {
+    safe[key] = Number.isFinite(safe[key]) ? safe[key] : 0;
+  });
+  if (Array.isArray(safe.topRooms)) {
+    safe.topRooms = safe.topRooms.map((room: any) => ({
+      ...room,
+      bookings: Number.isFinite(room.bookings) ? room.bookings : 0,
+      revenue: Number.isFinite(room.revenue) ? room.revenue : 0,
+      name: typeof room.name === 'string' ? room.name : ''
+    }));
+  }
+  return safe;
+}
 import React, { useState, useEffect } from 'react';
 import {
   Download,
@@ -7,6 +27,7 @@ import { format, subDays } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { exportReportPDF } from '../../utils/pdfExport';
 import OverviewReport from './reports/OverviewReport';
 import RevenueReport from './reports/RevenueReport';
 import BookingsReport from './reports/BookingsReport';
@@ -660,23 +681,29 @@ export default function Reports() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-gray-900">Báo cáo - Thống kê</h1>
-
-        {/* Export Buttons */}
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-gray-900 text-xl font-bold">Báo cáo - Thống kê</h1>
         <div className="flex space-x-3">
           <button
             onClick={() => exportExcelClient()}
-            className="flex items-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+            className="flex items-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow transition-colors"
           >
             <Download className="w-5 h-5" />
             <span>Xuất Excel</span>
+          </button>
+          <button
+            onClick={() => reportData && exportReportPDF({ reportData: sanitizeReportData(reportData), reportType, startDate, endDate })}
+            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow transition-colors"
+            disabled={!reportData}
+          >
+            <Download className="w-5 h-5" />
+            <span>Xuất PDF</span>
           </button>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl shadow-sm p-6">
+      <div className="bg-white rounded-xl shadow-sm p-6 mb-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <label className="block text-gray-700 mb-2">Loại báo cáo</label>
