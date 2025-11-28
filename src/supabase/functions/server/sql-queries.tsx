@@ -690,6 +690,60 @@ export async function getDetailedReports(filters?: { startDate?: string, endDate
     b.trang_thai === 'da_tra_phong' || b.trang_thai === 'checkout'
   ).length;
 
+  // Tổng hợp bảng chi tiết hiệu suất phòng (roomUsageDetails)
+  let startDate = filters?.startDate ? new Date(filters.startDate) : new Date(new Date().setDate(new Date().getDate() - 30));
+  let endDate = filters?.endDate ? new Date(filters.endDate) : new Date();
+  
+  // Set hours for accurate calculation
+  startDate.setHours(0,0,0,0);
+  endDate.setHours(23,59,59,999);
+
+  let totalDays = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
+
+  const roomUsageDetails = rooms.map(room => {
+    // Lọc các booking của phòng này trong kỳ báo cáo, không tính booking đã hủy
+    const roomBookings = bookings.filter(b => b.id_phong === room.id && b.trang_thai !== 'da_huy');
+    // Tính tổng số ngày sử dụng
+    let usedDays = 0;
+    
+    roomBookings.forEach(b => {
+      const checkIn = new Date(b.thoi_gian_nhan);
+      const checkOut = new Date(b.thoi_gian_tra);
+      
+      // Tính số ngày giao với kỳ báo cáo (Intersection)
+      let overlapStart = checkIn > startDate ? checkIn : startDate;
+      let overlapEnd = checkOut < endDate ? checkOut : endDate;
+      
+      if (overlapEnd > overlapStart) {
+        let days = (overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24);
+        usedDays += days;
+      }
+    });
+
+    // Rounding and Capping
+    usedDays = Number(usedDays.toFixed(1));
+    if (usedDays > totalDays) usedDays = totalDays;
+
+    // Số ngày khả dụng là tổng số ngày trong kỳ báo cáo
+    const availableDays = totalDays;
+    // Công suất (%)
+    const occupancy = availableDays > 0 ? Math.round((usedDays / availableDays) * 100) : 0;
+    // Số lượt đặt
+    const bookingsCount = roomBookings.length;
+    return {
+      branch: room.loai_phong?.co_so?.ten_co_so || '',
+      room: room.ma_phong || '',
+      type: room.loai_phong?.ten_loai || '',
+      usedDays,
+      availableDays,
+      occupancy,
+      bookings: bookingsCount
+    };
+  });
+  
+  // Sort by occupancy desc
+  roomUsageDetails.sort((a, b) => b.occupancy - a.occupancy);
+
   const cancelRate = totalBookings > 0 ? (cancelledBookings / totalBookings) * 100 : 0;
 
   // Calculate revenue
@@ -700,7 +754,6 @@ export async function getDetailedReports(filters?: { startDate?: string, endDate
   const totalDeposit = bookings
     .filter(b => b.trang_thai !== 'da_huy')
     .reduce((sum, b) => sum + (b.coc_csvc || 0), 0);
-
   // Calculate nights
   const totalNights = bookings
     .filter(b => b.trang_thai !== 'da_huy')
@@ -853,7 +906,10 @@ export async function getDetailedReports(filters?: { startDate?: string, endDate
     dailyRevenue,
     topRooms,
     bookingSources,
-    bookingStatus
+    bookingStatus,
+    
+    // Dữ liệu bảng chi tiết (Mới thêm)
+    roomUsageDetails
   };
 }
 

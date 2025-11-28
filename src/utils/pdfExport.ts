@@ -102,20 +102,19 @@ const buildRevenueContent = (data: any) => {
   content.push(createSectionHeader('Phân tích tài chính'));
   content.push(createKPIGrid([
     { label: 'DOANH THU TỔNG', value: formatCurrency(data.totalRevenue), color: '#27ae60' },
-    { label: 'TB MỖI ĐÊM', value: formatCurrency(data.averageNightlyRate) },
-    { label: 'TĂNG TRƯỞNG', value: formatPercent(data.growthRate), color: data.growthRate >= 0 ? 'green' : 'red' },
-    { label: 'TỔNG SỐ ĐÊM', value: data.totalNights }
+    { label: 'TỔNG SỐ ĐƠN', value: data.totalBookings },
+    { label: 'DOANH THU TB/ĐƠN', value: formatCurrency(data.averageBookingValue) },
+    { label: 'TĂNG TRƯỞNG', value: formatPercent(data.growthRate), color: data.growthRate >= 0 ? 'green' : 'red' }
   ]));
 
-  // Chi tiết theo ngày
-  content.push(createSectionHeader('Chi tiết doanh thu theo ngày'));
+  // Biểu đồ doanh thu theo ngày
+  content.push(createSectionHeader('Biểu đồ doanh thu theo thời gian'));
   const dailyRows = (data.dailyRevenue || []).map((d: any) => [
     d.date,
     { text: formatCurrency(d.revenue), alignment: 'right' },
     { text: d.bookings, alignment: 'center' },
     { text: formatCurrency(d.bookings ? Math.round(d.revenue/d.bookings) : 0), alignment: 'right' }
   ]);
-
   content.push({
     table: {
       headerRows: 1,
@@ -123,16 +122,57 @@ const buildRevenueContent = (data: any) => {
       body: [
         ['Ngày', 'Doanh thu', 'Số booking', 'TB/Booking'].map(t => ({ text: t, bold: true, fillColor: '#f0f0f0' })),
         ...dailyRows,
-        // Dòng tổng kết
         [
-            { text: 'TỔNG CỘNG', bold: true }, 
-            { text: formatCurrency(data.totalRevenue), bold: true, alignment: 'right' },
-            { text: data.totalBookings, bold: true, alignment: 'center' }, 
-            ''
+          { text: 'TỔNG CỘNG', bold: true },
+          { text: formatCurrency(data.totalRevenue), bold: true, alignment: 'right' },
+          { text: data.totalBookings, bold: true, alignment: 'center' },
+          { text: formatCurrency(data.averageBookingValue), bold: true, alignment: 'right' }
         ]
       ]
     },
     layout: 'lightHorizontalLines'
+  });
+
+  // Bảng chi tiết các đơn trong kỳ
+  if (Array.isArray(data.orders) && data.orders.length > 0) {
+    content.push(createSectionHeader('Danh sách chi tiết các đơn trong kỳ'));
+    const orderRows = data.orders.map((order: any, idx: number) => [
+      idx + 1,
+      order.branch || '-',
+      order.code || '-',
+      order.customer || '-',
+      order.room || '-',
+      order.checkin || '-',
+      order.checkout || '-',
+      formatCurrency(order.total)
+    ]);
+    content.push({
+      table: {
+        headerRows: 1,
+        widths: [30, 60, 80, 80, 40, 60, 60, 70],
+        body: [
+          ['STT', 'Cơ sở', 'Mã đơn', 'Tên khách hàng', 'Phòng', 'Ngày nhận', 'Ngày trả', 'Tổng tiền'].map(t => ({ text: t, bold: true, fillColor: '#f0f0f0' })),
+          ...orderRows
+        ]
+      },
+      layout: 'lightHorizontalLines',
+      fontSize: 9
+    });
+  }
+
+  // Tổng kết cuối report
+  content.push(createSectionHeader('Tổng kết doanh thu'));
+  content.push({
+    table: {
+      widths: ['*', '*'],
+      body: [
+        ['Tổng số đơn', data.totalBookings],
+        ['Tổng doanh thu', formatCurrency(data.totalRevenue)],
+        ['Doanh thu trung bình/đơn', formatCurrency(data.averageBookingValue)]
+      ]
+    },
+    layout: 'lightHorizontalLines',
+    margin: [0,0,0,10]
   });
 
   return content;
@@ -142,45 +182,75 @@ const buildRevenueContent = (data: any) => {
 const buildRoomsContent = (data: any) => {
     const content: any[] = [];
 
-    // KPI Phòng
-    content.push(createSectionHeader('Tổng quan phòng'));
+    // Tiêu đề section
+    content.push(createSectionHeader('BÁO CÁO CÔNG SUẤT PHÒNG'));
+
+    // KPI tổng quan
     content.push(createKPIGrid([
-        { label: 'TỔNG SỐ PHÒNG', value: data.totalRooms },
-        { label: 'ĐANG SỬ DỤNG', value: data.occupiedRooms, color: '#e67e22' },
-        { label: 'PHÒNG TRỐNG', value: data.availableRooms, color: '#27ae60' },
-        { label: 'CÔNG SUẤT', value: formatPercent(data.occupancyRate) }
+      { label: 'TỔNG SỐ PHÒNG', value: data.totalRooms },
+      { label: 'ĐANG SỬ DỤNG', value: data.occupiedRooms },
+      { label: 'PHÒNG TRỐNG', value: data.availableRooms },
+      { label: 'CÔNG SUẤT TB', value: formatPercent(data.occupancyRate) }
     ]));
 
-    // Top Phòng
-    content.push(createSectionHeader('Xếp hạng hiệu quả phòng'));
-    const roomRows = (data.topRooms || []).map((r: any, idx: number) => {
-        let medal = '';
-        if (idx === 0) medal = '🥇 ';
-        if (idx === 1) medal = '🥈 ';
-        if (idx === 2) medal = '🥉 ';
-        
-        return [
-            medal + r.name,
-            { text: r.bookings, alignment: 'center' },
-            { text: formatCurrency(r.revenue), alignment: 'right', color: '#27ae60', bold: true },
-            drawProgressBar((r.revenue / (data.totalRevenue || 1)) * 100, '#2ecc71') // Thanh % doanh thu đóng góp
-        ];
+    // Bảng chi tiết công suất phòng
+    content.push(createSectionHeader('Bảng chi tiết công suất phòng'));
+    const detailsRows = (data.roomUsageDetails || []).map((room: any, idx: number) => [
+      idx + 1,
+      room.branch || '-',
+      `${room.room}${room.type ? ' (' + room.type + ')' : ''}`,
+      room.usedDays,
+      room.availableDays,
+      { text: formatPercent(room.occupancy), alignment: 'center' },
+      { stack: [
+        { text: formatPercent(room.occupancy), alignment: 'center' },
+        drawProgressBar(room.occupancy, '#8b5cf6')
+      ], alignment: 'center' },
+      room.bookings
+    ]);
+    content.push({
+      table: {
+        headerRows: 1,
+        widths: [30, 60, 80, 50, 50, 50, 70, 50],
+        body: [
+          ['STT', 'Cơ sở', 'Phòng / Loại phòng', 'Số ngày sử dụng', 'Số ngày khả dụng', 'Công suất (%)', 'Thanh %', 'Số lượt đặt'].map(t => ({ text: t, bold: true, fillColor: '#f0f0f0' })),
+          ...detailsRows
+        ]
+      },
+      layout: 'lightHorizontalLines',
+      fontSize: 9
     });
 
+    // Tổng kết cuối report
+    content.push(createSectionHeader('Tổng kết công suất phòng'));
+    // Công suất trung bình toàn cơ sở
+    const avgOccupancy = data.roomUsageDetails && data.roomUsageDetails.length > 0
+      ? (data.roomUsageDetails.reduce((sum: number, r: any) => sum + r.occupancy, 0) / data.roomUsageDetails.length)
+      : 0;
+    // Phòng cao nhất/thấp nhất
+    let maxRoom = null, minRoom = null;
+    if (data.roomUsageDetails && data.roomUsageDetails.length > 0) {
+      maxRoom = data.roomUsageDetails.reduce((a: any, b: any) => (a.occupancy > b.occupancy ? a : b));
+      minRoom = data.roomUsageDetails.reduce((a: any, b: any) => (a.occupancy < b.occupancy ? a : b));
+    }
+    // Tổng số phòng được sử dụng trong kỳ
+    const usedRoomsCount = data.roomUsageDetails ? data.roomUsageDetails.filter((r: any) => r.usedDays > 0).length : 0;
     content.push({
-        table: {
-            headerRows: 1,
-            widths: ['*', 'auto', 'auto', 100],
-            body: [
-                ['Tên phòng', 'Số lượt đặt', 'Doanh thu', 'Tỷ trọng'].map(t => ({ text: t, bold: true, fillColor: '#f0f0f0' })),
-                ...roomRows
-            ]
-        },
-        layout: 'lightHorizontalLines'
+      table: {
+      widths: ['*', '*'],
+      body: [
+        ['Công suất trung bình toàn cơ sở', formatPercent(avgOccupancy)],
+        ['Phòng/loại phòng có công suất cao nhất', maxRoom ? `${maxRoom.room}${maxRoom.type ? ' (' + maxRoom.type + ')' : ''} - ${formatPercent(maxRoom.occupancy)}` : '-'],
+        ['Phòng/loại phòng có công suất thấp nhất', minRoom ? `${minRoom.room}${minRoom.type ? ' (' + minRoom.type + ')' : ''} - ${formatPercent(minRoom.occupancy)}` : '-'],
+        ['Tổng số phòng được sử dụng trong kỳ', usedRoomsCount]
+      ]
+      },
+      layout: 'lightHorizontalLines',
+      margin: [0,0,0,10]
     });
 
     return content;
-}
+  }
 
 // 4. REPORT KHÁCH HÀNG (Customers)
 const buildCustomersContent = (data: any) => {

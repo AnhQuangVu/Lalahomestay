@@ -7,6 +7,16 @@ import {
 } from 'lucide-react';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
+interface RoomUsageDetail {
+  branch: string;
+  room: string;
+  type: string;
+  usedDays: number;
+  availableDays: number;
+  occupancy: number;
+  bookings: number;
+}
+
 interface ReportData {
   totalRooms: number;
   occupiedRooms: number;
@@ -14,6 +24,7 @@ interface ReportData {
   occupancyRate: number;
   totalNights: number;
   topRooms: Array<{ name: string; bookings: number; revenue: number; }>;
+  roomUsageDetails?: RoomUsageDetail[];
 }
 
 interface RoomsReportProps {
@@ -224,54 +235,42 @@ export default function RoomsReport({ reportData, formatCurrency }: RoomsReportP
         )}
       </div>
 
-      {/* Room Performance Table */}
+      {/* Room Usage Details Table */}
       <div className="bg-white rounded-xl shadow-sm p-6">
         <h3 className="text-gray-900 mb-4">Bảng chi tiết hiệu suất phòng</h3>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-200">
-                <th className="text-left py-3 px-4 text-gray-700">Xếp hạng</th>
-                <th className="text-left py-3 px-4 text-gray-700">Tên phòng</th>
+                <th className="text-left py-3 px-4 text-gray-700">Cơ sở</th>
+                <th className="text-left py-3 px-4 text-gray-700">Phòng / Loại phòng</th>
+                <th className="text-center py-3 px-4 text-gray-700">Số ngày sử dụng</th>
+                <th className="text-center py-3 px-4 text-gray-700">Số ngày khả dụng</th>
+                <th className="text-center py-3 px-4 text-gray-700">Công suất (%)</th>
                 <th className="text-center py-3 px-4 text-gray-700">Số lượt đặt</th>
-                <th className="text-right py-3 px-4 text-gray-700">Doanh thu</th>
-                <th className="text-center py-3 px-4 text-gray-700">Hiệu suất</th>
               </tr>
             </thead>
             <tbody>
-              {reportData.topRooms && reportData.topRooms.map((room, index) => {
-                const maxBookings = Math.max(...reportData.topRooms.map(r => r.bookings));
-                const performance = (room.bookings / maxBookings) * 100;
-                
-                return (
-                  <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-3 px-4">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                        index === 0 ? 'bg-yellow-100 text-yellow-600' :
-                        index === 1 ? 'bg-gray-100 text-gray-600' :
-                        index === 2 ? 'bg-orange-100 text-orange-600' :
-                        'bg-blue-100 text-blue-600'
-                      }`}>
-                        #{index + 1}
+              {reportData.roomUsageDetails && reportData.roomUsageDetails.map((room, idx) => (
+                <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="py-3 px-4">{room.branch}</td>
+                  <td className="py-3 px-4 text-gray-900">{room.room} {room.type ? `(${room.type})` : ''}</td>
+                  <td className="py-3 px-4 text-center">{room.usedDays}</td>
+                  <td className="py-3 px-4 text-center">{room.availableDays}</td>
+                  <td className="py-3 px-4 text-center">
+                    <div className="flex flex-col items-center">
+                      <span>{room.occupancy}%</span>
+                      <div className="w-24 h-2 bg-gray-200 rounded mt-1">
+                        <div
+                          className="h-2 rounded bg-purple-500"
+                          style={{ width: `${room.occupancy}%` }}
+                        />
                       </div>
-                    </td>
-                    <td className="py-3 px-4 text-gray-900">{room.name}</td>
-                    <td className="py-3 px-4 text-center text-gray-900">{room.bookings}</td>
-                    <td className="py-3 px-4 text-right text-gray-900">{formatCurrency(room.revenue)}</td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center justify-center space-x-2">
-                        <div className="w-24 bg-gray-200 rounded-full h-2">
-                          <div 
-                            className="bg-purple-600 h-2 rounded-full" 
-                            style={{ width: `${performance}%` }}
-                          />
-                        </div>
-                        <span className="text-sm text-gray-600">{performance.toFixed(0)}%</span>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+                    </div>
+                  </td>
+                  <td className="py-3 px-4 text-center">{room.bookings}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
