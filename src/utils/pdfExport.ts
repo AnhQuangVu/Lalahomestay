@@ -253,46 +253,124 @@ const buildRoomsContent = (data: any) => {
   }
 
 // 4. REPORT KHÁCH HÀNG (Customers)
+// 4. REPORT KHÁCH HÀNG (Fixed Layout & Data)
 const buildCustomersContent = (data: any) => {
-    const content: any[] = [];
-    
-    // KPI
-    const newRate = data.totalCustomers ? (data.newCustomers / data.totalCustomers) * 100 : 0;
-    content.push(createSectionHeader('Phân tích khách hàng'));
-    content.push(createKPIGrid([
-        { label: 'TỔNG KHÁCH', value: data.totalCustomers },
-        { label: 'KHÁCH MỚI', value: data.newCustomers, subtext: `(${formatPercent(newRate)})` },
-        { label: 'KHÁCH CŨ', value: data.totalCustomers - data.newCustomers },
-        { label: 'DOANH THU/KHÁCH', value: formatCurrency(data.totalCustomers ? Math.round(data.totalRevenue/data.totalCustomers) : 0) }
-    ]));
+  const content: any[] = [];
+  // --- TÍNH TOÁN DỮ LIỆU CÒN THIẾU TẠI FRONTEND ---
+  // Backend trả về list đã sort theo booking trong kỳ, nên phần tử đầu tiên là Top trong kỳ
+  const customerList = data.customersList || [];
+  const topCustomerPeriod = customerList.length > 0 ? customerList[0] : null;
+  // Tìm khách có tổng lượt đặt tích lũy cao nhất
+  // Clone mảng để không ảnh hưởng thứ tự mảng gốc
+  const topCustomerOverall = customerList.length > 0 
+    ? [...customerList].sort((a: any, b: any) => b.totalBookings - a.totalBookings)[0]
+    : null;
 
-    // Nguồn khách
-    content.push(createSectionHeader('Nguồn đặt phòng'));
-    const totalSources = (data.bookingSources || []).reduce((sum:any, s:any) => sum + s.count, 0);
-    
-    const sourceRows = (data.bookingSources || []).map((s: any) => {
-        const percent = totalSources ? (s.count / totalSources) * 100 : 0;
-        return [
-            s.source,
-            { text: s.count, alignment: 'center' },
-            { text: formatPercent(percent), alignment: 'right' },
-            drawProgressBar(percent, '#9b59b6')
-        ];
-    });
+  // KPI Header
+  const newRate = data.totalCustomers ? (data.newCustomers / data.totalCustomers) * 100 : 0;
+  content.push(createSectionHeader('Phân tích khách hàng'));
+  content.push(createKPIGrid([
+    { label: 'TỔNG KHÁCH', value: data.totalCustomers },
+    { label: 'KHÁCH MỚI', value: data.newCustomers, subtext: `(${formatPercent(newRate)})` },
+    { label: 'KHÁCH CŨ', value: data.totalCustomers - data.newCustomers },
+    { label: 'DOANH THU/KHÁCH', value: formatCurrency(data.totalCustomers ? Math.round(data.totalRevenue/data.totalCustomers) : 0) }
+  ]));
 
-    content.push({
-        table: {
-            headerRows: 1,
-            widths: ['*', 'auto', 'auto', 150],
-            body: [
-                ['Kênh đặt phòng', 'Số lượng', 'Tỷ lệ', 'Biểu đồ'].map(t => ({ text: t, bold: true, fillColor: '#f0f0f0' })),
-                ...sourceRows
-            ]
-        },
-        layout: 'lightHorizontalLines'
-    });
+  // Bảng danh sách khách hàng chi tiết (Đã sửa lại column cho vừa khổ giấy A4)
+  content.push(createSectionHeader('Danh sách khách hàng tiêu biểu trong kỳ'));
+  // Chỉ lấy Top 50 khách để tránh file PDF quá nặng nếu danh sách dài
+  const displayList = customerList.slice(0, 50); 
 
-    return content;
+  const customerRows = displayList.map((c: any, idx: number) => [
+    idx + 1,
+    { text: c.name || '-', bold: true }, // Tên
+    c.phone || '-',                      // SĐT
+    c.email || '-',                      // Email
+    { text: c.bookingsInPeriod || 0, alignment: 'center' }, // Đặt trong kỳ
+    { text: c.totalBookings || 0, alignment: 'center' },    // Tích lũy
+    { text: c.lastStayDate || '-', alignment: 'center', fontSize: 9 } // Ngày check-in cuối
+  ]);
+
+  content.push({
+    table: {
+      headerRows: 1,
+      // Tổng width ~ 515 là đẹp. 
+      // widths: [STT, Tên, SĐT, Email, Kỳ, Tổng, Ngày]
+      widths: [25, '*', 75, 90, 50, 50, 65], 
+      body: [
+        [
+          'STT',
+          'Tên khách hàng',
+          'Số điện thoại',
+          'Email',
+          'Đơn kỳ',
+          'Tổng đơn',
+          'Gần nhất'
+        ].map(t => ({ text: t, bold: true, fillColor: '#f0f0f0', fontSize: 9 })),
+        ...customerRows
+      ]
+    },
+    layout: 'lightHorizontalLines',
+    fontSize: 9
+  });
+  
+  if (customerList.length > 50) {
+    content.push({ text: `...và còn ${customerList.length - 50} khách hàng khác.`, italics: true, fontSize: 9, margin: [0, 5, 0, 0] });
+  }
+
+  // Tổng kết cuối report (Sử dụng dữ liệu đã tính toán ở trên)
+  content.push(createSectionHeader('Tổng kết khách hàng'));
+  content.push({
+    table: {
+      widths: ['*', '*'],
+      body: [
+        ['Tổng số khách trong kỳ', data.totalCustomers],
+        ['Số khách mới', data.newCustomers],
+        ['Số khách quay lại', data.totalCustomers - data.newCustomers],
+        [
+            'Khách đặt nhiều nhất trong kỳ', 
+            topCustomerPeriod 
+                ? `${topCustomerPeriod.name} (${topCustomerPeriod.bookingsInPeriod} lượt)` 
+                : '-'
+        ],
+        [
+            'Khách thân thiết nhất (Tích lũy)', 
+            topCustomerOverall 
+                ? `${topCustomerOverall.name} (${topCustomerOverall.totalBookings} lượt)` 
+                : '-'
+        ]
+      ]
+    },
+    layout: 'lightHorizontalLines',
+    margin: [0,0,0,10]
+  });
+
+  // Nguồn khách (Booking Sources)
+  content.push(createSectionHeader('Nguồn đặt phòng'));
+  const totalSources = (data.bookingSources || []).reduce((sum:any, s:any) => sum + s.count, 0);
+  const sourceRows = (data.bookingSources || []).map((s: any) => {
+    const percent = totalSources ? (s.count / totalSources) * 100 : 0;
+    return [
+      s.source,
+      { text: s.count, alignment: 'center' },
+      { text: formatPercent(percent), alignment: 'right' },
+      drawProgressBar(percent, '#9b59b6')
+    ];
+  });
+  
+  content.push({
+    table: {
+      headerRows: 1,
+      widths: ['*', 'auto', 'auto', 150],
+      body: [
+        ['Kênh đặt phòng', 'Số lượng', 'Tỷ lệ', 'Biểu đồ'].map(t => ({ text: t, bold: true, fillColor: '#f0f0f0' })),
+        ...sourceRows
+      ]
+    },
+    layout: 'lightHorizontalLines'
+  });
+
+  return content;
 }
 
 // 5. REPORT BOOKINGS (Đặt phòng)

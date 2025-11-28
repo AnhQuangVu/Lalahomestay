@@ -14,6 +14,14 @@ interface ReportData {
   totalRevenue: number;
   averageBookingValue: number;
   dailyRevenue: Array<{ date: string; revenue: number; bookings: number; }>;
+  customersList?: Array<{
+    name: string;
+    phone: string;
+    email: string;
+    bookingsInPeriod: number;
+    totalBookings: number;
+    lastStayDate: string;
+  }>;
 }
 
 interface CustomersReportProps {
@@ -308,6 +316,38 @@ export default function CustomersReport({ reportData, formatCurrency }: Customer
           </div>
         </div>
       </div>
+      {/* Customer List Table */}
+      {reportData.customersList && reportData.customersList.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm p-6 mt-6">
+          <h3 className="text-gray-900 mb-4">Danh sách khách hàng trong kỳ</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-3 px-4 text-gray-700">Tên khách hàng</th>
+                  <th className="text-left py-3 px-4 text-gray-700">Số điện thoại</th>
+                  <th className="text-left py-3 px-4 text-gray-700">Email</th>
+                  <th className="text-center py-3 px-4 text-gray-700">Số lần đặt trong kỳ</th>
+                  <th className="text-center py-3 px-4 text-gray-700">Tổng số lần đặt tích lũy</th>
+                  <th className="text-center py-3 px-4 text-gray-700">Ngày lưu trú gần nhất</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reportData.customersList.map((customer: any, idx: number) => (
+                  <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-3 px-4 text-gray-900">{customer.name}</td>
+                    <td className="py-3 px-4">{customer.phone}</td>
+                    <td className="py-3 px-4">{customer.email}</td>
+                    <td className="py-3 px-4 text-center">{customer.bookingsInPeriod}</td>
+                    <td className="py-3 px-4 text-center">{customer.totalBookings}</td>
+                    <td className="py-3 px-4 text-center">{customer.lastStayDate}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
