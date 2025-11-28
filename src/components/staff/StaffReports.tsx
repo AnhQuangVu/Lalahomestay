@@ -1,4 +1,19 @@
-// Mock dữ liệu hoạt động lễ tân trong ca
+import { useState, useEffect } from 'react';
+import pdfMake from 'pdfmake/build/pdfmake';
+import pdfFonts from 'pdfmake/build/vfs_fonts';
+import { Download, Calendar, TrendingUp, Home, CheckCircle, XCircle, Users, BarChart3 } from 'lucide-react';
+import { format, subDays } from 'date-fns';
+import { vi } from 'date-fns/locale';
+import { toast } from 'sonner';
+
+// Import cấu hình Supabase của bạn
+import { projectId, publicAnonKey } from '../../utils/supabase/info';
+
+// Cấu hình font cho pdfMake
+pdfMake.vfs = pdfFonts.vfs;
+
+// --- MOCK DATA & INTERFACES ---
+
 interface ReceptionEvent {
   time: string;
   type: string;
@@ -14,15 +29,6 @@ const mockReceptionEvents: ReceptionEvent[] = [
   { time: '10:20', type: 'Hủy đơn', code: 'LALA-20251121-7890', customer: 'Hoàng Tú Kiều', room: '', note: 'Khách đổi lịch' },
   { time: '11:00', type: 'Check-out', code: 'LALA-20251121-5487', customer: 'Nguyễn An', room: '101', note: 'Trả phòng sớm' },
 ];
-import { useState, useEffect } from 'react';
-import pdfMake from 'pdfmake/build/pdfmake';
-import pdfFonts from 'pdfmake/build/vfs_fonts';
-pdfMake.vfs = pdfFonts.vfs;
-import { Download, Calendar, TrendingUp, Home, CheckCircle, XCircle, Users, BarChart3 } from 'lucide-react';
-import { format, subDays } from 'date-fns';
-import { vi } from 'date-fns/locale';
-import { projectId, publicAnonKey } from '../../utils/supabase/info';
-import { toast } from 'sonner';
 
 interface DailyRoomStat {
   date: string;
@@ -33,16 +39,13 @@ interface DailyRoomStat {
   occupancy: number;
 }
 
+// --- COMPONENT CHÍNH ---
+
 export default function StaffReports() {
   const [startDate, setStartDate] = useState(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [reportData, setReportData] = useState<DailyRoomStat[]>([]);
   const [loading, setLoading] = useState(false);
-
-  // Chỉ fetch khi nhấn nút 'Xem báo cáo'
-  // useEffect(() => {
-  //   fetchReportData();
-  // }, [startDate, endDate]);
 
   const fetchReportData = async () => {
     setLoading(true);
@@ -62,6 +65,7 @@ export default function StaffReports() {
       }
     } catch (error) {
       console.error('Error fetching room report:', error);
+      toast.error('Có lỗi khi tải dữ liệu báo cáo');
     } finally {
       setLoading(false);
     }
@@ -195,7 +199,7 @@ export default function StaffReports() {
   }
 
   // KPI lễ tân
-  const events = mockReceptionEvents; // Thay bằng dữ liệu thực tế nếu có
+  const events = mockReceptionEvents; 
   const kpiCreated = events.filter(e => e.type.toLowerCase().includes('tạo đơn')).length;
   const kpiCheckin = events.filter(e => e.type.toLowerCase().includes('check-in')).length;
   const kpiCheckout = events.filter(e => e.type.toLowerCase().includes('check-out')).length;
@@ -391,15 +395,14 @@ export default function StaffReports() {
                 return;
               }
               const exportTime = new Date().toLocaleString('vi-VN');
-              // Tự động xác định ca trực
               const hour = new Date().getHours();
               let caTruc = '';
               if (hour >= 6 && hour < 14) caTruc = 'Ca sáng';
               else if (hour >= 14 && hour < 22) caTruc = 'Ca chiều';
               else caTruc = 'Ca tối';
-              const nhanVien = 'Nguyễn Văn A'; // Sửa lại nếu có dữ liệu thực tế
+              const nhanVien = 'Nguyễn Văn A';
               const timeRange = caTruc === 'Ca sáng' ? '06:00 - 14:00' : caTruc === 'Ca chiều' ? '14:00 - 22:00' : '22:00 - 06:00';
-              // Bảng hoạt động
+              
               const tableBody = [
                 ['STT', 'Thời gian', 'Hoạt động', 'Mã đơn', 'Tên khách hàng', 'Phòng', 'Ghi chú / Diễn giải'].map(t => ({ text: t, bold: true, fillColor: '#f0f0f0' })),
                 ...events.map((e, idx) => [
@@ -412,7 +415,7 @@ export default function StaffReports() {
                   e.note || '-'
                 ])
               ];
-              // Tổng kết cuối báo cáo
+              
               const summaryRows = [
                 ['Tổng số hoạt động', events.length],
                 ['Số đơn tạo mới', kpiCreated],
@@ -420,13 +423,13 @@ export default function StaffReports() {
                 ['Số check-out', kpiCheckout],
                 ['Số đơn hủy', kpiCancel]
               ];
-              // PDF
+              
               const docDefinition = {
                 content: [
-                  { text: 'BÁO CÁO HOẠT ĐỘNG LỄ TÂN TRONG CA', style: 'header', alignment: 'center', margin: [0,0,0,10] },
-                  { text: `Ca trực: ${caTruc} | Thời gian: ${timeRange} | Nhân viên: ${nhanVien}`, style: 'subheader', alignment: 'center', margin: [0,0,0,10] },
-                  { text: `Thời gian xuất: ${exportTime}`, style: 'subheader', alignment: 'center', margin: [0,0,0,10] },
-                  { text: 'BẢNG HOẠT ĐỘNG TRONG CA', style: 'sectionHeader', margin: [0,10,0,6] },
+                  { text: 'BÁO CÁO HOẠT ĐỘNG LỄ TÂN TRONG CA', style: 'header', alignment: 'center', margin: [0, 0, 0, 10] },
+                  { text: `Ca trực: ${caTruc} | Thời gian: ${timeRange} | Nhân viên: ${nhanVien}`, style: 'subheader', alignment: 'center', margin: [0, 0, 0, 10] },
+                  { text: `Thời gian xuất: ${exportTime}`, style: 'subheader', alignment: 'center', margin: [0, 0, 0, 10] },
+                  { text: 'BẢNG HOẠT ĐỘNG TRONG CA', style: 'sectionHeader', margin: [0, 10, 0, 6] },
                   {
                     table: {
                       headerRows: 1,
@@ -436,14 +439,14 @@ export default function StaffReports() {
                     layout: 'lightHorizontalLines',
                     fontSize: 9
                   },
-                  { text: 'TỔNG KẾT CUỐI BÁO CÁO', style: 'sectionHeader', margin: [0,10,0,6] },
+                  { text: 'TỔNG KẾT CUỐI BÁO CÁO', style: 'sectionHeader', margin: [0, 10, 0, 6] },
                   {
                     table: {
                       widths: ['*', '*'],
                       body: summaryRows
                     },
                     layout: 'lightHorizontalLines',
-                    margin: [0,0,0,10]
+                    margin: [0, 0, 0, 10]
                   },
                   { text: '\nBáo cáo được tạo tự động từ hệ thống quản lý Lala House.', style: 'footer', alignment: 'center', color: '#7f8c8d', fontSize: 9 }
                 ],
@@ -468,209 +471,208 @@ export default function StaffReports() {
         </div>
       </div>
 
-        {/* Header */}
-        <div className="mb-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Chi tiết công suất theo ngày</h2>
-          <p className="text-gray-600">
-            Từ {format(new Date(startDate), 'dd/MM/yyyy', { locale: vi })} đến {format(new Date(endDate), 'dd/MM/yyyy', { locale: vi })}
-          </p>
-        </div>
+      {/* Header cho bảng chi tiết */}
+      <div className="mb-6">
+        <h2 className="text-xl font-bold text-gray-900 mb-2">Chi tiết công suất theo ngày</h2>
+        <p className="text-gray-600">
+          Từ {format(new Date(startDate), 'dd/MM/yyyy', { locale: vi })} đến {format(new Date(endDate), 'dd/MM/yyyy', { locale: vi })}
+        </p>
+      </div>
 
-        {/* Report Table */}
-        <div className="overflow-x-auto rounded-lg border border-gray-200">
-          {reportData.length > 0 ? (
-            <table className="w-full">
-              <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
-                <tr>
-                  <th className="text-left py-4 px-4 text-gray-700 font-semibold">Ngày</th>
-                  <th className="text-center py-4 px-4 text-gray-700 font-semibold">
-                    <Home className="w-4 h-4 inline mr-1" />
-                    Phòng trống
-                  </th>
-                  <th className="text-center py-4 px-4 text-gray-700 font-semibold">
-                    <XCircle className="w-4 h-4 inline mr-1" />
-                    Dự kiến trả
-                  </th>
-                  <th className="text-center py-4 px-4 text-gray-700 font-semibold">
-                    <CheckCircle className="w-4 h-4 inline mr-1" />
-                    Dự kiến nhận
-                  </th>
-                  <th className="text-center py-4 px-4 text-gray-700 font-semibold">
-                    <Users className="w-4 h-4 inline mr-1" />
-                    Đang sử dụng
-                  </th>
-                  <th className="text-center py-4 px-4 text-gray-700 font-semibold">
-                    <TrendingUp className="w-4 h-4 inline mr-1" />
-                    Công suất
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-100">
-                {reportData.map((row, index) => (
-                  <tr key={index} className="hover:bg-purple-50 transition-colors">
-                    <td className="py-4 px-4">
-                      <span className="font-medium text-gray-900">{row.date}</span>
-                    </td>
-                    <td className="py-4 px-4 text-center">
-                      <span className="inline-flex items-center justify-center w-10 h-10 bg-blue-100 text-blue-700 rounded-lg font-bold">
-                        {row.emptyRooms}
-                      </span>
-                    </td>
-                    <td className="py-4 px-4 text-center">
-                      <span className="inline-flex items-center justify-center w-10 h-10 bg-red-100 text-red-700 rounded-lg font-bold">
-                        {row.checkouts}
-                      </span>
-                    </td>
-                    <td className="py-4 px-4 text-center">
-                      <span className="inline-flex items-center justify-center w-10 h-10 bg-green-100 text-green-700 rounded-lg font-bold">
-                        {row.checkins}
-                      </span>
-                    </td>
-                    <td className="py-4 px-4 text-center">
-                      <span className="inline-flex items-center justify-center w-10 h-10 bg-orange-100 text-orange-700 rounded-lg font-bold">
-                        {row.occupied}
-                      </span>
-                    </td>
-                    <td className="py-4 px-4 text-center">
-                      <span className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-bold ${row.occupancy >= 80 ? 'bg-emerald-100 text-emerald-700' :
-                        row.occupancy >= 60 ? 'bg-yellow-100 text-yellow-700' :
-                          row.occupancy >= 40 ? 'bg-orange-100 text-orange-700' :
-                            'bg-red-100 text-red-700'
-                        }`}>
-                        {row.occupancy}%
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot className="bg-gradient-to-r from-gray-50 to-gray-100 font-bold">
-                <tr>
-                  <td className="py-4 px-4 text-gray-900">TỔNG / TRUNG BÌNH</td>
-                  <td className="py-4 px-4 text-center text-blue-600">
-                    {reportData.reduce((sum, r) => sum + r.emptyRooms, 0)}
+      {/* Report Table */}
+      <div className="overflow-x-auto rounded-lg border border-gray-200">
+        {reportData.length > 0 ? (
+          <table className="w-full">
+            <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+              <tr>
+                <th className="text-left py-4 px-4 text-gray-700 font-semibold">Ngày</th>
+                <th className="text-center py-4 px-4 text-gray-700 font-semibold">
+                  <Home className="w-4 h-4 inline mr-1" />
+                  Phòng trống
+                </th>
+                <th className="text-center py-4 px-4 text-gray-700 font-semibold">
+                  <XCircle className="w-4 h-4 inline mr-1" />
+                  Dự kiến trả
+                </th>
+                <th className="text-center py-4 px-4 text-gray-700 font-semibold">
+                  <CheckCircle className="w-4 h-4 inline mr-1" />
+                  Dự kiến nhận
+                </th>
+                <th className="text-center py-4 px-4 text-gray-700 font-semibold">
+                  <Users className="w-4 h-4 inline mr-1" />
+                  Đang sử dụng
+                </th>
+                <th className="text-center py-4 px-4 text-gray-700 font-semibold">
+                  <TrendingUp className="w-4 h-4 inline mr-1" />
+                  Công suất
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-100">
+              {reportData.map((row, index) => (
+                <tr key={index} className="hover:bg-purple-50 transition-colors">
+                  <td className="py-4 px-4">
+                    <span className="font-medium text-gray-900">{row.date}</span>
                   </td>
-                  <td className="py-4 px-4 text-center text-red-600">
-                    {reportData.reduce((sum, r) => sum + r.checkouts, 0)}
+                  <td className="py-4 px-4 text-center">
+                    <span className="inline-flex items-center justify-center w-10 h-10 bg-blue-100 text-blue-700 rounded-lg font-bold">
+                      {row.emptyRooms}
+                    </span>
                   </td>
-                  <td className="py-4 px-4 text-center text-green-600">
-                    {reportData.reduce((sum, r) => sum + r.checkins, 0)}
+                  <td className="py-4 px-4 text-center">
+                    <span className="inline-flex items-center justify-center w-10 h-10 bg-red-100 text-red-700 rounded-lg font-bold">
+                      {row.checkouts}
+                    </span>
                   </td>
-                  <td className="py-4 px-4 text-center text-orange-600">
-                    {reportData.reduce((sum, r) => sum + r.occupied, 0)}
+                  <td className="py-4 px-4 text-center">
+                    <span className="inline-flex items-center justify-center w-10 h-10 bg-green-100 text-green-700 rounded-lg font-bold">
+                      {row.checkins}
+                    </span>
                   </td>
-                  <td className="py-4 px-4 text-center text-purple-600 text-lg">
-                    {(reportData.reduce((sum, r) => sum + r.occupancy, 0) / reportData.length).toFixed(1)}%
+                  <td className="py-4 px-4 text-center">
+                    <span className="inline-flex items-center justify-center w-10 h-10 bg-orange-100 text-orange-700 rounded-lg font-bold">
+                      {row.occupied}
+                    </span>
+                  </td>
+                  <td className="py-4 px-4 text-center">
+                    <span className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-bold ${row.occupancy >= 80 ? 'bg-emerald-100 text-emerald-700' :
+                      row.occupancy >= 60 ? 'bg-yellow-100 text-yellow-700' :
+                        row.occupancy >= 40 ? 'bg-orange-100 text-orange-700' :
+                          'bg-red-100 text-red-700'
+                      }`}>
+                      {row.occupancy}%
+                    </span>
                   </td>
                 </tr>
-              </tfoot>
-            </table>
-          ) : (
-            <div className="text-center py-16">
-              <Calendar className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-              <p className="text-gray-500 text-lg">Không có dữ liệu trong khoảng thời gian này</p>
-              <p className="text-gray-400 text-sm mt-2">Chọn khoảng thời gian khác để xem báo cáo</p>
-            </div>
-          )}
-        </div>
-
-        {/* Footer Actions */}
-        {reportData.length > 0 && (
-          <div className="mt-8 pt-6 border-t-2 border-gray-200">
-            <div className="flex items-center justify-between text-sm mb-6">
-              <div className="space-y-1">
-                <p className="text-gray-600">
-                  <span className="font-semibold text-gray-900">Khoảng thời gian:</span> {format(new Date(startDate), 'dd/MM/yyyy', { locale: vi })} - {format(new Date(endDate), 'dd/MM/yyyy', { locale: vi })}
-                </p>
-                <p className="text-gray-600">
-                  <span className="font-semibold text-gray-900">Tổng ngày:</span> {reportData.length} ngày
-                </p>
-              </div>
-              <div className="text-right space-y-1">
-                <p className="text-gray-600">
-                  <span className="font-semibold text-gray-900">Cơ sở:</span> LaLa House Homestay
-                </p>
-                <p className="text-gray-600">
-                  <span className="font-semibold text-gray-900">Thời gian tạo:</span> {format(new Date(), 'HH:mm:ss', { locale: vi })}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-4">
-              <button
-                onClick={handleExport}
-                disabled={reportData.length === 0}
-                className="flex items-center space-x-2 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-lg transition-all hover:shadow-xl disabled:bg-gray-400 disabled:cursor-not-allowed disabled:shadow-none"
-              >
-                <Download className="w-5 h-5" />
-                <span className="font-medium">Xuất Excel</span>
-              </button>
-              <button
-                onClick={() => {
-                  if (reportData.length === 0) {
-                    toast.error('Không có dữ liệu để xuất PDF');
-                    return;
-                  }
-                  const exportTime = new Date().toLocaleString('vi-VN');
-                  const docDefinition = {
-                    content: [
-                      { text: 'LALA HOUSE - BÁO CÁO CÔNG SUẤT PHÒNG', style: 'header', alignment: 'center', margin: [0,0,0,10] },
-                      { text: `Từ ngày: ${format(new Date(startDate), 'dd/MM/yyyy', { locale: vi })} đến ${format(new Date(endDate), 'dd/MM/yyyy', { locale: vi })}`, style: 'subheader', alignment: 'center' },
-                      { text: `Thời gian xuất: ${exportTime}`, style: 'subheader', alignment: 'center', margin: [0,0,0,10] },
-                      { text: 'CHI TIẾT CÔNG SUẤT THEO NGÀY', style: 'sectionHeader', margin: [0,10,0,6] },
-                      {
-                        table: {
-                          headerRows: 1,
-                          widths: [60, 60, 60, 60, 60, 60, 60],
-                          body: [
-                            ['Ngày', 'Phòng trống', 'Dự kiến trả', 'Dự kiến nhận', 'Đang sử dụng', 'Công suất (%)', 'Đánh giá'].map(t => ({ text: t, bold: true, fillColor: '#f0f0f0' })),
-                            ...reportData.map(r => [
-                              r.date,
-                              r.emptyRooms,
-                              r.checkouts,
-                              r.checkins,
-                              r.occupied,
-                              r.occupancy + '%',
-                              r.occupancy >= 80 ? '✓ Cao' : r.occupancy >= 60 ? '✓ Tốt' : r.occupancy >= 40 ? '⚠️ TB' : '✗ Thấp'
-                            ]),
-                            [
-                              { text: 'TỔNG / TB', bold: true },
-                              reportData.reduce((sum, r) => sum + r.emptyRooms, 0),
-                              reportData.reduce((sum, r) => sum + r.checkouts, 0),
-                              reportData.reduce((sum, r) => sum + r.checkins, 0),
-                              reportData.reduce((sum, r) => sum + r.occupied, 0),
-                              (reportData.reduce((sum, r) => sum + r.occupancy, 0) / reportData.length).toFixed(1) + '%',
-                              ''
-                            ]
-                          ]
-                        },
-                        layout: 'lightHorizontalLines',
-                        fontSize: 9
-                      },
-                      { text: '\nBáo cáo được tạo tự động từ hệ thống quản lý Lala House.', style: 'footer', alignment: 'center', color: '#7f8c8d', fontSize: 9 }
-                    ],
-                    styles: {
-                      header: { fontSize: 16, bold: true, color: '#2c3e50' },
-                      subheader: { fontSize: 11, color: '#555' },
-                      sectionHeader: { fontSize: 12, bold: true, color: '#34495e', decoration: 'underline', decorationStyle: 'dotted' },
-                      footer: { fontSize: 9, color: '#7f8c8d', italics: true }
-                    },
-                    defaultStyle: {
-                      font: 'Roboto',
-                      fontSize: 10
-                    }
-                  };
-                  pdfMake.createPdf(docDefinition).download(`BaoCaoCongSuatPhong-${startDate}-${endDate}.pdf`);
-                }}
-                disabled={reportData.length === 0}
-                className="flex items-center space-x-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-lg transition-all hover:shadow-xl disabled:bg-gray-400 disabled:cursor-not-allowed disabled:shadow-none"
-              >
-                <Download className="w-5 h-5" />
-                <span className="font-medium">Xuất PDF</span>
-              </button>
-            </div>
+              ))}
+            </tbody>
+            <tfoot className="bg-gradient-to-r from-gray-50 to-gray-100 font-bold">
+              <tr>
+                <td className="py-4 px-4 text-gray-900">TỔNG / TRUNG BÌNH</td>
+                <td className="py-4 px-4 text-center text-blue-600">
+                  {reportData.reduce((sum, r) => sum + r.emptyRooms, 0)}
+                </td>
+                <td className="py-4 px-4 text-center text-red-600">
+                  {reportData.reduce((sum, r) => sum + r.checkouts, 0)}
+                </td>
+                <td className="py-4 px-4 text-center text-green-600">
+                  {reportData.reduce((sum, r) => sum + r.checkins, 0)}
+                </td>
+                <td className="py-4 px-4 text-center text-orange-600">
+                  {reportData.reduce((sum, r) => sum + r.occupied, 0)}
+                </td>
+                <td className="py-4 px-4 text-center text-purple-600 text-lg">
+                  {(reportData.reduce((sum, r) => sum + r.occupancy, 0) / reportData.length).toFixed(1)}%
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        ) : (
+          <div className="text-center py-16">
+            <Calendar className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+            <p className="text-gray-500 text-lg">Không có dữ liệu trong khoảng thời gian này</p>
+            <p className="text-gray-400 text-sm mt-2">Chọn khoảng thời gian khác để xem báo cáo</p>
           </div>
         )}
       </div>
+
+      {/* Footer Actions (Xuất Excel & PDF Công suất) */}
+      {reportData.length > 0 && (
+        <div className="mt-8 pt-6 border-t-2 border-gray-200">
+          <div className="flex items-center justify-between text-sm mb-6">
+            <div className="space-y-1">
+              <p className="text-gray-600">
+                <span className="font-semibold text-gray-900">Khoảng thời gian:</span> {format(new Date(startDate), 'dd/MM/yyyy', { locale: vi })} - {format(new Date(endDate), 'dd/MM/yyyy', { locale: vi })}
+              </p>
+              <p className="text-gray-600">
+                <span className="font-semibold text-gray-900">Tổng ngày:</span> {reportData.length} ngày
+              </p>
+            </div>
+            <div className="text-right space-y-1">
+              <p className="text-gray-600">
+                <span className="font-semibold text-gray-900">Cơ sở:</span> LaLa House Homestay
+              </p>
+              <p className="text-gray-600">
+                <span className="font-semibold text-gray-900">Thời gian tạo:</span> {format(new Date(), 'HH:mm:ss', { locale: vi })}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-4">
+            <button
+              onClick={handleExport}
+              disabled={reportData.length === 0}
+              className="flex items-center space-x-2 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-lg transition-all hover:shadow-xl disabled:bg-gray-400 disabled:cursor-not-allowed disabled:shadow-none"
+            >
+              <Download className="w-5 h-5" />
+              <span className="font-medium">Xuất Excel</span>
+            </button>
+            <button
+              onClick={() => {
+                if (reportData.length === 0) {
+                  toast.error('Không có dữ liệu để xuất PDF');
+                  return;
+                }
+                const exportTime = new Date().toLocaleString('vi-VN');
+                const docDefinition = {
+                  content: [
+                    { text: 'LALA HOUSE - BÁO CÁO CÔNG SUẤT PHÒNG', style: 'header', alignment: 'center', margin: [0, 0, 0, 10] },
+                    { text: `Từ ngày: ${format(new Date(startDate), 'dd/MM/yyyy', { locale: vi })} đến ${format(new Date(endDate), 'dd/MM/yyyy', { locale: vi })}`, style: 'subheader', alignment: 'center' },
+                    { text: `Thời gian xuất: ${exportTime}`, style: 'subheader', alignment: 'center', margin: [0, 0, 0, 10] },
+                    { text: 'CHI TIẾT CÔNG SUẤT THEO NGÀY', style: 'sectionHeader', margin: [0, 10, 0, 6] },
+                    {
+                      table: {
+                        headerRows: 1,
+                        widths: [60, 60, 60, 60, 60, 60, 60],
+                        body: [
+                          ['Ngày', 'Phòng trống', 'Dự kiến trả', 'Dự kiến nhận', 'Đang sử dụng', 'Công suất (%)', 'Đánh giá'].map(t => ({ text: t, bold: true, fillColor: '#f0f0f0' })),
+                          ...reportData.map(r => [
+                            r.date,
+                            r.emptyRooms,
+                            r.checkouts,
+                            r.checkins,
+                            r.occupied,
+                            r.occupancy + '%',
+                            r.occupancy >= 80 ? '✓ Cao' : r.occupancy >= 60 ? '✓ Tốt' : r.occupancy >= 40 ? '⚠️ TB' : '✗ Thấp'
+                          ]),
+                          [
+                            { text: 'TỔNG / TB', bold: true },
+                            reportData.reduce((sum, r) => sum + r.emptyRooms, 0),
+                            reportData.reduce((sum, r) => sum + r.checkouts, 0),
+                            reportData.reduce((sum, r) => sum + r.checkins, 0),
+                            reportData.reduce((sum, r) => sum + r.occupied, 0),
+                            (reportData.reduce((sum, r) => sum + r.occupancy, 0) / reportData.length).toFixed(1) + '%',
+                            ''
+                          ]
+                        ]
+                      },
+                      layout: 'lightHorizontalLines',
+                      fontSize: 9
+                    },
+                    { text: '\nBáo cáo được tạo tự động từ hệ thống quản lý Lala House.', style: 'footer', alignment: 'center', color: '#7f8c8d', fontSize: 9 }
+                  ],
+                  styles: {
+                    header: { fontSize: 16, bold: true, color: '#2c3e50' },
+                    subheader: { fontSize: 11, color: '#555' },
+                    sectionHeader: { fontSize: 12, bold: true, color: '#34495e', decoration: 'underline', decorationStyle: 'dotted' },
+                    footer: { fontSize: 9, color: '#7f8c8d', italics: true }
+                  },
+                  defaultStyle: {
+                    font: 'Roboto',
+                    fontSize: 10
+                  }
+                };
+                pdfMake.createPdf(docDefinition).download(`BaoCaoCongSuatPhong-${startDate}-${endDate}.pdf`);
+              }}
+              disabled={reportData.length === 0}
+              className="flex items-center space-x-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-lg transition-all hover:shadow-xl disabled:bg-gray-400 disabled:cursor-not-allowed disabled:shadow-none"
+            >
+              <Download className="w-5 h-5" />
+              <span className="font-medium">Xuất PDF</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
