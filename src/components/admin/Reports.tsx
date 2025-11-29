@@ -647,8 +647,6 @@ export default function Reports() {
         return <OverviewReport reportData={reportData} formatCurrency={formatCurrency} />;
       case 'revenue':
         return <RevenueReport reportData={reportData} formatCurrency={formatCurrency} />;
-      case 'bookings':
-        return <BookingsReport reportData={reportData} formatCurrency={formatCurrency} />;
       case 'rooms':
         return <RoomsReport reportData={reportData} formatCurrency={formatCurrency} />;
       case 'customers':
@@ -657,6 +655,9 @@ export default function Reports() {
         return <OverviewReport reportData={reportData} formatCurrency={formatCurrency} />;
     }
   };
+  // Removed bookings report option
+  // case 'bookings':
+  //     return <BookingsReport reportData={reportData} formatCurrency={formatCurrency} />;
 
   if (loading) {
     return (
@@ -687,6 +688,7 @@ export default function Reports() {
           <button
             onClick={() => exportExcelClient()}
             className="flex items-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow transition-colors"
+            disabled={reportType === 'overview'}
           >
             <Download className="w-5 h-5" />
             <span>Xuất Excel</span>
@@ -694,7 +696,7 @@ export default function Reports() {
           <button
             onClick={() => reportData && exportReportPDF({ reportData: sanitizeReportData(reportData), reportType, startDate, endDate })}
             className="flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow transition-colors"
-            disabled={!reportData}
+            disabled={!reportData || reportType === 'overview'}
           >
             <Download className="w-5 h-5" />
             <span>Xuất PDF</span>
@@ -714,7 +716,6 @@ export default function Reports() {
             >
               <option value="overview">Tổng quan</option>
               <option value="revenue">Doanh thu</option>
-              <option value="bookings">Đặt phòng</option>
               <option value="rooms">Phòng</option>
               <option value="customers">Khách hàng</option>
             </select>
