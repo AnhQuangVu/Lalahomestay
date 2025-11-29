@@ -1,23 +1,26 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
-pdfMake.vfs = pdfFonts.vfs;
-import { Download, Calendar, TrendingUp, DollarSign, Users, Clock, CreditCard, AlertCircle, CheckCircle } from 'lucide-react';
+import { Download, Calendar, TrendingUp, DollarSign, Users, Clock, CreditCard, AlertCircle, CheckCircle, Home, LogIn, LogOut, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { toast } from 'sonner';
 
+// @ts-ignore
+pdfMake.vfs = pdfFonts.vfs;
+
+// --- INTERFACES ---
 interface Transaction {
   code: string;
   time: string;
   customerName: string;
   room: string;
-  revenue: number;
-  received: number;
-  deposit: number;
-  refund: number;
-  debt: number;
+  revenue: number; // Doanh thu tổng
+  received: number; // Thực thu
+  deposit: number; // Cọc
+  refund: number; // Hoàn
+  debt: number; // Nợ
   note: string;
 }
 
@@ -32,16 +35,181 @@ interface DailyReportData {
   };
 }
 
+// --- STYLES OBJECT (Inline CSS) ---
+const styles: { [key: string]: React.CSSProperties } = {
+  container: {
+    maxWidth: '1280px',
+    margin: '0 auto',
+    padding: '20px',
+    fontFamily: '"Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    color: '#374151',
+  },
+  headerTitle: {
+    fontSize: '28px',
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: '8px',
+  },
+  headerSubtitle: {
+    color: '#6b7280',
+    marginBottom: '32px',
+  },
+  controlCard: {
+    background: 'linear-gradient(to right, #2563eb, #1d4ed8)',
+    borderRadius: '12px',
+    padding: '24px',
+    marginBottom: '24px',
+    color: 'white',
+    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+    display: 'flex',
+    alignItems: 'flex-end',
+    gap: '20px',
+    flexWrap: 'wrap',
+  },
+  inputGroup: {
+    flex: '1',
+    minWidth: '200px',
+  },
+  label: {
+    display: 'block',
+    marginBottom: '8px',
+    fontWeight: '500',
+    color: '#dbeafe',
+    fontSize: '14px',
+  },
+  input: {
+    width: '100%',
+    padding: '10px 16px',
+    borderRadius: '8px',
+    border: '1px solid #93c5fd',
+    outline: 'none',
+    fontSize: '16px',
+    fontWeight: '600',
+    color: '#1e3a8a',
+    backgroundColor: '#eff6ff',
+  },
+  buttonPrimary: {
+    backgroundColor: 'white',
+    color: '#2563eb',
+    padding: '10px 24px',
+    borderRadius: '8px',
+    border: 'none',
+    fontWeight: '600',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+    height: '46px',
+  },
+  kpiGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+    gap: '16px',
+    marginBottom: '32px',
+  },
+  kpiCard: {
+    backgroundColor: 'white',
+    borderRadius: '12px',
+    padding: '20px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+    border: '1px solid #e5e7eb',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'space-between',
+  },
+  kpiIconBox: {
+    width: '40px',
+    height: '40px',
+    borderRadius: '8px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: '12px',
+  },
+  kpiLabel: {
+    fontSize: '13px',
+    fontWeight: '600',
+    color: '#6b7280',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+  },
+  kpiValue: {
+    fontSize: '24px',
+    fontWeight: '700',
+    color: '#111827',
+    marginTop: '4px',
+  },
+  tableCard: {
+    backgroundColor: 'white',
+    borderRadius: '12px',
+    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+    border: '1px solid #e5e7eb',
+    overflow: 'hidden',
+  },
+  tableHeader: {
+    padding: '20px 24px',
+    borderBottom: '1px solid #e5e7eb',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  tableTitle: {
+    fontSize: '18px',
+    fontWeight: '700',
+    color: '#111827',
+    margin: 0,
+  },
+  tableContainer: {
+    overflowX: 'auto',
+  },
+  table: {
+    width: '100%',
+    borderCollapse: 'collapse',
+    fontSize: '14px',
+  },
+  th: {
+    backgroundColor: '#f9fafb',
+    padding: '12px 24px',
+    textAlign: 'left',
+    fontWeight: '600',
+    color: '#4b5563',
+    borderBottom: '1px solid #e5e7eb',
+    whiteSpace: 'nowrap',
+  },
+  td: {
+    padding: '16px 24px',
+    borderBottom: '1px solid #f3f4f6',
+    color: '#374151',
+    verticalAlign: 'middle',
+  },
+  badge: {
+    padding: '4px 10px',
+    borderRadius: '20px',
+    fontSize: '12px',
+    fontWeight: '600',
+    display: 'inline-block',
+  },
+  exportBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '8px 16px',
+    borderRadius: '6px',
+    fontSize: '14px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    border: '1px solid transparent',
+    transition: 'all 0.2s',
+  },
+};
+
 export default function DailyReport() {
   const [reportDate, setReportDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [reportData, setReportData] = useState<DailyReportData | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Chỉ fetch khi nhấn nút 'Xem báo cáo'
-  // useEffect(() => {
-  //   fetchReportData();
-  // }, [reportDate]);
-
+  // --- API ---
   const fetchReportData = async () => {
     setLoading(true);
     try {
@@ -53,463 +221,326 @@ export default function DailyReport() {
           }
         }
       );
-
       const result = await response.json();
       if (result.success) {
         setReportData(result.data);
       }
     } catch (error) {
       console.error('Error fetching daily report:', error);
+      toast.error('Lỗi tải dữ liệu');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleExport = async () => {
-      // ...existing code...
+  // --- HELPER: Xác định hoạt động ---
+  const getActivityName = (t: Transaction) => {
+    const noteLower = (t.note || '').toLowerCase();
+    if (noteLower.includes('check-in') || (t.deposit > 0 && t.revenue === 0)) return 'Check-in';
+    if (noteLower.includes('check-out') || (t.revenue > 0)) return 'Check-out';
+    if (noteLower.includes('hủy')) return 'Hủy đơn';
+    if (t.deposit > 0) return 'Thu cọc';
+    if (t.code.startsWith('TAO')) return 'Tạo đơn'; // Giả sử mã tạo đơn
+    return 'Thanh toán';
+  };
+
+  const getActivityColor = (activity: string) => {
+    if (activity === 'Check-in') return { bg: '#dcfce7', text: '#166534' }; // Green
+    if (activity === 'Check-out') return { bg: '#ffedd5', text: '#9a3412' }; // Orange
+    if (activity === 'Hủy đơn') return { bg: '#fee2e2', text: '#991b1b' }; // Red
+    return { bg: '#eff6ff', text: '#1e40af' }; // Blue
+  };
+
+  const formatCurrency = (amount: number) => new Intl.NumberFormat('vi-VN').format(amount) + ' ₫';
+
+  // --- LOGIC TÍNH TOÁN KPI ---
+  const transactions = reportData?.transactions || [];
+  const summary = reportData?.summary || { totalReceived: 0 };
+
+  const totalOrders = transactions.length;
+  const totalCheckin = transactions.filter(t => getActivityName(t) === 'Check-in').length;
+  const totalCheckout = transactions.filter(t => getActivityName(t) === 'Check-out').length;
+  const totalCancel = transactions.filter(t => getActivityName(t) === 'Hủy đơn').length;
+  
+  const totalMoneyToday = summary.totalReceived;
+
+  const TOTAL_ROOMS = 20; 
+  const roomsOccupied = totalCheckin; // Logic tạm thời
+  const roomsEmpty = TOTAL_ROOMS - roomsOccupied;
+
+  // --- PDF EXPORT ---
+  const handleExportPDF = () => {
     if (!reportData || transactions.length === 0) {
-      toast.error('Không có dữ liệu để xuất');
+      toast.error('Không có dữ liệu để xuất PDF');
       return;
     }
 
-    toast.info('Đang tạo file Excel...');
+    const exportTime = new Date().toLocaleString('vi-VN');
+    const reportDateFormatted = format(new Date(reportDate), 'dd/MM/yyyy', { locale: vi });
+    const hour = new Date().getHours();
+    
+    // Xác định Ca trực
+    let caTruc = '';
+    if (hour >= 6 && hour < 14) caTruc = 'Ca Sáng (06:00 - 14:00)';
+    else if (hour >= 14 && hour < 22) caTruc = 'Ca Chiều (14:00 - 22:00)';
+    else caTruc = 'Ca Tối (22:00 - 06:00)';
 
-    try {
-      const mod = await import('xlsx');
-      const XLSX = (mod && ((mod as any).default || mod)) as any;
+    const nhanVien = 'Nguyễn Văn A'; // Có thể lấy từ User Context
 
-      const wb = XLSX.utils.book_new();
-      const exportTime = new Date().toLocaleString('vi-VN');
-      const reportDateFormatted = format(new Date(reportDate), 'dd/MM/yyyy', { locale: vi });
+    // Bảng chi tiết (Body)
+    const tableBody = [
+      [
+        { text: 'STT', style: 'tableHeader' },
+        { text: 'Mã đơn', style: 'tableHeader' },
+        { text: 'Khách hàng', style: 'tableHeader' },
+        { text: 'Phòng', style: 'tableHeader' },
+        { text: 'Hoạt động', style: 'tableHeader' },
+        { text: 'Thời gian', style: 'tableHeader' },
+        { text: 'Số tiền thu', style: 'tableHeader', alignment: 'right' },
+        { text: 'Ghi chú', style: 'tableHeader' }
+      ],
+      ...transactions.map((t, idx) => [
+        { text: idx + 1, alignment: 'center', fontSize: 9 },
+        { text: t.code, color: '#2563eb', fontSize: 9, bold: true },
+        { text: t.customerName, fontSize: 9 },
+        { text: t.room, alignment: 'center', fontSize: 9 },
+        { text: getActivityName(t), fontSize: 9, alignment: 'center' },
+        { text: t.time, alignment: 'center', fontSize: 9 },
+        { text: formatCurrency(t.received), alignment: 'right', bold: true, fontSize: 9 },
+        { text: t.note || '', fontSize: 9, color: '#555' }
+      ])
+    ];
 
-      // Sheet 1: Tổng quan
-      const summaryData: any[][] = [
-        ['LALA HOUSE - BÁO CÁO CUỐI NGÀY'],
-        [`Ngày báo cáo: ${reportDateFormatted}`],
-        [`Thời gian xuất: ${exportTime}`],
-        [],
-        ['CHỈ SỐ TÀI CHÍNH', '', '', ''],
-        ['Chỉ số', 'Giá trị (₫)', 'Định dạng', 'Ghi chú'],
-        ['Tổng doanh thu', summary.totalRevenue, formatCurrency(summary.totalRevenue), 'Tổng tiền phòng'],
-        ['Thực thu', summary.totalReceived, formatCurrency(summary.totalReceived), 'Tiền đã nhận'],
-        ['Tiền cọc', summary.totalDeposit, formatCurrency(summary.totalDeposit), 'Cọc CSVC'],
-        ['Hoàn cọc', summary.totalRefund, formatCurrency(summary.totalRefund), 'Đã hoàn trả'],
-        ['Ghi nợ', summary.totalDebt, formatCurrency(summary.totalDebt), 'Chưa thu'],
-        [],
-        ['THỐNG KÊ GIAO DỊCH', '', '', ''],
-        ['Tổng số giao dịch', transactions.length, '', ''],
-        ['Giao dịch có nợ', transactions.filter(t => t.debt > 0).length, '', ''],
-        ['Tỷ lệ thu đủ', `${((transactions.filter(t => t.debt === 0).length / transactions.length) * 100).toFixed(1)}%`, '', ''],
-      ];
+    // Bảng tổng kết (Summary)
+    const summaryRows = [
+      ['Tổng số đơn trong ngày', { text: totalOrders, bold: true, alignment: 'right' }],
+      ['Tổng khách đến', { text: totalCheckin, color: 'green', bold: true, alignment: 'right' }],
+      ['Tổng khách trả phòng', { text: totalCheckout, color: 'orange', bold: true, alignment: 'right' }],
+      ['Tổng đơn hủy', { text: totalCancel, color: 'red', bold: true, alignment: 'right' }],
+      ['Tổng doanh thu thu trực tiếp trong ngày', { text: formatCurrency(totalMoneyToday), bold: true, color: '#2563eb', alignment: 'right' }],
+      ['Tiền tồn cuối ca (Thu trực tiếp)', { text: formatCurrency(totalMoneyToday), bold: true, alignment: 'right' }],
+      ['Tình trạng phòng cuối ngày', { text: `${roomsOccupied} đang ở / ${roomsEmpty} trống`, alignment: 'right' }]
+    ];
 
-      const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
-      wsSummary['!cols'] = [{ wch: 25 }, { wch: 20 }, { wch: 25 }, { wch: 30 }];
-      wsSummary['!merges'] = [
-        { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
-        { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } },
-        { s: { r: 2, c: 0 }, e: { r: 2, c: 3 } },
-        { s: { r: 4, c: 0 }, e: { r: 4, c: 3 } },
-        { s: { r: 12, c: 0 }, e: { r: 12, c: 3 } },
-      ];
-      XLSX.utils.book_append_sheet(wb, wsSummary, 'Tổng quan');
+    const docDefinition = {
+      content: [
+        // --- HEADER ---
+        { text: 'BÁO CÁO CUỐI NGÀY – GIAO CA', style: 'header' },
+        
+        {
+          columns: [
+            {
+              width: '*',
+              text: [
+                { text: 'Ngày: ', bold: true }, reportDateFormatted, '\n',
+                { text: 'Ca trực: ', bold: true }, caTruc, '\n',
+                { text: 'Lễ tân: ', bold: true }, nhanVien
+              ]
+            },
+            {
+              width: 'auto',
+              text: `Xuất lúc: ${exportTime}`, style: 'small', alignment: 'right'
+            }
+          ],
+          margin: [0, 0, 0, 20]
+        },
 
-      // Sheet 2: Chi tiết giao dịch
-      const transactionData: any[][] = [
-        ['CHI TIẾT GIAO DỊCH TRONG NGÀY'],
-        [`Ngày: ${reportDateFormatted}`],
-        [],
-        ['Mã đơn', 'Thời gian', 'Khách hàng', 'Phòng', 'Doanh thu', 'Thực thu', 'Cọc', 'Hoàn cọc', 'Ghi nợ', 'Ghi chú'],
-        ...transactions.map((t: any) => [
-          t.code,
-          t.time,
-          t.customerName,
-          t.room,
-          t.revenue,
-          t.received,
-          t.deposit,
-          t.refund,
-          t.debt,
-          t.note || ''
-        ]),
-        [],
-        ['TỔNG CỘNG', '', '', '', summary.totalRevenue, summary.totalReceived, summary.totalDeposit, summary.totalRefund, summary.totalDebt, '']
-      ];
+        // --- TABLE ---
+        { text: 'CHI TIẾT GIAO DỊCH', style: 'sectionHeader' },
+        {
+          table: {
+            headerRows: 1,
+            // Widths: STT, Mã, Khách, Phòng, HĐ, Giờ, Tiền, Ghi chú
+            widths: [25, 70, 80, 40, 60, 50, 70, '*'],
+            body: tableBody
+          },
+          layout: {
+            fillColor: function (rowIndex: number) { return (rowIndex === 0) ? '#f3f4f6' : null; },
+            hLineWidth: function (i: number, node: any) { return (i === 0 || i === node.table.body.length) ? 1 : 0.5; },
+            vLineWidth: function () { return 0; },
+            hLineColor: function () { return '#d1d5db'; }
+          }
+        },
 
-      const wsTransactions = XLSX.utils.aoa_to_sheet(transactionData);
-      wsTransactions['!cols'] = [
-        { wch: 15 }, // Mã đơn
-        { wch: 18 }, // Thời gian
-        { wch: 20 }, // Khách hàng
-        { wch: 12 }, // Phòng
-        { wch: 15 }, // Doanh thu
-        { wch: 15 }, // Thực thu
-        { wch: 12 }, // Cọc
-        { wch: 12 }, // Hoàn cọc
-        { wch: 12 }, // Ghi nợ
-        { wch: 30 }  // Ghi chú
-      ];
-      wsTransactions['!merges'] = [
-        { s: { r: 0, c: 0 }, e: { r: 0, c: 9 } },
-        { s: { r: 1, c: 0 }, e: { r: 1, c: 9 } },
-      ];
-      XLSX.utils.book_append_sheet(wb, wsTransactions, 'Chi tiết');
+        // --- SUMMARY ---
+        { text: '\n' },
+        {
+          table: {
+            widths: [250, '*'], // Cột tiêu đề rộng 250, còn lại fill hết
+            body: [
+              [{ text: 'TỔNG KẾT CUỐI BÁO CÁO', colSpan: 2, style: 'sectionHeader', alignment: 'center', border: [false, false, false, false] }, {}],
+              ...summaryRows
+            ]
+          },
+          layout: 'lightHorizontalLines'
+        },
 
-      // Export
-      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `bao-cao-cuoi-ngay-${reportDate}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+        // --- SIGNATURE ---
+        { text: '\n\n\n' },
+        {
+          columns: [
+            { text: 'Người lập biểu', alignment: 'center', bold: true },
+            { text: 'Người nhận bàn giao', alignment: 'center', bold: true },
+            { text: 'Quản lý xác nhận', alignment: 'center', bold: true }
+          ]
+        },
+        { text: '\n\n', fontSize: 8 }
+      ],
+      styles: {
+        header: { fontSize: 18, bold: true, color: '#111827', alignment: 'center', margin: [0, 0, 0, 15] },
+        sectionHeader: { fontSize: 12, bold: true, color: '#374151', margin: [0, 5, 0, 5], decoration: 'underline' },
+        tableHeader: { fontSize: 9, bold: true, color: '#374151', alignment: 'center' },
+        small: { fontSize: 9, color: '#6b7280', italics: true }
+      },
+      defaultStyle: { font: 'Roboto', fontSize: 10 }
+    };
 
-      toast.success('Xuất Excel thành công!');
-    } catch (err) {
-      console.error('Export error:', err);
-      toast.error('Không thể xuất Excel. Vui lòng thử lại.');
-    }
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('vi-VN').format(amount) + ' ₫';
+    // @ts-ignore
+    pdfMake.createPdf(docDefinition).download(`BaoCaoGiaoCa-${reportDate}.pdf`);
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Đang tải báo cáo...</p>
-        </div>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column' }}>
+        <div style={{ width: '40px', height: '40px', border: '4px solid #e5e7eb', borderTop: '4px solid #3b82f6', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+        <p style={{ marginTop: '16px', color: '#6b7280' }}>Đang tải báo cáo...</p>
+        <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
 
-  const summary = reportData?.summary || { totalRevenue: 0, totalReceived: 0, totalDeposit: 0, totalRefund: 0, totalDebt: 0 };
-  const transactions = reportData?.transactions || [];
-
   return (
-    <div className="max-w-7xl mx-auto">
-      {/* Header với gradient */}
-      <div className="mb-8">
-        <div className="mb-4">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">📊 Báo cáo cuối ngày</h1>
-          <p className="text-gray-600">Tổng hợp giao dịch và doanh thu trong ngày</p>
-        </div>
+    <div style={styles.container}>
+      {/* HEADER */}
+      <div style={{ marginBottom: '24px' }}>
+        <h1 style={styles.headerTitle}>📊 Báo cáo cuối ngày</h1>
+        <p style={styles.headerSubtitle}>Tổng hợp giao dịch, hoạt động và chốt ca làm việc</p>
       </div>
 
-      {/* Date Picker Card + Nút Xem báo cáo */}
-      <div className="rounded-xl shadow-lg p-6 mb-6 text-white" style={{ background: 'linear-gradient(to bottom right, rgb(59, 130, 246), rgb(37, 99, 235))' }}>
-        <div className="flex items-center space-x-4">
-          <div className="flex-1">
-            <label className="block text-blue-100 mb-2 font-medium">
-              <Calendar className="w-4 h-4 inline mr-2" />
-              Chọn ngày báo cáo
-            </label>
-            <input
-              type="date"
-              value={reportDate}
-              onChange={(e) => setReportDate(e.target.value)}
-              className="w-full px-4 py-3 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-white focus:border-white outline-none text-gray-900 font-medium"
-            />
-          </div>
-          <div className="flex-shrink-0 mt-4 md:mt-0">
-            <button
-              onClick={fetchReportData}
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-lg transition-all font-semibold flex items-center gap-2"
-              disabled={loading}
+      {/* CONTROL BAR */}
+      <div style={styles.controlCard}>
+        <div style={styles.inputGroup}>
+          <label style={styles.label}><Calendar size={16} style={{ display: 'inline', marginRight: '5px' }} /> Chọn ngày báo cáo</label>
+          <input 
+            type="date" 
+            value={reportDate} 
+            onChange={(e) => setReportDate(e.target.value)} 
+            style={styles.input} 
+          />
+        </div>
+        <button onClick={fetchReportData} style={styles.buttonPrimary}>
+          <Clock size={18} /> Xem báo cáo
+        </button>
+      </div>
+
+      {/* KPI GRID (7 Metrics) */}
+      <div style={styles.kpiGrid}>
+        <KPICard title="Tổng đơn xử lý" value={totalOrders} icon={<TrendingUp color="#2563eb" />} color="blue" />
+        <KPICard title="Khách check-in" value={totalCheckin} icon={<LogIn color="#16a34a" />} color="green" />
+        <KPICard title="Khách check-out" value={totalCheckout} icon={<LogOut color="#ea580c" />} color="orange" />
+        <KPICard title="Đơn hủy" value={totalCancel} icon={<XCircle color="#dc2626" />} color="red" />
+        
+        <KPICard title="Tổng tiền thu" value={formatCurrency(totalMoneyToday)} icon={<DollarSign color="#2563eb" />} color="blue" isWide />
+        <KPICard title="Phòng đang ở" value={roomsOccupied} icon={<Home color="#ca8a04" />} color="yellow" />
+        <KPICard title="Phòng trống" value={roomsEmpty} icon={<CheckCircle color="#059669" />} color="emerald" />
+      </div>
+
+      {/* DETAIL TABLE */}
+      {transactions.length > 0 && (
+        <div style={styles.tableCard}>
+          <div style={styles.tableHeader}>
+            <h3 style={styles.tableTitle}>Chi tiết giao dịch trong ngày</h3>
+            <button 
+              onClick={handleExportPDF} 
+              style={{ ...styles.exportBtn, backgroundColor: '#2563eb', color: 'white' }}
             >
-              <Clock className="w-5 h-5" />
-              Xem báo cáo
+              <Download size={16} /> Xuất PDF Giao Ca
             </button>
           </div>
-        </div>
-      </div>
-
-      {/* Summary Cards với icons */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-        <div className="rounded-xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform" style={{ background: 'linear-gradient(to bottom right, rgb(59, 130, 246), rgb(37, 99, 235))' }}>
-          <div className="flex items-center justify-between mb-3">
-            <TrendingUp className="w-8 h-8 opacity-80" />
-            <span className="text-2xl font-bold">{transactions.length}</span>
-          </div>
-          <p className="text-blue-100 text-sm mb-1">Tổng doanh thu</p>
-          <p className="text-2xl font-bold">{summary.totalRevenue.toLocaleString('vi-VN')}₫</p>
-        </div>
-
-        <div className="rounded-xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform" style={{ background: 'linear-gradient(to bottom right, rgb(34, 197, 94), rgb(22, 163, 74))' }}>
-          <div className="flex items-center justify-between mb-3">
-            <DollarSign className="w-8 h-8 opacity-80" />
-            <CheckCircle className="w-6 h-6" />
-          </div>
-          <p className="text-green-100 text-sm mb-1">Thực thu</p>
-          <p className="text-2xl font-bold">{summary.totalReceived.toLocaleString('vi-VN')}₫</p>
-        </div>
-
-        <div className="rounded-xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform" style={{ background: 'linear-gradient(to bottom right, rgb(234, 179, 8), rgb(202, 138, 4))' }}>
-          <div className="flex items-center justify-between mb-3">
-            <CreditCard className="w-8 h-8 opacity-80" />
-            <Clock className="w-6 h-6" />
-          </div>
-          <p className="text-yellow-100 text-sm mb-1">Tiền cọc</p>
-          <p className="text-2xl font-bold">{summary.totalDeposit.toLocaleString('vi-VN')}₫</p>
-        </div>
-
-        <div className="rounded-xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform" style={{ background: 'linear-gradient(to bottom right, rgb(168, 85, 247), rgb(147, 51, 234))' }}>
-          <div className="flex items-center justify-between mb-3">
-            <Users className="w-8 h-8 opacity-80" />
-            <CheckCircle className="w-6 h-6" />
-          </div>
-          <p className="text-purple-100 text-sm mb-1">Hoàn cọc</p>
-          <p className="text-2xl font-bold">{summary.totalRefund.toLocaleString('vi-VN')}₫</p>
-        </div>
-
-        <div className="rounded-xl shadow-lg p-6 text-white transform hover:scale-105 transition-transform" style={{ background: 'linear-gradient(to bottom right, rgb(239, 68, 68), rgb(220, 38, 38))' }}>
-          <div className="flex items-center justify-between mb-3">
-            <AlertCircle className="w-8 h-8 opacity-80" />
-            <span className="text-xl font-bold">{transactions.filter(t => t.debt > 0).length}</span>
-          </div>
-          <p className="text-red-100 text-sm mb-1">Ghi nợ</p>
-          <p className="text-2xl font-bold">{summary.totalDebt.toLocaleString('vi-VN')}₫</p>
-        </div>
-      </div>
-
-      {/* Main Report Card */}
-      <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-
-        {/* Header */}
-        <div className="mb-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Chi tiết giao dịch</h2>
-          <p className="text-gray-600">Danh sách tất cả giao dịch trong ngày {format(new Date(reportDate), 'dd/MM/yyyy', { locale: vi })}</p>
-        </div>
-
-        {/* Transactions Table */}
-        <div className="overflow-x-auto rounded-lg border border-gray-200">
-          {transactions.length > 0 ? (
-            <table className="w-full text-sm">
-              <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+          
+          <div style={styles.tableContainer}>
+            <table style={styles.table}>
+              <thead>
                 <tr>
-                  <th className="text-left py-4 px-4 text-gray-700 font-semibold">Mã đơn</th>
-                  <th className="text-left py-4 px-4 text-gray-700 font-semibold">Thời gian</th>
-                  <th className="text-left py-4 px-4 text-gray-700 font-semibold">Khách hàng</th>
-                  <th className="text-left py-4 px-4 text-gray-700 font-semibold">Phòng</th>
-                  <th className="text-right py-4 px-4 text-gray-700 font-semibold">Doanh thu</th>
-                  <th className="text-right py-4 px-4 text-gray-700 font-semibold">Thực thu</th>
-                  <th className="text-right py-4 px-4 text-gray-700 font-semibold">Cọc</th>
-                  <th className="text-right py-4 px-4 text-gray-700 font-semibold">Hoàn cọc</th>
-                  <th className="text-right py-4 px-4 text-gray-700 font-semibold">Ghi nợ</th>
-                  <th className="text-left py-4 px-4 text-gray-700 font-semibold">Ghi chú</th>
+                  <th style={styles.th}>Mã đơn</th>
+                  <th style={styles.th}>Khách hàng</th>
+                  <th style={{ ...styles.th, textAlign: 'center' }}>Phòng</th>
+                  <th style={{ ...styles.th, textAlign: 'center' }}>Hoạt động</th>
+                  <th style={{ ...styles.th, textAlign: 'center' }}>Thời gian</th>
+                  <th style={{ ...styles.th, textAlign: 'right' }}>Số tiền thu</th>
+                  <th style={styles.th}>Ghi chú</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-100">
-                {transactions.map((transaction, index) => (
-                  <tr key={index} className="hover:bg-blue-50 transition-colors">
-                    <td className="py-4 px-4">
-                      <span className="font-mono font-medium text-blue-600">{transaction.code}</span>
-                    </td>
-                    <td className="py-4 px-4 text-gray-600">{transaction.time}</td>
-                    <td className="py-4 px-4">
-                      <span className="font-medium text-gray-900">{transaction.customerName}</span>
-                    </td>
-                    <td className="py-4 px-4">
-                      <span className="px-2 py-1 bg-gray-100 rounded text-gray-900 font-medium">{transaction.room}</span>
-                    </td>
-                    <td className="py-4 px-4 text-right">
-                      <span className="font-semibold text-blue-600">{transaction.revenue.toLocaleString('vi-VN')}₫</span>
-                    </td>
-                    <td className="py-4 px-4 text-right">
-                      <span className="font-semibold text-green-600">{transaction.received.toLocaleString('vi-VN')}₫</span>
-                    </td>
-                    <td className="py-4 px-4 text-right text-gray-900">
-                      {transaction.deposit.toLocaleString('vi-VN')}₫
-                    </td>
-                    <td className="py-4 px-4 text-right text-gray-900">
-                      {transaction.refund.toLocaleString('vi-VN')}₫
-                    </td>
-                    <td className="py-4 px-4 text-right">
-                      {transaction.debt > 0 ? (
-                        <span className="px-2 py-1 bg-red-100 text-red-700 rounded font-semibold">
-                          {transaction.debt.toLocaleString('vi-VN')}₫
+              <tbody>
+                {transactions.map((t, idx) => {
+                  const activity = getActivityName(t);
+                  const actStyle = getActivityColor(activity);
+                  return (
+                    <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#f9fafb' }}>
+                      <td style={{ ...styles.td, fontFamily: 'monospace', color: '#2563eb', fontWeight: '500' }}>{t.code}</td>
+                      <td style={{ ...styles.td, fontWeight: '600' }}>{t.customerName}</td>
+                      <td style={{ ...styles.td, textAlign: 'center' }}>
+                        <span style={{ backgroundColor: '#f3f4f6', padding: '4px 8px', borderRadius: '4px', fontWeight: 'bold' }}>{t.room}</span>
+                      </td>
+                      <td style={{ ...styles.td, textAlign: 'center' }}>
+                        <span style={{ ...styles.badge, backgroundColor: actStyle.bg, color: actStyle.text }}>
+                          {activity}
                         </span>
-                      ) : (
-                        <span className="text-gray-400">0₫</span>
-                      )}
-                    </td>
-                    <td className="py-4 px-4 text-gray-600 text-xs max-w-xs truncate">{transaction.note || '-'}</td>
-                  </tr>
-                ))}
+                      </td>
+                      <td style={{ ...styles.td, textAlign: 'center', color: '#6b7280' }}>{t.time}</td>
+                      <td style={{ ...styles.td, textAlign: 'right', fontWeight: '700', color: '#111827' }}>
+                        {formatCurrency(t.received)}
+                      </td>
+                      <td style={{ ...styles.td, color: '#6b7280', fontSize: '13px', maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {t.note || '-'}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
-              <tfoot className="bg-gradient-to-r from-gray-50 to-gray-100 font-bold">
+              <tfoot style={{ backgroundColor: '#f9fafb', borderTop: '2px solid #e5e7eb' }}>
                 <tr>
-                  <td colSpan={4} className="py-4 px-4 text-gray-900">TỔNG CỘNG</td>
-                  <td className="py-4 px-4 text-right text-blue-600 text-lg">{summary.totalRevenue.toLocaleString('vi-VN')}₫</td>
-                  <td className="py-4 px-4 text-right text-green-600 text-lg">{summary.totalReceived.toLocaleString('vi-VN')}₫</td>
-                  <td className="py-4 px-4 text-right text-gray-900">{summary.totalDeposit.toLocaleString('vi-VN')}₫</td>
-                  <td className="py-4 px-4 text-right text-gray-900">{summary.totalRefund.toLocaleString('vi-VN')}₫</td>
-                  <td className="py-4 px-4 text-right text-red-600 text-lg">{summary.totalDebt.toLocaleString('vi-VN')}₫</td>
+                  <td colSpan={5} style={{ ...styles.td, textAlign: 'right', fontWeight: 'bold', fontSize: '15px' }}>TỔNG CỘNG:</td>
+                  <td style={{ ...styles.td, textAlign: 'right', fontWeight: 'bold', fontSize: '16px', color: '#2563eb' }}>{formatCurrency(totalMoneyToday)}</td>
                   <td></td>
                 </tr>
               </tfoot>
             </table>
-          ) : (
-            <div className="text-center py-16">
-              <Calendar className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-              <p className="text-gray-500 text-lg">Không có giao dịch nào trong ngày này</p>
-              <p className="text-gray-400 text-sm mt-2">Chọn ngày khác để xem báo cáo</p>
-            </div>
-          )}
+          </div>
         </div>
+      )}
 
-        {/* Report Info */}
-        <div className="mt-8 pt-6 border-t-2 border-gray-200">
-          <div className="flex items-center justify-between text-sm">
-            <div className="space-y-1">
-              <p className="text-gray-600">
-                <span className="font-semibold text-gray-900">Ngày báo cáo:</span> {format(new Date(reportDate), 'dd/MM/yyyy', { locale: vi })}
-              </p>
-              <p className="text-gray-600">
-                <span className="font-semibold text-gray-900">Giờ lập:</span> {format(new Date(), 'HH:mm:ss', { locale: vi })}
-              </p>
-            </div>
-            <div className="text-right space-y-1">
-              <p className="text-gray-600">
-                <span className="font-semibold text-gray-900">Cơ sở:</span> LaLa House Homestay
-              </p>
-              <p className="text-gray-600">
-                <span className="font-semibold text-gray-900">Người lập:</span> Nhân viên lễ tân
-              </p>
-            </div>
-          </div>
+      {/* EMPTY STATE */}
+      {!loading && transactions.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '60px', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
+          <Calendar size={48} color="#9ca3af" style={{ marginBottom: '16px' }} />
+          <p style={{ fontSize: '18px', color: '#374151', fontWeight: '500' }}>Chưa có dữ liệu cho ngày này</p>
+          <p style={{ color: '#6b7280' }}>Vui lòng chọn ngày khác hoặc bắt đầu tạo giao dịch mới.</p>
+        </div>
+      )}
+    </div>
+  );
+}
 
-          {/* Action buttons */}
-          <div className="flex items-center justify-end mt-6 gap-4">
-            <button
-              onClick={handleExport}
-              disabled={!reportData || transactions.length === 0}
-              className="flex items-center space-x-2 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow-lg transition-all hover:shadow-xl disabled:bg-gray-400 disabled:cursor-not-allowed disabled:shadow-none"
-            >
-              <Download className="w-5 h-5" />
-              <span className="font-medium">Xuất Excel</span>
-            </button>
-            <button
-              onClick={() => {
-                if (!reportData || transactions.length === 0) {
-                  toast.error('Không có dữ liệu để xuất PDF');
-                  return;
-                }
-                // TÍNH KPI
-                const totalOrders = transactions.length;
-                const totalCheckin = transactions.filter(t => t.note?.toLowerCase().includes('check-in')).length;
-                const totalCheckout = transactions.filter(t => t.note?.toLowerCase().includes('check-out')).length;
-                const totalCancel = transactions.filter(t => t.note?.toLowerCase().includes('hủy')).length;
-                const totalDeposit = transactions.reduce((sum, t) => sum + (t.deposit || 0), 0);
-                const totalReceived = transactions.reduce((sum, t) => sum + (t.received || 0), 0);
-                // Giả sử có biến tổng số phòng cuối ngày (cần truyền vào nếu có)
-                const totalRooms = 20; // Sửa lại nếu có dữ liệu thực tế
-                const roomsOccupied = transactions.filter(t => t.note?.toLowerCase().includes('check-in')).length;
-                const roomsEmpty = totalRooms - roomsOccupied;
-                // Tiêu đề, ca trực, lễ tân
-                const hour = new Date().getHours();
-                let caTruc = '';
-                if (hour >= 6 && hour < 14) caTruc = 'Sáng';
-                else if (hour >= 14 && hour < 22) caTruc = 'Chiều';
-                else caTruc = 'Đêm';
-                const leTan = 'Nhân viên lễ tân'; // Sửa lại nếu có dữ liệu thực tế
-                const exportTime = new Date().toLocaleString('vi-VN');
-                const reportDateFormatted = format(new Date(reportDate), 'dd/MM/yyyy', { locale: vi });
-                // BẢNG CHI TIẾT
-                const tableBody = [
-                  ['STT', 'Mã đơn', 'Khách hàng', 'Phòng', 'Hoạt động', 'Thời gian', 'Số tiền thu', 'Ghi chú'].map(t => ({ text: t, bold: true, fillColor: '#f0f0f0' })),
-                  ...transactions.map((t, idx) => [
-                    idx + 1,
-                    t.code,
-                    t.customerName,
-                    t.room,
-                    t.note || '',
-                    t.time,
-                    formatCurrency(t.received),
-                    t.note || ''
-                  ])
-                ];
-                // TỔNG KẾT CUỐI BÁO CÁO
-                const summaryRows = [
-                  ['Tổng số đơn trong ngày', totalOrders],
-                  ['Tổng khách đến', totalCheckin],
-                  ['Tổng khách trả phòng', totalCheckout],
-                  ['Tổng đơn hủy', totalCancel],
-                  ['Tổng doanh thu thu trực tiếp trong ngày', formatCurrency(totalReceived)],
-                  ['Tiền tồn cuối ca', formatCurrency(totalDeposit)],
-                  ['Tình trạng phòng cuối ngày', `${roomsOccupied} đang ở / ${roomsEmpty} trống`]
-                ];
-                // PDF
-                const docDefinition = {
-                  content: [
-                    { text: 'BÁO CÁO CUỐI NGÀY – GIAO CA', style: 'header', alignment: 'center', margin: [0,0,0,10] },
-                    { text: `Ngày: ${reportDateFormatted}   Ca trực: ${caTruc}   Lễ tân: ${leTan}`, style: 'subheader', alignment: 'center', margin: [0,0,0,10] },
-                    { text: `Thời gian xuất: ${exportTime}`, style: 'subheader', alignment: 'center', margin: [0,0,0,10] },
-                    { text: 'KPI TỔNG HỢP', style: 'sectionHeader', margin: [0,10,0,6] },
-                    {
-                      table: {
-                        widths: ['*', '*'],
-                        body: [
-                          ['Tổng số đơn xử lý', totalOrders],
-                          ['Số khách check-in', totalCheckin],
-                          ['Số khách check-out', totalCheckout],
-                          ['Số đơn hủy', totalCancel],
-                          ['Tổng số tiền thu', formatCurrency(totalReceived)],
-                          ['Tổng số phòng đang ở', roomsOccupied],
-                          ['Tổng số phòng trống cuối ngày', roomsEmpty]
-                        ]
-                      },
-                      layout: 'lightHorizontalLines',
-                      margin: [0,0,0,10]
-                    },
-                    { text: 'BẢNG CHI TIẾT TRONG NGÀY', style: 'sectionHeader', margin: [0,10,0,6] },
-                    {
-                      table: {
-                        headerRows: 1,
-                        widths: [30, 70, 70, 40, 60, 50, 60, 80],
-                        body: tableBody
-                      },
-                      layout: 'lightHorizontalLines',
-                      fontSize: 9
-                    },
-                    { text: 'TỔNG KẾT CUỐI BÁO CÁO', style: 'sectionHeader', margin: [0,10,0,6] },
-                    {
-                      table: {
-                        widths: ['*', '*'],
-                        body: summaryRows
-                      },
-                      layout: 'lightHorizontalLines',
-                      margin: [0,0,0,10]
-                    },
-                    { text: '\nBáo cáo được tạo tự động từ hệ thống quản lý Lala House.', style: 'footer', alignment: 'center', color: '#7f8c8d', fontSize: 9 }
-                  ],
-                  styles: {
-                    header: { fontSize: 16, bold: true, color: '#2c3e50' },
-                    subheader: { fontSize: 11, color: '#555' },
-                    sectionHeader: { fontSize: 12, bold: true, color: '#34495e', decoration: 'underline', decorationStyle: 'dotted' },
-                    footer: { fontSize: 9, color: '#7f8c8d', italics: true }
-                  },
-                  defaultStyle: {
-                    font: 'Roboto',
-                    fontSize: 10
-                  }
-                };
-                pdfMake.createPdf(docDefinition).download(`BaoCaoCuoiNgay-${reportDate}.pdf`);
-              }}
-              disabled={!reportData || transactions.length === 0}
-              className="flex items-center space-x-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-lg transition-all hover:shadow-xl disabled:bg-gray-400 disabled:cursor-not-allowed disabled:shadow-none"
-            >
-              <Download className="w-5 h-5" />
-              <span className="font-medium">Xuất PDF</span>
-            </button>
-          </div>
+// --- SUB-COMPONENT: KPI CARD ---
+const KPICard = ({ title, value, icon, color, isWide }: any) => {
+  const bgColors: any = { blue: '#eff6ff', green: '#f0fdf4', orange: '#fff7ed', red: '#fef2f2', yellow: '#fefce8', emerald: '#ecfdf5' };
+  
+  return (
+    <div style={{ 
+      ...styles.kpiCard, 
+      gridColumn: isWide ? 'span 2' : 'span 1',
+      borderLeft: `4px solid ${color === 'blue' ? '#2563eb' : color === 'green' ? '#16a34a' : color === 'red' ? '#dc2626' : color === 'yellow' ? '#ca8a04' : '#059669'}` 
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <span style={styles.kpiLabel}>{title}</span>
+          <div style={styles.kpiValue}>{value}</div>
+        </div>
+        <div style={{ ...styles.kpiIconBox, backgroundColor: bgColors[color] || '#f3f4f6' }}>
+          {icon}
         </div>
       </div>
     </div>
   );
-}
+};
