@@ -1062,7 +1062,7 @@ export default function BookingPage() {
                   </div>
                 </div>
                 <div style={{ gridColumn: 'span 2' }}>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '8px' }}>Email (Không bắt buộc)</label>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '8px' }}>Email </label>
                   <div style={{ position: 'relative' }}>
                     <Mail size={18} style={{ position: 'absolute', top: '12px', left: '12px', color: '#94a3b8' }} />
                     <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="email@domain.com" style={{ width: '100%', padding: '10px 10px 10px 40px', borderRadius: '10px', border: '1px solid #e2e8f0', outline: 'none' }} />

@@ -123,7 +123,7 @@ export default function RevenueReport({ reportData, formatCurrency }: RevenueRep
         )}
       </div>
 
-      {/* Revenue by Room */}
+      {/* Revenue by Room
       <div className="bg-white rounded-xl shadow-sm p-6">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -154,7 +154,7 @@ export default function RevenueReport({ reportData, formatCurrency }: RevenueRep
             Không có dữ liệu
           </div>
         )}
-      </div>
+      </div> */}
 
       {/* Revenue Details Table */}
       <div className="bg-white rounded-xl shadow-sm p-6">
