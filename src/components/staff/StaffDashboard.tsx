@@ -1,84 +1,221 @@
-// Việt hóa trạng thái đơn đặt phòng
-const getBookingStatusLabel = (status: string) => {
-  const map: Record<string, string> = {
-    'da_coc': 'Đã đặt cọc',
-    'da_tra': 'Đã trả phòng',
-    'dang_o': 'Đang ở',
-    'dang_dung': 'Đang sử dụng',
-    'da_huy': 'Đã hủy',
-    'cho_xac_nhan': 'Chờ xác nhận',
-    'checkout': 'Đã checkout',
-    'sap_nhan': 'Sắp nhận',
-    'sap_tra': 'Sắp trả',
-    'trong': 'Trống',
-    '': 'Không xác định'
-  };
-  return map[status] || status;
-};
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Toaster, toast } from 'sonner';
 import {
-  MoreVertical, Clock, UserCheck, LogOut, Sparkles,
-  FileText, Settings, User, CalendarRange, Plus, X,
-  CreditCard, MapPin, Phone, StickyNote
+  Clock, UserCheck, LogOut, Sparkles,
+  FileText, Settings, User, Plus, X,
+  CreditCard, MapPin, Phone, StickyNote, AlertCircle,
+  LayoutGrid, BarChart2, Home, CheckCircle, XCircle, TrendingUp, BarChart3, PieChart as PieChartIcon,
+  ChevronDown, Edit, Save
 } from 'lucide-react';
+import { 
+  BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, 
+  CartesianGrid, Tooltip, Legend, ResponsiveContainer 
+} from 'recharts';
 import { format, differenceInHours } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 
+// --- CONFIG ---
+const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-faeb1932`;
+
+// --- HELPER FUNCTIONS ---
+const getBookingStatusLabel = (status: string) => {
+  const map: Record<string, string> = {
+    'da_coc': 'Đã đặt cọc', 'da_tra': 'Đã trả phòng', 'dang_o': 'Đang ở',
+    'dang_dung': 'Đang sử dụng', 'da_huy': 'Đã hủy', 'cho_xac_nhan': 'Chờ xác nhận',
+    'checkout': 'Đã checkout', 'sap_nhan': 'Sắp nhận', 'sap_tra': 'Sắp trả',
+    'trong': 'Trống', '': 'Không xác định'
+  };
+  return map[status] || status;
+};
+
+const formatCurrency = (amount: number) => 
+  new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(amount || 0);
+
 // --- INTERFACES ---
 interface Room {
-  id: string;
-  number: string;
-  concept: string;
-  location: string;
+  id: string; number: string; concept: string; location: string;
   status: 'available' | 'occupied' | 'checkout-soon' | 'checkin-soon' | 'overdue' | 'maintenance';
   cleanStatus: 'clean' | 'dirty' | 'cleaning';
-  price2h: number;
-  priceNight: number;
+  price2h: number; priceNight: number;
   currentBooking?: {
-    code: string;
-    customerName: string;
-    checkIn: string;
-    checkOut: string;
+    code: string; customerName: string; checkIn: string; checkOut: string;
+    source: string; note: string; totalPrice: number; deposit: number;
   };
 }
 
+interface ReportData {
+  totalRooms: number; occupiedRooms: number; availableRooms: number;
+  occupancyRate: number; totalNights: number;
+  topRooms: Array<{ name: string; bookings: number; revenue: number; }>;
+  roomUsageDetails: Array<{
+    branch: string; room: string; type: string;
+    usedDays: number; availableDays: number; occupancy: number; bookings: number;
+    originalRoom: Room;
+  }>;
+}
+
+// --- SUB-COMPONENT: BÁO CÁO (Đã bỏ cột Thao tác) ---
+const RoomsReportSection = ({ reportData, onRowClick }: { reportData: ReportData, onRowClick: (room: Room) => void }) => {
+  const occupancyData = [
+    { name: 'Đang sử dụng', value: reportData.occupiedRooms, color: '#8b5cf6' },
+    { name: 'Còn trống', value: reportData.availableRooms, color: '#e5e7eb' }
+  ];
+
+  return (
+    <div className="space-y-6 mt-12 pt-8 border-t border-gray-200 animate-in fade-in slide-in-from-bottom-8 duration-700">
+      <div className="flex items-center gap-2 mb-4">
+        <BarChart3 className="w-6 h-6 text-gray-700"/>
+        <h2 className="text-2xl font-bold text-gray-800">Báo cáo hiệu suất & Thống kê</h2>
+      </div>
+
+      {/* 1. KPIs */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-6 border border-purple-200">
+          <div className="flex justify-between mb-3"><div className="w-12 h-12 bg-purple-500 rounded-lg flex items-center justify-center"><Home className="w-6 h-6 text-white" /></div></div>
+          <p className="text-sm text-purple-700">Tổng số phòng</p><p className="text-3xl font-bold text-purple-900">{reportData.totalRooms}</p>
+        </div>
+        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-6 border border-green-200">
+          <div className="flex justify-between mb-3"><div className="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center"><CheckCircle className="w-6 h-6 text-white" /></div></div>
+          <p className="text-sm text-green-700">Đang sử dụng</p><p className="text-3xl font-bold text-green-900">{reportData.occupiedRooms}</p>
+        </div>
+        <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-6 border border-gray-200">
+          <div className="flex justify-between mb-3"><div className="w-12 h-12 bg-gray-500 rounded-lg flex items-center justify-center"><XCircle className="w-6 h-6 text-white" /></div></div>
+          <p className="text-sm text-gray-700">Còn trống</p><p className="text-3xl font-bold text-gray-900">{reportData.availableRooms}</p>
+        </div>
+        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 border border-blue-200">
+          <div className="flex justify-between mb-3"><div className="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center"><TrendingUp className="w-6 h-6 text-white" /></div></div>
+          <p className="text-sm text-blue-700">Công suất</p><p className="text-3xl font-bold text-blue-900">{reportData.occupancyRate}%</p>
+        </div>
+      </div>
+
+      {/* 2. Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <h3 className="font-bold text-lg mb-6 flex items-center gap-2"><PieChartIcon className="w-5 h-5 text-gray-400"/> Tỷ lệ lấp đầy</h3>
+          <div className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={occupancyData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={5} dataKey="value">
+                  {occupancyData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
+                </Pie>
+                <Tooltip />
+                <Legend verticalAlign="bottom" height={36}/>
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+          <h3 className="font-bold text-lg mb-6 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-gray-400"/> Hiệu suất doanh thu (Top 5)</h3>
+          {reportData.topRooms.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={reportData.topRooms} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="name" tick={{fontSize: 12}} />
+                <YAxis yAxisId="right" orientation="right" stroke="#10b981" fontSize={12} tickFormatter={(val) => `${val/1000}k`} />
+                <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                <Bar yAxisId="right" dataKey="revenue" fill="#10b981" name="Doanh thu" radius={[4, 4, 0, 0]} barSize={40} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <div className="h-[300px] flex items-center justify-center text-gray-400">Chưa có dữ liệu doanh thu</div>}
+        </div>
+      </div>
+
+      {/* 3. Table */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="p-6 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+            <h3 className="font-bold text-lg text-gray-800">Chi tiết trạng thái phòng</h3>
+            <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded border">Real-time</span>
+        </div>
+        <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+          <table className="w-full">
+            <thead className="bg-gray-100 sticky top-0 z-10">
+              <tr>
+                <th className="text-left py-3 px-6 text-xs font-bold text-gray-600 uppercase whitespace-nowrap">Cơ sở / Phòng</th>
+                <th className="text-center py-3 px-6 text-xs font-bold text-gray-600 uppercase whitespace-nowrap">Trạng thái</th>
+                <th className="text-center py-3 px-6 text-xs font-bold text-gray-600 uppercase whitespace-nowrap">Công suất</th>
+                <th className="text-center py-3 px-6 text-xs font-bold text-gray-600 uppercase whitespace-nowrap">Đơn hiện tại</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {reportData.roomUsageDetails.map((room, idx) => (
+                <tr 
+                    key={idx} 
+                    onClick={() => onRowClick(room.originalRoom)} 
+                    className="hover:bg-blue-50 transition-colors cursor-pointer group"
+                >
+                  <td className="py-3 px-6">
+                      <div className="font-bold text-gray-800 group-hover:text-blue-600 transition-colors">{room.room}</div>
+                      <div className="text-xs text-gray-500">{room.branch} - {room.type}</div>
+                  </td>
+                  <td className="py-3 px-6 text-center">
+                      {room.occupancy === 100 ? 
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Đang dùng</span> : 
+                        (room.occupancy === 50 ? <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">Sắp đến</span> : <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Trống</span>)
+                      }
+                  </td>
+                  <td className="py-3 px-6 text-center">
+                    <div className="flex flex-col items-center gap-1">
+                      <span className="text-xs font-medium text-gray-700">{room.occupancy}%</span>
+                      <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${room.occupancy === 100 ? 'bg-blue-500' : (room.occupancy === 50 ? 'bg-orange-400' : 'bg-green-500')}`} style={{ width: `${room.occupancy}%` }} />
+                      </div>
+                    </div>
+                  </td>
+                  <td className="py-3 px-6 text-sm text-center font-medium text-gray-700">{room.bookings}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- MAIN COMPONENT ---
 export default function StaffDashboard() {
-  // --- STATE ---
   const [rooms, setRooms] = useState<Room[]>([]);
   const [filter, setFilter] = useState<string>('all');
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isEditing, setIsEditing] = useState(false);
+  
+  // State: Edit Room Info (Prices/Number)
+  const [isEditingInfo, setIsEditingInfo] = useState(false);
+  const [infoForm, setInfoForm] = useState({ number: '', concept: '', price2h: 0, priceNight: 0 });
 
-  // Edit States
-  const [editStatus, setEditStatus] = useState<string | null>(null);
-  const [editClean, setEditClean] = useState<string | null>(null);
-  const [editLoading, setEditLoading] = useState(false);
+  // State: Loading for actions
+  const [actionLoading, setActionLoading] = useState(false);
 
-  // Sub-modals
+  // Modal States
   const [bookingDetail, setBookingDetail] = useState<any | null>(null);
   const [showBookingForm, setShowBookingForm] = useState(false);
 
   useEffect(() => {
     loadRooms();
-    const interval = setInterval(loadRooms, 15000);
+    const interval = setInterval(loadRooms, 15000); 
     return () => clearInterval(interval);
   }, []);
 
-  // --- DATA LOADING ---
+  useEffect(() => {
+    if (selectedRoom) {
+      setInfoForm({
+        number: selectedRoom.number,
+        concept: selectedRoom.concept,
+        price2h: selectedRoom.price2h,
+        priceNight: selectedRoom.priceNight
+      });
+      setIsEditingInfo(false);
+    }
+  }, [selectedRoom]);
+
   const loadRooms = async () => {
     try {
       const [roomsRes, bookingsRes] = await Promise.all([
-        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-faeb1932/phong`, {
-          headers: { 'Authorization': `Bearer ${publicAnonKey}` }
-        }),
-        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-faeb1932/dat-phong`, {
-          headers: { 'Authorization': `Bearer ${publicAnonKey}` }
-        })
+        fetch(`${API_URL}/phong`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }),
+        fetch(`${API_URL}/dat-phong`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } })
       ]);
-
       const [roomsData, bookingsData] = await Promise.all([roomsRes.json(), bookingsRes.json()]);
 
       if (!roomsData.success) { setRooms([]); return; }
@@ -92,43 +229,38 @@ export default function StaffDashboard() {
         const currentBooking = bookingsFromApi.find((b: any) => {
           if (!b || !b.id_phong || b.id_phong !== r.id) return false;
           if (['da_huy', 'da_tra', 'checkout'].includes(b.trang_thai)) return false;
-
-          // Nếu trạng thái đang ở -> lấy luôn
           if (b.trang_thai === 'dang_o' || b.trang_thai === 'dang_dung') return true;
-
-          // Logic thời gian
           const start = new Date(b.thoi_gian_nhan);
           const end = new Date(b.thoi_gian_tra);
-          if (r.trang_thai === 'dang_dung') return true;
-          return now <= end && (now >= start || differenceInHours(start, now) <= 2);
+          return now <= end && (now >= start || differenceInHours(start, now) <= 24);
         });
 
         const statusMap: any = { 'trong': 'available', 'dang_dung': 'occupied', 'sap_nhan': 'checkin-soon', 'sap_tra': 'checkout-soon', 'bao_tri': 'maintenance' };
         const cleanMap: any = { 'sach': 'clean', 'dang_don': 'cleaning', 'chua_don': 'dirty' };
-
         let derivedStatus = statusMap[r.trang_thai] || 'available';
-        if (currentBooking && derivedStatus === 'available') {
-          if (new Date() >= new Date(currentBooking.thoi_gian_nhan)) {
-            derivedStatus = 'occupied';
-          } else {
-            derivedStatus = 'checkin-soon';
-          }
+        
+        if (currentBooking) {
+             const checkIn = new Date(currentBooking.thoi_gian_nhan);
+             const checkOut = new Date(currentBooking.thoi_gian_tra);
+             if (r.trang_thai === 'bao_tri') {
+                 derivedStatus = 'maintenance';
+             } else if (now >= checkIn && now <= checkOut) {
+                 derivedStatus = 'occupied';
+                 if (differenceInHours(checkOut, now) < 1) derivedStatus = 'checkout-soon';
+             } else if (now < checkIn && differenceInHours(checkIn, now) <= 24) {
+                 derivedStatus = 'checkin-soon';
+             }
         }
 
         return {
-          id: r.id,
-          number: r.ma_phong,
-          concept: r.loai_phong?.ten_loai || '',
-          location: r.loai_phong?.co_so?.ten_co_so || '',
-          status: derivedStatus,
-          cleanStatus: cleanMap[r.tinh_trang_vesinh] || 'clean',
-          price2h: r.loai_phong?.gia_gio || 0,
-          priceNight: r.loai_phong?.gia_dem || 0,
+          id: r.id, number: r.ma_phong, concept: r.loai_phong?.ten_loai || '', location: r.loai_phong?.co_so?.ten_co_so || '',
+          status: derivedStatus, cleanStatus: cleanMap[r.tinh_trang_vesinh] || 'clean',
+          price2h: r.loai_phong?.gia_gio || 0, priceNight: r.loai_phong?.gia_dem || 0,
           currentBooking: currentBooking ? {
-            code: currentBooking.ma_dat,
-            customerName: currentBooking.khach_hang?.ho_ten || currentBooking.ho_ten || 'Khách vãng lai',
-            checkIn: currentBooking.thoi_gian_nhan,
-            checkOut: currentBooking.thoi_gian_tra
+            code: currentBooking.ma_dat, customerName: currentBooking.khach_hang?.ho_ten || currentBooking.ho_ten || 'Khách vãng lai',
+            checkIn: currentBooking.thoi_gian_nhan, checkOut: currentBooking.thoi_gian_tra,
+            source: currentBooking.kenh_dat || 'Khác', note: currentBooking.ghi_chu || '',
+            totalPrice: currentBooking.tong_tien || 0, deposit: currentBooking.tien_coc || 0
           } : undefined
         } as Room;
       });
@@ -136,106 +268,88 @@ export default function StaffDashboard() {
     } catch (error) { console.error(error); setRooms([]); } finally { setLoading(false); }
   };
 
-  // --- API ACTIONS ---
+  // --- CALCULATION FOR REPORT ---
+  const reportData: ReportData = useMemo(() => {
+    const totalRooms = rooms.length;
+    const occupiedRooms = rooms.filter(r => ['occupied', 'checkout-soon'].includes(r.status)).length;
+    const availableRooms = rooms.filter(r => r.status === 'available').length;
+    const roomUsageDetails = rooms.map(r => {
+        const isOccupied = ['occupied', 'checkout-soon'].includes(r.status);
+        return {
+            branch: r.location, room: r.number, type: r.concept,
+            usedDays: isOccupied ? 1 : 0, availableDays: 1,
+            occupancy: isOccupied ? 100 : (r.status === 'checkin-soon' ? 50 : 0),
+            bookings: r.currentBooking ? 1 : 0,
+            originalRoom: r
+        };
+    });
+    const topRooms = rooms.filter(r => r.currentBooking).map(r => ({
+            name: r.number, bookings: 1, revenue: r.currentBooking?.totalPrice || 0
+    })).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
+
+    return {
+        totalRooms, occupiedRooms, availableRooms,
+        occupancyRate: totalRooms > 0 ? Math.round((occupiedRooms / totalRooms) * 100) : 0,
+        totalNights: occupiedRooms, topRooms, roomUsageDetails
+    };
+  }, [rooms]);
+
+  // --- API HELPER & ACTIONS ---
   const updateRoomStatusApi = async (roomId: string, status: string, cleanStatus: string) => {
     const statusMap: any = { 'available': 'trong', 'occupied': 'dang_dung', 'checkout-soon': 'sap_tra', 'checkin-soon': 'sap_nhan', 'maintenance': 'bao_tri' };
     const cleanMap: any = { 'clean': 'sach', 'cleaning': 'dang_don', 'dirty': 'chua_don' };
-    await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-faeb1932/phong/${roomId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
+    await fetch(`${API_URL}/phong/${roomId}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
       body: JSON.stringify({ trang_thai: statusMap[status] || 'trong', tinh_trang_vesinh: cleanMap[cleanStatus] || 'sach' })
     });
   };
 
-  // --- ACTION: TRẢ PHÒNG (ĐÃ ĐƠN GIẢN HÓA) ---
+  const handleUpdateRoomInfo = async () => {
+    if (!selectedRoom) return;
+    const toastId = toast.loading('Đang cập nhật thông tin...');
+    try {
+        setActionLoading(true);
+        await fetch(`${API_URL}/phong/${selectedRoom.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
+            body: JSON.stringify({
+                ma_phong: infoForm.number,
+            })
+        });
+        toast.success('Đã cập nhật thông tin phòng!', { id: toastId });
+        setIsEditingInfo(false);
+        loadRooms(); 
+        setSelectedRoom(prev => prev ? ({...prev, number: infoForm.number, concept: infoForm.concept}) : null);
+    } catch (e) {
+        toast.error('Lỗi cập nhật', { id: toastId });
+    } finally {
+        setActionLoading(false);
+    }
+  };
+
   const handleCheckout = async () => {
     if (!selectedRoom?.currentBooking) return;
-
     if (!window.confirm(`Xác nhận trả phòng cho khách ${selectedRoom.currentBooking.customerName}?`)) return;
-
-    const toastId = toast.loading('Đang xử lý trả phòng...');
-
+    const toastId = toast.loading('Đang xử lý...');
     try {
-      setEditLoading(true);
-      const bookingRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-faeb1932/dat-phong/ma/${selectedRoom.currentBooking.code}`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } });
+      setActionLoading(true);
+      const bookingRes = await fetch(`${API_URL}/dat-phong/ma/${selectedRoom.currentBooking.code}`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } });
       const bookingData = await bookingRes.json();
-
       if (bookingData.success) {
         await Promise.all([
-          fetch(`https://${projectId}.supabase.co/functions/v1/make-server-faeb1932/dat-phong/${bookingData.data.id}`, {
-            method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
-            body: JSON.stringify({ trang_thai: 'da_tra', thoi_gian_tra_thuc_te: new Date().toISOString() })
-          }),
+          fetch(`${API_URL}/dat-phong/${bookingData.data.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` }, body: JSON.stringify({ trang_thai: 'da_tra', thoi_gian_tra_thuc_te: new Date().toISOString() }) }),
           updateRoomStatusApi(selectedRoom.id, 'available', 'dirty')
         ]);
-
-        toast.success('Trả phòng thành công!', { id: toastId });
-        setSelectedRoom(null);
-        loadRooms();
-      } else {
-        toast.error('Không tìm thấy đơn đặt phòng', { id: toastId });
-      }
-    } catch (e) {
-      toast.error('Lỗi hệ thống', { id: toastId });
-    } finally {
-      setEditLoading(false);
-    }
+        toast.success('Trả phòng thành công!', { id: toastId }); setSelectedRoom(null); loadRooms();
+      } else { toast.error('Lỗi tìm đơn', { id: toastId }); }
+    } catch (e) { toast.error('Lỗi hệ thống', { id: toastId }); } finally { setActionLoading(false); }
   };
 
-  const handleCleanRoom = async () => {
-    if (!selectedRoom) return;
-    const toastId = toast.loading('Đang cập nhật...');
-    try {
-      setEditLoading(true);
-      await updateRoomStatusApi(selectedRoom.id, 'available', 'clean');
-      toast.success('Phòng đã sạch sẽ!', { id: toastId });
-      setSelectedRoom(null); loadRooms();
-    } catch (e) { toast.error('Lỗi kết nối', { id: toastId }); } finally { setEditLoading(false); }
-  };
+  const handleCleanRoom = async () => { if (!selectedRoom) return; try { setActionLoading(true); await updateRoomStatusApi(selectedRoom.id, 'available', 'clean'); toast.success('Đã dọn xong!'); setSelectedRoom(null); loadRooms(); } catch { toast.error('Lỗi'); } finally { setActionLoading(false); } };
+  const handleCheckIn = async () => { if (!selectedRoom) return; try { setActionLoading(true); await updateRoomStatusApi(selectedRoom.id, 'occupied', selectedRoom.cleanStatus); toast.success('Đã nhận phòng!'); setSelectedRoom(null); loadRooms(); } catch { toast.error('Lỗi'); } finally { setActionLoading(false); } };
+  const handleShowDetail = async () => { if (!selectedRoom?.currentBooking) return; try { const res = await fetch(`${API_URL}/dat-phong/ma/${selectedRoom.currentBooking.code}`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }); const data = await res.json(); if (data.success) setBookingDetail(data.data); } catch { toast.error('Lỗi'); } };
 
-  const handleCheckIn = async () => {
-    if (!selectedRoom) return;
-    const toastId = toast.loading('Đang nhận phòng...');
-    try {
-      setEditLoading(true);
-      await updateRoomStatusApi(selectedRoom.id, 'occupied', selectedRoom.cleanStatus);
-      toast.success('Nhận phòng thành công!', { id: toastId });
-      setSelectedRoom(null); loadRooms();
-    } catch (e) { toast.error('Lỗi kết nối', { id: toastId }); } finally { setEditLoading(false); }
-  };
-
-  const handleSaveManual = async () => {
-    if (!selectedRoom) return;
-    const toastId = toast.loading('Đang lưu...');
-    try {
-      setEditLoading(true);
-      await updateRoomStatusApi(selectedRoom.id, editStatus || selectedRoom.status, editClean || selectedRoom.cleanStatus);
-      toast.success('Cập nhật thành công', { id: toastId });
-      setSelectedRoom(null); loadRooms();
-    } catch (e) { toast.error('Lỗi kết nối', { id: toastId }); } finally { setEditLoading(false); }
-  };
-
-  const handleShowDetail = async () => {
-    if (!selectedRoom?.currentBooking) return;
-    try {
-      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-faeb1932/dat-phong/ma/${selectedRoom.currentBooking.code}`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } });
-      const data = await res.json();
-      if (data.success) {
-        console.log('bookingDetail:', data.data);
-        setBookingDetail(data.data);
-      } else {
-        toast.error('Không tìm thấy chi tiết');
-      }
-    } catch (e) {
-      toast.error('Lỗi kết nối');
-    }
-  };
-
-  // --- STYLES & HELPERS ---
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
-  };
-
+  // --- STYLES ---
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'occupied': return { bg: '#eff6ff', border: '#bfdbfe', text: '#1d4ed8', label: 'Đang ở' };
@@ -246,438 +360,225 @@ export default function StaffDashboard() {
       default: return { bg: '#fff', border: '#e5e7eb', text: '#000', label: 'Unknown' };
     }
   };
-
-  const getTimeRemaining = (checkOut: string) => {
-    const hours = differenceInHours(new Date(checkOut), new Date());
-    if (hours < 0) return 'Quá giờ';
-    if (hours === 0) return '< 1h';
-    return `${hours}h`;
-  };
-
   const filteredRooms = filter === 'all' ? rooms : rooms.filter(r => r.status === filter);
 
-  // --- MAIN RENDER ---
-  if (loading) return (
-    <div style={{ display: 'flex', justifyContent: 'center', padding: '80px' }}>
-      <div style={{ width: '40px', height: '40px', border: '4px solid #e5e7eb', borderTopColor: '#2563eb', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-    </div>
-  );
+  if (loading) return <div className="flex justify-center p-20"><div className="w-10 h-10 border-4 border-gray-200 border-t-blue-600 rounded-full animate-spin"></div></div>;
 
   return (
-    <div style={{ maxWidth: '1280px', margin: '0 auto', paddingBottom: '80px', padding: '20px', fontFamily: 'sans-serif' }}>
-
+    <div className="max-w-7xl mx-auto pb-20 px-4 pt-6 font-sans overflow-x-hidden">
       <Toaster position="top-right" richColors closeButton />
 
-      {/* Header */}
-      <div style={{ marginBottom: '32px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#111827', marginBottom: '16px' }}>Lịch đặt phòng</h1>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-          {[
-            { val: 'all', label: 'Tất cả', bg: '#1f2937', text: '#fff' },
-            { val: 'available', label: 'Phòng Trống', bg: '#16a34a', text: '#fff' },
-            { val: 'occupied', label: 'Đang ở', bg: '#2563eb', text: '#fff' },
-            { val: 'checkin-soon', label: 'Sắp nhận', bg: '#f97316', text: '#fff' },
-            { val: 'checkout-soon', label: 'Sắp trả', bg: '#eab308', text: '#fff' },
-            { val: 'maintenance', label: 'Bảo trì', bg: '#6b7280', text: '#fff' }
-          ].map(btn => (
-            <button
-              key={btn.val}
-              onClick={() => setFilter(btn.val)}
-              style={{
-                padding: '8px 16px',
-                borderRadius: '8px',
-                fontSize: '14px',
-                fontWeight: '500',
-                cursor: 'pointer',
-                border: '1px solid transparent',
-                backgroundColor: filter === btn.val ? btn.bg : '#fff',
-                color: filter === btn.val ? btn.text : '#4b5563',
-                borderColor: filter === btn.val ? 'transparent' : '#e5e7eb',
-                boxShadow: filter === btn.val ? '0 4px 6px -1px rgba(0, 0, 0, 0.1)' : 'none',
-                transition: 'all 0.2s'
-              }}
-            >
-              {btn.label}
-            </button>
-          ))}
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+        <div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-1">Lịch đặt phòng</h1>
+            <p className="text-sm text-gray-500">Quản lý tình trạng phòng và đơn đặt</p>
         </div>
       </div>
 
-      {/* Grid Rooms */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-        gap: '16px'
-      }}>
-        {filteredRooms.map(room => {
-          const conf = getStatusColor(room.status);
-          const isOccupied = room.status === 'occupied' || room.status === 'checkout-soon';
-
-          return (
-            <div
-              key={room.id}
-              onClick={() => { setSelectedRoom(room); setIsEditing(false); }}
-              style={{
-                backgroundColor: conf.bg,
-                border: `1px solid ${conf.border}`,
-                borderRadius: '12px',
-                cursor: 'pointer',
-                position: 'relative',
-                overflow: 'hidden',
-                boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)',
-                transition: 'transform 0.2s',
-                display: 'flex',
-                flexDirection: 'column',
-                minHeight: '160px'
-              }}
-              onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-4px)'}
-              onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-            >
-              <div style={{ padding: '16px', paddingBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <h3 style={{ fontSize: '24px', fontWeight: 'bold', color: '#111827', margin: 0 }}>{room.number}</h3>
-                  <p style={{ fontSize: '12px', fontWeight: '500', color: '#6b7280', margin: 0 }}>{room.concept}</p>
-                </div>
-                <span style={{
-                  padding: '4px 8px',
-                  borderRadius: '4px',
-                  fontSize: '10px',
-                  fontWeight: 'bold',
-                  textTransform: 'uppercase',
-                  backgroundColor: 'rgba(255,255,255,0.6)',
-                  border: '1px solid rgba(0,0,0,0.05)',
-                  color: conf.text
-                }}>
-                  {conf.label}
-                </span>
-              </div>
-
-              <div style={{ padding: '16px', paddingTop: '8px', flex: 1 }}>
-                {room.currentBooking ? (
-                  <div style={{ marginTop: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                      <div style={{
-                        width: '32px', height: '32px', borderRadius: '50%',
-                        backgroundColor: isOccupied ? '#2563eb' : '#f97316',
-                        color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                      }}>
-                        <User size={16} />
-                      </div>
-                      <div style={{ flex: 1, overflow: 'hidden' }}>
-                        <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#111827', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {room.currentBooking.customerName}
-                        </p>
-                        <p style={{ fontSize: '10px', color: '#6b7280', fontFamily: 'monospace', margin: 0 }}>
-                          {room.currentBooking.code.slice(-6)}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div style={{
-                      backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: '8px', padding: '8px',
-                      border: '1px solid rgba(0,0,0,0.05)', fontSize: '12px', color: '#4b5563',
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                    }}>
-                      <div style={{ textAlign: 'center' }}>
-                        <span style={{ display: 'block', fontSize: '9px', textTransform: 'uppercase', color: '#9ca3af' }}>Vào</span>
-                        <span style={{ fontWeight: '600' }}>{format(new Date(room.currentBooking.checkIn), 'HH:mm')}</span>
-                      </div>
-                      <CalendarRange size={14} color="#d1d5db" />
-                      <div style={{ textAlign: 'center' }}>
-                        <span style={{ display: 'block', fontSize: '9px', textTransform: 'uppercase', color: '#9ca3af' }}>Ra</span>
-                        <span style={{ fontWeight: '600' }}>{format(new Date(room.currentBooking.checkOut), 'HH:mm')}</span>
-                      </div>
-                    </div>
-
-                    <div style={{
-                      marginTop: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
-                      fontSize: '11px', fontWeight: '500', color: '#ea580c', backgroundColor: '#ffedd5',
-                      padding: '4px', borderRadius: '4px'
-                    }}>
-                      <Clock size={12} />
-                      <span>Còn {getTimeRemaining(room.currentBooking.checkOut)}</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px dashed #e5e7eb' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#6b7280', marginBottom: '4px' }}>
-                      <span>2h:</span>
-                      <span style={{ fontWeight: 'bold', color: '#374151' }}>{room.price2h.toLocaleString()}đ</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#6b7280' }}>
-                      <span>Đêm:</span>
-                      <span style={{ fontWeight: 'bold', color: '#374151' }}>{room.priceNight.toLocaleString()}đ</span>
-                    </div>
-                  </div>
-                )}
-
-                {room.cleanStatus === 'dirty' && (
-                  <div style={{ position: 'absolute', top: '8px', right: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div style={{ width: '10px', height: '10px', backgroundColor: '#ef4444', borderRadius: '50%', boxShadow: '0 0 0 4px rgba(239, 68, 68, 0.2)' }}></div>
-                  </div>
-                )}
-                {room.cleanStatus === 'dirty' && (
-                  <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'center' }}>
-                    <span style={{
-                      fontSize: '10px', fontWeight: 'bold', color: '#dc2626', backgroundColor: '#fef2f2',
-                      padding: '2px 8px', borderRadius: '12px', border: '1px solid #fee2e2',
-                      display: 'flex', alignItems: 'center', gap: '4px'
-                    }}>
-                      <Sparkles size={10} /> Cần dọn dẹp
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              <div style={{ height: '6px', width: '100%', backgroundColor: room.cleanStatus === 'dirty' ? '#ef4444' : (isOccupied ? '#3b82f6' : '#22c55e') }}></div>
-            </div>
-          )
-        })}
+      {/* FILTER BUTTONS */}
+      <div className="flex flex-wrap gap-2 mb-6">
+          {[ { val: 'all', label: 'Tất cả', bg: '#1f2937' }, { val: 'available', label: 'Phòng Trống', bg: '#16a34a' }, { val: 'occupied', label: 'Đang ở', bg: '#2563eb' }, { val: 'checkin-soon', label: 'Sắp nhận', bg: '#f97316' }, { val: 'checkout-soon', label: 'Sắp trả', bg: '#eab308' }, { val: 'maintenance', label: 'Bảo trì', bg: '#6b7280' } ].map(btn => (
+              <button key={btn.val} onClick={() => setFilter(btn.val)} style={{backgroundColor: filter === btn.val ? btn.bg : '#fff', color: filter === btn.val ? '#fff' : '#4b5563'}} className={`px-4 py-2 rounded-lg text-sm font-medium border transition-all ${filter !== btn.val ? 'border-gray-200 hover:bg-gray-50' : 'border-transparent shadow-sm'}`}>{btn.label}</button>
+          ))}
       </div>
 
-      {/* --- MODAL PHÒNG CHÍNH --- */}
-      {selectedRoom && (
-        <div style={{
-          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '16px'
-        }}>
-          <div style={{
-            backgroundColor: '#fff', borderRadius: '16px', width: '100%', maxWidth: '420px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-            overflow: 'hidden', animation: 'fadeIn 0.2s ease-out'
-          }}>
-            <style>{`@keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }`}</style>
+      {/* GRID ROOMS */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {filteredRooms.map(room => {
+          const conf = getStatusColor(room.status);
+          const isOccupied = ['occupied', 'checkout-soon'].includes(room.status);
+          const isCheckin = room.status === 'checkin-soon';
 
-            <div style={{ padding: '16px 24px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f9fafb' }}>
-              <div>
-                <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#1f2937', margin: 0 }}>Phòng {selectedRoom.number}</h2>
-                <p style={{ fontSize: '14px', color: '#6b7280', margin: 0 }}>{selectedRoom.concept} • {selectedRoom.location}</p>
+          return (
+              <div key={room.id} onClick={() => { setSelectedRoom(room); setIsEditingInfo(false); }} className="relative overflow-hidden rounded-xl cursor-pointer shadow-sm hover:-translate-y-1 transition-transform duration-200 flex flex-col min-h-[190px]" style={{ backgroundColor: conf.bg, border: `1px solid ${conf.border}` }}>
+              
+              {/* CARD HEADER */}
+              <div className="px-4 py-3 border-b flex justify-between items-start" style={{ borderColor: conf.border, backgroundColor: 'rgba(255,255,255,0.4)' }}>
+                  <div><h3 className="text-xl font-bold text-gray-900 leading-none">{room.number}</h3><p className="text-xs font-medium text-gray-500 mt-1">{room.concept}</p></div>
+                  <div className="flex flex-col items-end">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide border" style={{ backgroundColor: 'rgba(255,255,255,0.8)', borderColor: 'rgba(0,0,0,0.05)', color: conf.text }}>{conf.label}</span>
+                      {room.currentBooking && <span className="text-[10px] font-bold text-gray-400 mt-1 uppercase">{room.currentBooking.source === 'facebook' ? 'FB' : room.currentBooking.source}</span>}
+                  </div>
               </div>
-              <button onClick={() => setSelectedRoom(null)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '8px', borderRadius: '50%' }}>
-                <X size={24} color="#9ca3af" />
-              </button>
+
+              {/* CARD BODY */}
+              <div className="p-4 flex-1 flex flex-col justify-center">
+                  {(isOccupied || isCheckin) && room.currentBooking ? (
+                  <>
+                      <div className="flex items-center gap-2 mb-3">
+                          <User size={16} className="text-gray-500"/>
+                          <span className="font-bold text-gray-800 text-sm truncate">{room.currentBooking.customerName}</span>
+                          {room.currentBooking.note && <StickyNote size={14} className="text-amber-500 ml-auto" />}
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-gray-600 mb-3 bg-white/50 p-2 rounded-lg">
+                          <div className="text-center"><div className="text-[9px] uppercase text-gray-400">Đến</div><div className="font-bold">{format(new Date(room.currentBooking.checkIn), 'HH:mm dd/MM')}</div></div>
+                          <div className="text-gray-300">➜</div>
+                          <div className="text-center"><div className="text-[9px] uppercase text-gray-400">Đi</div><div className="font-bold">{format(new Date(room.currentBooking.checkOut), 'HH:mm dd/MM')}</div></div>
+                      </div>
+                      <div className="flex justify-between items-center text-xs">
+                          <div className="flex items-center gap-1 text-green-600 font-semibold"><CreditCard size={12}/> {room.currentBooking.deposit > 0 ? `Cọc: ${formatCurrency(room.currentBooking.deposit)}` : 'Chưa cọc'}</div>
+                          <div className="font-bold text-gray-800">{formatCurrency(room.currentBooking.totalPrice)}</div>
+                      </div>
+                  </>
+                  ) : (
+                  <div className="space-y-2">
+                      <div className="flex justify-between text-xs text-gray-500 border-b border-dashed border-gray-200 pb-1"><span>2h đầu</span><span className="font-bold text-gray-700">{formatCurrency(room.price2h)}</span></div>
+                      <div className="flex justify-between text-xs text-gray-500"><span>Qua đêm</span><span className="font-bold text-gray-700">{formatCurrency(room.priceNight)}</span></div>
+                      {room.cleanStatus === 'dirty' && <div className="mt-2 bg-red-50 text-red-600 text-xs font-bold text-center py-1.5 rounded-md flex items-center justify-center gap-1"><Sparkles size={12}/> Cần dọn dẹp</div>}
+                  </div>
+                  )}
+              </div>
+              {/* Color Strip */}
+              <div className={`h-1 w-full ${room.cleanStatus === 'dirty' ? 'bg-red-500' : (isOccupied ? 'bg-blue-500' : (isCheckin ? 'bg-orange-500' : 'bg-green-500'))}`}></div>
+              </div>
+          );
+          })}
+      </div>
+
+      {/* --- REPORT SECTION --- */}
+      <RoomsReportSection reportData={reportData} onRowClick={(r) => { setSelectedRoom(r); setIsEditingInfo(false); }} />
+
+      {/* MODAL ROOM DETAIL (Tích hợp Edit Info, Bỏ Edit Status) */}
+      {selectedRoom && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
+            {/* Modal Header with Edit Button */}
+            <div className="px-6 py-4 border-b bg-gray-50 flex justify-between items-start">
+              {isEditingInfo ? (
+                  <div className="w-full mr-4">
+                      <input 
+                        type="text" 
+                        value={infoForm.number} 
+                        onChange={(e) => setInfoForm({...infoForm, number: e.target.value})}
+                        className="w-full font-bold text-xl mb-1 bg-white border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 outline-none"
+                        placeholder="Số phòng"
+                      />
+                      <input 
+                        type="text" 
+                        value={infoForm.concept} 
+                        onChange={(e) => setInfoForm({...infoForm, concept: e.target.value})}
+                        className="w-full text-sm text-gray-500 bg-white border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 outline-none"
+                        placeholder="Loại phòng"
+                      />
+                  </div>
+              ) : (
+                  <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-xl font-bold text-gray-800">Phòng {selectedRoom.number}</h2>
+                        {/* Edit Button */}
+                        <button onClick={() => setIsEditingInfo(true)} className="p-1.5 rounded-full hover:bg-gray-200 text-gray-400 hover:text-blue-600 transition"><Edit size={14}/></button>
+                      </div>
+                      <p className="text-sm text-gray-500">{selectedRoom.concept} • {selectedRoom.location}</p>
+                  </div>
+              )}
+              <button onClick={() => setSelectedRoom(null)} className="p-2 rounded-full hover:bg-gray-200 transition"><X size={20} className="text-gray-500" /></button>
             </div>
 
-            <div style={{ padding: '24px' }}>
-              <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
-                <div style={{
-                  flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid', textAlign: 'center',
-                  backgroundColor: selectedRoom.cleanStatus === 'clean' ? '#f0fdf4' : '#fef2f2',
-                  borderColor: selectedRoom.cleanStatus === 'clean' ? '#dcfce7' : '#fee2e2',
-                  color: selectedRoom.cleanStatus === 'clean' ? '#15803d' : '#b91c1c'
-                }}>
-                  <p style={{ fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', opacity: 0.7, margin: 0, marginBottom: '4px' }}>Vệ sinh</p>
-                  <p style={{ fontSize: '16px', fontWeight: 'bold', margin: 0 }}>{selectedRoom.cleanStatus === 'clean' ? 'Sạch sẽ' : 'Cần dọn'}</p>
+            {/* Modal Body */}
+            <div className="p-6 space-y-6">
+                
+                {/* Editing Prices Section */}
+                {isEditingInfo && (
+                    <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-200 space-y-3 animate-in fade-in">
+                        <h4 className="text-xs font-bold uppercase text-yellow-700">Cập nhật thông tin</h4>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="text-xs text-gray-500 block mb-1">Giá 2h</label>
+                                <input type="number" value={infoForm.price2h} onChange={(e) => setInfoForm({...infoForm, price2h: parseInt(e.target.value)})} className="w-full p-2 rounded border border-yellow-300 focus:outline-none focus:border-yellow-500 text-sm"/>
+                            </div>
+                            <div>
+                                <label className="text-xs text-gray-500 block mb-1">Giá đêm</label>
+                                <input type="number" value={infoForm.priceNight} onChange={(e) => setInfoForm({...infoForm, priceNight: parseInt(e.target.value)})} className="w-full p-2 rounded border border-yellow-300 focus:outline-none focus:border-yellow-500 text-sm"/>
+                            </div>
+                        </div>
+                        <div className="flex gap-2 mt-2">
+                            <button onClick={handleUpdateRoomInfo} disabled={actionLoading} className="flex-1 bg-yellow-600 text-white py-2 rounded-lg text-sm font-bold hover:bg-yellow-700 flex items-center justify-center gap-1 shadow-sm"><Save size={14}/> Lưu</button>
+                            <button onClick={() => setIsEditingInfo(false)} className="flex-1 bg-white text-gray-600 border border-gray-300 py-2 rounded-lg text-sm font-bold hover:bg-gray-50">Hủy</button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Status Badges */}
+                <div className="flex gap-3">
+                    <div className={`flex-1 p-3 rounded-xl border text-center ${selectedRoom.cleanStatus === 'clean' ? 'bg-green-50 border-green-100 text-green-700' : 'bg-red-50 border-red-100 text-red-700'}`}>
+                        <p className="text-[10px] uppercase font-bold opacity-70 mb-1">Vệ sinh</p><p className="font-bold">{selectedRoom.cleanStatus === 'clean' ? 'Sạch sẽ' : 'Cần dọn'}</p>
+                    </div>
+                    <div className="flex-1 p-3 rounded-xl border text-center" style={{backgroundColor: getStatusColor(selectedRoom.status).bg, borderColor: getStatusColor(selectedRoom.status).border, color: getStatusColor(selectedRoom.status).text}}>
+                        <p className="text-[10px] uppercase font-bold opacity-70 mb-1">Trạng thái</p><p className="font-bold">{getStatusColor(selectedRoom.status).label}</p>
+                    </div>
                 </div>
-                <div style={{
-                  flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid', textAlign: 'center',
-                  backgroundColor: getStatusColor(selectedRoom.status).bg,
-                  borderColor: getStatusColor(selectedRoom.status).border,
-                  color: getStatusColor(selectedRoom.status).text
-                }}>
-                  <p style={{ fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', opacity: 0.7, margin: 0, marginBottom: '4px' }}>Trạng thái</p>
-                  <p style={{ fontSize: '16px', fontWeight: 'bold', margin: 0 }}>{getStatusColor(selectedRoom.status).label}</p>
+
+                {/* Modal Booking Info */}
+                {selectedRoom.currentBooking && (
+                    <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 space-y-4">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-blue-600 shadow-sm"><User size={20}/></div>
+                            <div><p className="text-[10px] uppercase font-bold text-gray-500">Khách hàng</p><p className="font-bold text-gray-900 text-lg">{selectedRoom.currentBooking.customerName}</p></div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 pt-3 border-t border-blue-100">
+                            <div><p className="text-[10px] uppercase font-bold text-gray-500">Check-in</p><p className="font-semibold text-gray-800 text-sm">{format(new Date(selectedRoom.currentBooking.checkIn), 'HH:mm dd/MM')}</p></div>
+                            <div><p className="text-[10px] uppercase font-bold text-gray-500">Check-out</p><p className="font-semibold text-gray-800 text-sm">{format(new Date(selectedRoom.currentBooking.checkOut), 'HH:mm dd/MM')}</p></div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Actions */}
+                <div className="space-y-3">
+                    {selectedRoom.cleanStatus === 'dirty' && selectedRoom.status === 'available' && <button onClick={handleCleanRoom} className="w-full py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition"><Sparkles size={18}/> Xác nhận dọn xong</button>}
+                    {selectedRoom.status === 'occupied' && (
+                        <>
+                            <button onClick={handleCheckout} className="w-full py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition"><LogOut size={18}/> Trả phòng</button>
+                            <button onClick={handleShowDetail} className="w-full py-3 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-xl font-bold flex items-center justify-center gap-2 transition"><FileText size={18}/> Xem chi tiết đơn</button>
+                        </>
+                    )}
+                    {selectedRoom.status === 'checkin-soon' && <button onClick={handleCheckIn} className="w-full py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition"><UserCheck size={18}/> Khách nhận phòng</button>}
+                    {selectedRoom.status === 'available' && selectedRoom.cleanStatus === 'clean' && <button onClick={() => setShowBookingForm(true)} className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition"><Plus size={18}/> Tạo đơn mới</button>}
                 </div>
-              </div>
-
-              {selectedRoom.currentBooking && (
-                <div style={{ backgroundColor: '#eff6ff', borderRadius: '12px', padding: '16px', border: '1px solid #dbeafe', marginBottom: '24px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-                    <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb' }}>
-                      <User size={20} />
-                    </div>
-                    <div>
-                      <p style={{ fontSize: '12px', color: '#6b7280', textTransform: 'uppercase', fontWeight: 'bold', margin: 0 }}>Khách hàng</p>
-                      <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#111827', margin: 0 }}>{selectedRoom.currentBooking.customerName}</p>
-                    </div>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', borderTop: '1px solid #dbeafe', paddingTop: '12px' }}>
-                    <div>
-                      <p style={{ fontSize: '10px', color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>Check-in</p>
-                      <p style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937' }}>{format(new Date(selectedRoom.currentBooking.checkIn), 'HH:mm dd/MM', { locale: vi })}</p>
-                    </div>
-                    <div>
-                      <p style={{ fontSize: '10px', color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>Check-out</p>
-                      <p style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937' }}>{format(new Date(selectedRoom.currentBooking.checkOut), 'HH:mm dd/MM', { locale: vi })}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div style={{ display: 'grid', gap: '12px' }}>
-                {selectedRoom.cleanStatus === 'dirty' && selectedRoom.status === 'available' && (
-                  <button
-                    onClick={handleCleanRoom}
-                    style={{ width: '100%', padding: '12px', backgroundColor: '#16a34a', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(22, 163, 74, 0.3)' }}
-                  >
-                    <Sparkles size={18} /> Xác nhận đã dọn xong
-                  </button>
-                )}
-
-                {selectedRoom.status === 'occupied' && (
-                  <>
-                    <button
-                      onClick={handleCheckout}
-                      style={{ width: '100%', padding: '12px', backgroundColor: '#ea580c', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(234, 88, 12, 0.3)' }}
-                    >
-                      <LogOut size={18} /> Trả phòng
-                    </button>
-                    <button
-                      onClick={handleShowDetail}
-                      style={{ width: '100%', padding: '12px', backgroundColor: '#fff', color: '#374151', border: '1px solid #e5e7eb', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-                    >
-                      <FileText size={18} /> Xem chi tiết đơn
-                    </button>
-                  </>
-                )}
-
-                {selectedRoom.status === 'checkin-soon' && (
-                  <button
-                    onClick={handleCheckIn}
-                    style={{ width: '100%', padding: '12px', backgroundColor: '#0d9488', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(13, 148, 136, 0.3)' }}
-                  >
-                    <UserCheck size={18} /> Khách nhận phòng
-                  </button>
-                )}
-
-                {selectedRoom.status === 'available' && selectedRoom.cleanStatus === 'clean' && (
-                  <button
-                    onClick={() => setShowBookingForm(true)}
-                    style={{ width: '100%', padding: '12px', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.3)' }}
-                  >
-                    <Plus size={18} /> Tạo đơn đặt phòng mới
-                  </button>
-                )}
-              </div>
-
-              <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid #f3f4f6', textAlign: 'center' }}>
-                <button
-                  onClick={() => setIsEditing(!isEditing)}
-                  style={{ fontSize: '12px', color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', margin: '0 auto' }}
-                >
-                  <Settings size={12} /> {isEditing ? 'Ẩn tùy chỉnh' : 'Sửa trạng thái thủ công'}
-                </button>
-
-                {isEditing && (
-                  <div style={{ marginTop: '16px', padding: '16px', backgroundColor: '#f9fafb', borderRadius: '12px', animation: 'fadeIn 0.2s' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-                      <select style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '14px' }} value={editStatus || selectedRoom.status} onChange={e => setEditStatus(e.target.value)}>
-                        <option value="available">Trống</option><option value="occupied">Đang ở</option><option value="maintenance">Bảo trì</option>
-                      </select>
-                      <select style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '14px' }} value={editClean || selectedRoom.cleanStatus} onChange={e => setEditClean(e.target.value)}>
-                        <option value="clean">Sạch</option><option value="dirty">Bẩn</option><option value="cleaning">Đang dọn</option>
-                      </select>
-                    </div>
-                    <button onClick={handleSaveManual} disabled={editLoading} style={{ width: '100%', padding: '8px', backgroundColor: '#1f2937', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>Lưu thay đổi</button>
-                  </div>
-                )}
-              </div>
             </div>
           </div>
+        </div>
+      )}
 
-          {/* --- MODAL CHI TIẾT HÓA ĐƠN/ĐẶT PHÒNG (ĐÃ NÂNG CẤP) --- */}
-          {bookingDetail && (
-            <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 110 }}>
-              <div style={{ backgroundColor: 'white', padding: '0', borderRadius: '20px', width: '360px', boxShadow: '0 20px 40px -5px rgba(0,0,0,0.2)', overflow: 'hidden', animation: 'fadeIn 0.2s ease-out' }}>
-
-                {/* Header */}
-                <div style={{ backgroundColor: '#1f2937', padding: '20px', color: 'white' }}>
-                  <h3 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <FileText size={18} /> Chi tiết đơn đặt
-                  </h3>
-                  <p style={{ margin: '4px 0 0 0', fontSize: '13px', opacity: 0.8 }}>Mã: <span style={{ fontFamily: 'monospace' }}>{bookingDetail.ma_dat}</span></p>
+      {/* MODAL BOOKING DETAIL */}
+      {bookingDetail && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
+                <div className="bg-gray-800 p-5 text-white">
+                    <h3 className="font-bold text-lg flex items-center gap-2"><FileText size={18}/> Chi tiết đơn đặt</h3>
+                    <p className="text-xs opacity-70 mt-1 font-mono">#{bookingDetail.ma_dat}</p>
                 </div>
-
-                <div style={{ padding: '20px' }}>
-                  {/* Customer Section */}
-                  <div style={{ marginBottom: '20px' }}>
-                    <p style={{ fontSize: '11px', fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', marginBottom: '8px' }}>Khách hàng</p>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4b5563' }}>
-                        <User size={20} />
-                      </div>
-                      <div>
-                        <p style={{ fontSize: '16px', fontWeight: 'bold', color: '#111827', margin: 0 }}>{bookingDetail.khach_hang?.ho_ten || bookingDetail.ho_ten}</p>
-                        <p style={{ fontSize: '13px', color: '#6b7280', margin: 0, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <Phone size={12} /> {bookingDetail.khach_hang?.sdt || bookingDetail.sdt}
-                        </p>
-                      </div>
+                <div className="p-6">
+                    <div className="mb-5 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-600"><User size={20}/></div>
+                        <div><p className="font-bold text-gray-900">{bookingDetail.khach_hang?.ho_ten || bookingDetail.ho_ten}</p><p className="text-sm text-gray-500 flex items-center gap-1"><Phone size={12}/> {bookingDetail.khach_hang?.sdt || bookingDetail.sdt}</p></div>
                     </div>
-                  </div>
-
-                  {/* Info Grid */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px', borderTop: '1px dashed #e5e7eb', borderBottom: '1px dashed #e5e7eb', padding: '16px 0' }}>
-                    <div>
-                      <p style={{ fontSize: '11px', color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>Phòng</p>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '600', color: '#1f2937' }}>
-                        <MapPin size={14} /> {bookingDetail.phong?.ma_phong || selectedRoom.number}
-                      </div>
+                    <div className="grid grid-cols-2 gap-4 py-4 border-y border-dashed border-gray-200 text-sm mb-5">
+                        <div><p className="text-[10px] uppercase font-bold text-gray-400">Phòng</p><div className="font-semibold flex items-center gap-1"><MapPin size={12}/> {bookingDetail.phong?.ma_phong || selectedRoom?.number}</div></div>
+                        <div><p className="text-[10px] uppercase font-bold text-gray-400">Trạng thái</p><span className="text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded-full text-xs">{getBookingStatusLabel(bookingDetail.trang_thai)}</span></div>
+                        <div><p className="text-[10px] uppercase font-bold text-gray-400">Check-in</p><div className="font-semibold">{format(new Date(bookingDetail.thoi_gian_nhan), 'HH:mm dd/MM')}</div></div>
+                        <div><p className="text-[10px] uppercase font-bold text-gray-400">Check-out</p><div className="font-semibold">{format(new Date(bookingDetail.thoi_gian_tra), 'HH:mm dd/MM')}</div></div>
                     </div>
-                    <div>
-                      <p style={{ fontSize: '11px', color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>Trạng thái</p>
-                      <span style={{ fontSize: '12px', fontWeight: 'bold', padding: '2px 8px', borderRadius: '99px', backgroundColor: '#dbeafe', color: '#1e40af' }}>
-                        {getBookingStatusLabel(bookingDetail.trang_thai)}
-                      </span>
+                    <div className="bg-gray-50 p-3 rounded-lg text-sm space-y-2 mb-5">
+                        <div className="flex justify-between text-gray-600"><span>Tổng tiền</span><span className="font-bold text-gray-900">{formatCurrency(bookingDetail.tong_tien || 0)}</span></div>
+                        <div className="flex justify-between text-gray-600"><span>Đã cọc</span><span className="font-bold text-green-600">{formatCurrency(bookingDetail.tien_coc || 0)}</span></div>
                     </div>
-                    <div>
-                      <p style={{ fontSize: '11px', color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>Check-in</p>
-                      <p style={{ fontSize: '13px', fontWeight: '600' }}>{format(new Date(bookingDetail.thoi_gian_nhan), 'HH:mm dd/MM', { locale: vi })}</p>
-                    </div>
-                    <div>
-                      <p style={{ fontSize: '11px', color: '#6b7280', textTransform: 'uppercase', marginBottom: '4px' }}>Check-out</p>
-                      <p style={{ fontSize: '13px', fontWeight: '600' }}>{format(new Date(bookingDetail.thoi_gian_tra), 'HH:mm dd/MM', { locale: vi })}</p>
-                    </div>
-                  </div>
-
-                  {/* Money Section (Mockup if data missing) */}
-                  <div style={{ marginBottom: '20px' }}>
-                    <p style={{ fontSize: '11px', fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', marginBottom: '8px' }}>Thanh toán</p>
-                    <div style={{ backgroundColor: '#f9fafb', padding: '12px', borderRadius: '8px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '13px' }}>
-                        <span style={{ color: '#4b5563' }}>Tổng tiền (dự kiến)</span>
-                        <span style={{ fontWeight: 'bold' }}>{formatCurrency(bookingDetail.tong_tien || 0)}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                        <span style={{ color: '#4b5563' }}>Đã cọc</span>
-                        <span style={{ fontWeight: 'bold', color: '#059669' }}>{formatCurrency(bookingDetail.tien_coc || 0)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Note Section */}
-                  {bookingDetail.ghi_chu && (
-                    <div style={{ marginBottom: '20px' }}>
-                      <p style={{ fontSize: '11px', fontWeight: 'bold', color: '#9ca3af', textTransform: 'uppercase', marginBottom: '4px' }}>Ghi chú</p>
-                      <p style={{ fontSize: '13px', color: '#374151', fontStyle: 'italic', display: 'flex', gap: '6px' }}>
-                        <StickyNote size={14} style={{ marginTop: '2px' }} /> {bookingDetail.ghi_chu}
-                      </p>
-                    </div>
-                  )}
-
-                  <button
-                    onClick={() => setBookingDetail(null)}
-                    style={{ width: '100%', padding: '12px', backgroundColor: '#f3f4f6', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', color: '#374151', transition: 'background 0.2s' }}
-                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#e5e7eb'}
-                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
-                  >
-                    Đóng
-                  </button>
+                    {bookingDetail.ghi_chu && <div className="mb-5"><p className="text-[10px] uppercase font-bold text-gray-400">Ghi chú</p><p className="text-sm text-gray-600 italic flex gap-1"><StickyNote size={14}/> {bookingDetail.ghi_chu}</p></div>}
+                    <button onClick={() => setBookingDetail(null)} className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition">Đóng</button>
                 </div>
-              </div>
             </div>
-          )}
+        </div>
+      )}
 
-          {showBookingForm && (
-            <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 110 }}>
-              <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '16px', width: '320px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
-                <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>Tạo đơn mới</h3>
-                <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '16px' }}>Chức năng đang phát triển...</p>
-                <button onClick={() => setShowBookingForm(false)} style={{ width: '100%', padding: '8px', backgroundColor: '#f3f4f6', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Đóng</button>
-              </div>
+      {/* MODAL CREATE BOOKING PLACEHOLDER */}
+      {showBookingForm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+            <div className="bg-white p-6 rounded-2xl w-full max-w-sm shadow-xl text-center">
+                <AlertCircle className="w-12 h-12 text-blue-500 mx-auto mb-4"/>
+                <h3 className="font-bold text-lg mb-2">Tạo đơn mới</h3>
+                <p className="text-gray-500 text-sm mb-6">Vui lòng chuyển sang trang "Tạo Booking" trên thanh menu để thực hiện thao tác này.</p>
+                <button onClick={() => setShowBookingForm(false)} className="w-full py-2 bg-gray-100 hover:bg-gray-200 rounded-lg font-semibold text-gray-700">Đóng</button>
             </div>
-          )}
-
         </div>
       )}
     </div>
