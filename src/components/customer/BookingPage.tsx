@@ -1,176 +1,37 @@
-// CalendarDateSelector: Hiển thị calendar, đánh dấu ngày đã bị đặt bằng màu đỏ và disable không cho chọn
 import React, { useState, useEffect, useMemo } from 'react';
 import { format, eachDayOfInterval, startOfDay } from 'date-fns';
-// Helper giữ nguyên giờ địa phương khi gửi lên backend
+import { DayPicker } from 'react-day-picker';
+import 'react-day-picker/dist/style.css';
+import { useNavigate } from 'react-router-dom';
+import {
+  ChevronLeft, ChevronRight, Calendar as CalendarIcon, Users, MapPin, Home, RefreshCw,
+  Upload, X, Clock, Sun, Moon, Sunset, Sunrise, CreditCard, User, Phone, Mail, FileText, CheckCircle2
+} from 'lucide-react';
+import { toast, Toaster } from 'sonner';
+
+// --- IMPORTS TỪ PROJECT CỦA BẠN ---
+import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { getRoomImages, formatCurrency } from '../../utils/imageUtils';
+import { uploadToCloudinary } from '../../utils/cloudinary';
+import PaymentQRDialog from '../PaymentQRDialog';
+import RoomImageCarousel from './RoomImageCarousel';
+import { cn } from '../ui/utils';
+
+const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-faeb1932`;
+
 function toLocalISOString(date: Date) {
   const pad = (n: number) => n.toString().padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
-import { DayPicker } from 'react-day-picker';
-import 'react-day-picker/dist/style.css';
 
-function CalendarDateSelector({ roomId, selectedDate, setSelectedDate, bookingType, numberOfNights }: {
-  roomId: string,
-  selectedDate: string,
-  setSelectedDate: (date: string) => void,
-  bookingType: 'ngay' | 'gio',
-  numberOfNights: number
-}) {
-  const [bookings, setBookings] = useState<any[]>([]);
-  useEffect(() => {
-    if (roomId) {
-      fetchBookings();
-    }
-    // eslint-disable-next-line
-  }, [roomId]);
-
-  const fetchBookings = async () => {
-    try {
-      const response = await fetch(`${API_URL}/dat-phong?room_id=${roomId}`,
-        { headers: { 'Authorization': `Bearer ${publicAnonKey}` } });
-      const data = await response.json();
-      if (data.success) {
-        setBookings(data.data.filter((b: any) => b.trang_thai !== 'da_huy'));
-      }
-    } catch (e) { /* ignore */ }
-  };
-
-  // Tính các ngày đã bị đặt (bị overlap, có buffer)
-  const bookedDates = useMemo(() => {
-    let dates: string[] = [];
-    let checkInDates: Date[] = [];
-    let checkOutDates: Date[] = [];
-    bookings.forEach(b => {
-      // Buffer: trừ 30 phút đầu, cộng 30 phút cuối
-      const start = startOfDay(new Date(new Date(b.thoi_gian_nhan).getTime() - 30 * 60 * 1000));
-      const end = startOfDay(new Date(new Date(b.thoi_gian_tra).getTime() + 30 * 60 * 1000));
-      eachDayOfInterval({ start, end }).forEach(d => {
-        dates.push(format(d, 'yyyy-MM-dd'));
-      });
-      checkInDates.push(start);
-      checkOutDates.push(end);
-    });
-    return { dates, checkInDates, checkOutDates };
-  }, [bookings]);
-
-  // Tạo danh sách ngày booked (bất kỳ ngày trong khoảng số đêm bị booked)
-  const bookedDateObjects: Date[] = [];
-  for (let d = new Date(); d < new Date(new Date().getFullYear() + 2, 0, 1); d.setDate(d.getDate() + 1)) {
-    for (let i = 0; i < numberOfNights; i++) {
-      const checkDate = new Date(d);
-      checkDate.setDate(checkDate.getDate() + i);
-      if (bookedDates.dates.includes(format(checkDate, 'yyyy-MM-dd'))) {
-        bookedDateObjects.push(new Date(d));
-        break;
-      }
-    }
-  }
-
-
-  // Hiển thị ngày nhận và trả phòng của các booking khác
-  const checkInObjects = bookedDates.checkInDates;
-  const checkOutObjects = bookedDates.checkOutDates;
-
-  // Ngày trả phòng dự kiến của booking hiện tại
-  let currentCheckout: Date | null = null;
-  if (bookingType === 'ngay' && selectedDate && numberOfNights > 0) {
-    const d = new Date(selectedDate);
-    d.setDate(d.getDate() + numberOfNights);
-    currentCheckout = d;
-  }
-
-  // Tạo danh sách ngày bị disable
-  // Disable ngày trong quá khứ cho cả hai loại booking
-  let disabledDates: Date[] = bookedDateObjects;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const minDate = today;
-  // Disable ngày trong quá khứ và ngày hiện tại nếu đã quá giờ nhận phòng (14h)
-  const now = new Date();
-  const disabledPastDates = Array.from({ length: 365 * 10 }, (_, i) => {
-    const d = new Date(minDate);
-    d.setDate(d.getDate() - (i + 1));
-    return d;
-  });
-  // Nếu hôm nay đã quá 14h thì disable luôn hôm nay
-  const disableToday = now.getHours() >= 14 ? [new Date(today)] : [];
-  disabledDates = [
-    ...bookedDateObjects,
-    ...disabledPastDates,
-    ...disableToday
-  ];
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '32px' }}>
-      <DayPicker
-        mode="single"
-        selected={selectedDate ? new Date(selectedDate) : undefined}
-        onSelect={d => d && setSelectedDate(format(d, 'yyyy-MM-dd'))}
-        modifiers={{
-          booked: bookedDateObjects,
-          checkin: checkInObjects,
-          checkout: currentCheckout ? [...checkOutObjects, currentCheckout] : checkOutObjects
-        }}
-        modifiersClassNames={{ booked: 'calendar-day--booked', checkin: 'calendar-day--checkin', checkout: 'calendar-day--checkout' }}
-        disabled={disabledDates}
-        weekStartsOn={1}
-        styles={{
-          day: { borderRadius: '8px' },
-        }}
-      />
-      {bookingType === 'ngay' && selectedDate && numberOfNights > 0 && (
-        <div style={{ minWidth: '220px', padding: '16px 20px', background: '#fff7ed', borderRadius: '12px', border: '1px solid #fdba74', color: '#d97706', fontWeight: 600, fontSize: '15px', boxShadow: '0 2px 8px #fbbf2433' }}>
-          <div>Thông tin lưu trú:</div>
-          <div style={{ marginTop: '8px', fontSize: '16px' }}>
-            <span>Nhận phòng: </span>
-            <b>{(() => {
-              const d = new Date(selectedDate);
-              d.setHours(14, 0, 0, 0);
-              return d.toLocaleString('vi-VN', { weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
-            })()}</b>
-          </div>
-          <div style={{ marginTop: '8px', fontSize: '16px' }}>
-            <span>Trả phòng: </span>
-            <b>{(() => {
-              const d = new Date(selectedDate);
-              d.setDate(d.getDate() + numberOfNights);
-              d.setHours(12, 0, 0, 0);
-              return d.toLocaleString('vi-VN', { weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
-            })()}</b>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-import { useNavigate } from 'react-router-dom';
-import {
-  ChevronLeft, ChevronRight, Calendar as CalendarIcon, Users, MapPin, Home, RefreshCw,
-  Upload, X, Clock, Sun, Moon, Sunset, Sunrise, CreditCard, User, Phone, Mail, FileText
-} from 'lucide-react';
-import { projectId, publicAnonKey } from '../../utils/supabase/info';
-import { getRoomImages, formatCurrency } from '../../utils/imageUtils';
-import { uploadToCloudinary } from '../../utils/cloudinary';
-import { toast, Toaster } from 'sonner';
-import PaymentQRDialog from '../PaymentQRDialog';
-import RoomImageCarousel from './RoomImageCarousel';
-import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
-import { Button } from '../ui/button';
-import { cn } from '../ui/utils';
-
-
-const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-faeb1932`;
-const DEPOSIT_AMOUNT = 0;
-
-// Component hiển thị lịch đặt phòng theo ngày
+// --- COMPONENT 1: CALENDAR CHO ĐẶT NGÀY ---
 const DailyCalendar = ({ selectedDate, setSelectedDate, numberOfNights, bookings }: {
   selectedDate: string;
   setSelectedDate: (date: string) => void;
   numberOfNights: number;
   bookings: any[];
 }) => {
-  // Tính các ngày đã bị đặt (bị overlap, có buffer)
-  const bookedDates = React.useMemo(() => {
+  const bookedDates = useMemo(() => {
     let dates: string[] = [];
     let checkInDates: Date[] = [];
     let checkOutDates: Date[] = [];
@@ -186,7 +47,6 @@ const DailyCalendar = ({ selectedDate, setSelectedDate, numberOfNights, bookings
     return { dates, checkInDates, checkOutDates };
   }, [bookings]);
 
-  // Tạo danh sách ngày booked (bất kỳ ngày trong khoảng số đêm bị booked)
   const bookedDateObjects: Date[] = [];
   for (let d = new Date(); d < new Date(new Date().getFullYear() + 2, 0, 1); d.setDate(d.getDate() + 1)) {
     for (let i = 0; i < numberOfNights; i++) {
@@ -208,21 +68,19 @@ const DailyCalendar = ({ selectedDate, setSelectedDate, numberOfNights, bookings
     currentCheckout = d;
   }
 
-  let disabledDates: Date[] = bookedDateObjects;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const minDate = today;
-  disabledDates = [
+  const disabledDates = [
     ...bookedDateObjects,
-    ...Array.from({ length: 365 * 10 }, (_, i) => {
-      const d = new Date(minDate);
+    ...Array.from({ length: 365 * 2 }, (_, i) => {
+      const d = new Date(today);
       d.setDate(d.getDate() - (i + 1));
       return d;
     })
   ];
 
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '32px' }}>
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '32px', flexWrap: 'wrap' }}>
       <DayPicker
         mode="single"
         selected={selectedDate ? new Date(selectedDate) : undefined}
@@ -263,69 +121,34 @@ const DailyCalendar = ({ selectedDate, setSelectedDate, numberOfNights, bookings
   );
 };
 
-// Component hiển thị lịch đặt phòng theo giờ
-const HourlyCalendar = ({ selectedDate, setSelectedDate, selectedTimeSlots, onSlotsChange }: {
-  selectedDate: string;
-  setSelectedDate: (date: string) => void;
-  selectedTimeSlots: { start: string, end: string } | null;
-  onSlotsChange: (slots: { start: string, end: string } | null) => void;
-}) => {
-  // Chỉ cần chọn ngày, không cần số đêm
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const minDate = today;
-  const now = new Date();
-  const disabledPastDates = Array.from({ length: 365 * 10 }, (_, i) => {
-    const d = new Date(minDate);
-    d.setDate(d.getDate() - (i + 1));
-    return d;
-  });
-  // Nếu hôm nay đã quá 21h thì disable luôn hôm nay (ví dụ: không cho đặt giờ sau 21h)
-  const disableToday = now.getHours() >= 21 ? [new Date(today)] : [];
-  const disabledDates = [
-    ...disabledPastDates,
-    ...disableToday
-  ];
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '32px' }}>
-      <DayPicker
-        mode="single"
-        selected={selectedDate ? new Date(selectedDate) : undefined}
-        onSelect={d => d && setSelectedDate(format(d, 'yyyy-MM-dd'))}
-        disabled={disabledDates}
-        weekStartsOn={1}
-        styles={{ day: { borderRadius: '8px' } }}
-      />
-      <div style={{ minWidth: '220px', padding: '16px 20px', background: '#f1f5f9', borderRadius: '12px', border: '1px solid #e2e8f0', color: '#334155', fontWeight: 600, fontSize: '15px', boxShadow: '0 2px 8px #64748b33' }}>
-        <div>Thông tin sử dụng:</div>
-        <div style={{ marginTop: '8px', fontSize: '16px' }}>
-          <span>Ngày sử dụng: </span>
-          <b>{selectedDate ? new Date(selectedDate).toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit' }) : ''}</b>
-        </div>
-        <div style={{ marginTop: '8px', fontSize: '16px' }}>
-          <span>Khung giờ đã chọn: </span>
-          <b>{selectedTimeSlots ? `${new Date(selectedTimeSlots.start).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - ${new Date(selectedTimeSlots.end).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` : 'Chưa chọn'}</b>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// --- COMPONENT CHỌN GIỜ (GIAO DIỆN PILL) ---
+// --- COMPONENT 2: MULTI-SELECT TIME SLOT SELECTOR ---
 function TimeSlotSelector({
   roomId,
   selectedDate,
-  selectedSlots,
+  selectedSlots, // Array
   onSlotsChange
 }: {
   roomId: string;
   selectedDate: string;
-  selectedSlots: { start: string, end: string } | null;
-  onSlotsChange: (slots: { start: string, end: string } | null) => void;
+  selectedSlots: any[];
+  onSlotsChange: (slots: any[]) => void;
 }) {
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const FIXED_SLOTS = [
+    { label: '07:30 - 08:45', startH: 7, startM: 30, endH: 8, endM: 45 },
+    { label: '09:00 - 10:15', startH: 9, startM: 0, endH: 10, endM: 15 },
+    { label: '10:30 - 11:45', startH: 10, startM: 30, endH: 11, endM: 45 },
+    { label: '12:00 - 13:15', startH: 12, startM: 0, endH: 13, endM: 15 },
+    { label: '13:30 - 14:45', startH: 13, startM: 30, endH: 14, endM: 45 },
+    { label: '15:00 - 16:15', startH: 15, startM: 0, endH: 16, endM: 15 },
+    { label: '16:30 - 17:45', startH: 16, startM: 30, endH: 17, endM: 45 },
+    { label: '18:00 - 19:15', startH: 18, startM: 0, endH: 19, endM: 15 },
+    { label: '19:30 - 20:45', startH: 19, startM: 30, endH: 20, endM: 45 },
+    { label: '21:00 - 22:15', startH: 21, startM: 0, endH: 22, endM: 15 },
+    { label: '22:30 - 07:00 (Hôm sau)', startH: 22, startM: 30, endH: 7, endM: 0, nextDay: true }
+  ];
 
   useEffect(() => {
     if (selectedDate && roomId) fetchBookingsForDate();
@@ -336,9 +159,9 @@ function TimeSlotSelector({
     try {
       const checkDate = new Date(selectedDate);
       const bufferStart = new Date(checkDate);
-      bufferStart.setDate(bufferStart.getDate() - 30);
+      bufferStart.setDate(bufferStart.getDate() - 1);
       const bufferEnd = new Date(checkDate);
-      bufferEnd.setDate(bufferEnd.getDate() + 30);
+      bufferEnd.setDate(bufferEnd.getDate() + 2);
 
       const response = await fetch(
         `${API_URL}/dat-phong?start_date=${bufferStart.toISOString()}&end_date=${bufferEnd.toISOString()}`,
@@ -359,149 +182,63 @@ function TimeSlotSelector({
     }
   };
 
-  const generateTimeSlots = () => {
-    const slots = [];
-    let date = new Date(`${selectedDate}T06:00:00`);
-    for (let i = 0; i < 48; i++) {
-      slots.push({
-        label: date.toTimeString().slice(0, 5),
-        date: new Date(date),
-        period: i < 12 ? 'sang' : i < 24 ? 'chieu' : i < 36 ? 'toi' : 'dem'
-      });
-      date = new Date(date.getTime() + 30 * 60 * 1000);
-    }
-    return slots;
+  const generateSlots = () => {
+    if (!selectedDate) return [];
+    return FIXED_SLOTS.map(config => {
+      const start = new Date(selectedDate);
+      start.setHours(config.startH, config.startM, 0, 0);
+      const end = new Date(selectedDate);
+      if (config.nextDay) {
+        end.setDate(end.getDate() + 1);
+      }
+      end.setHours(config.endH, config.endM, 0, 0);
+      return { label: config.label, start, end, config };
+    });
   };
 
-  const isValidDate = selectedDate && !isNaN(new Date(`${selectedDate}T06:00:00`).getTime());
-  const timeSlots = isValidDate ? generateTimeSlots() : [];
+  const slots = generateSlots();
+  const isValidDate = selectedDate && !isNaN(new Date(selectedDate).getTime());
 
-  const isTimeSlotAvailable = (slot: { label: string, date: Date }) => {
-    const slotStart = slot.date;
-    const slotEnd = new Date(slot.date.getTime() + 30 * 60 * 1000);
-    const hour = slot.date.getHours();
-    const minute = slot.date.getMinutes();
-
-    // Hard Locks
-    if (hour === 6 && minute === 0) return false;
-    if (hour === 21 && minute === 30) return false;
-
-    // Disable slot nếu là hôm nay và slot đã qua
+  const getSlotStatus = (slot: { start: Date, end: Date }) => {
     const now = new Date();
-    const slotDateStr = slot.date.toISOString().slice(0, 10);
-    const todayStr = now.toISOString().slice(0, 10);
-    if (slotDateStr === todayStr && slot.date.getTime() < now.getTime()) {
-      return false;
-    }
+    if (slot.start < now) return { available: false, reason: 'past' };
 
-    // Booking Checks
     for (const booking of bookings) {
-      const bookingStart = new Date(booking.thoi_gian_nhan);
-      const bookingEnd = new Date(booking.thoi_gian_tra);
-      const bufferStart = new Date(bookingStart.getTime() - 30 * 60 * 1000);
-      const bufferEnd = new Date(bookingEnd.getTime() + 30 * 60 * 1000);
+      const bStart = new Date(booking.thoi_gian_nhan);
+      const bEnd = new Date(booking.thoi_gian_tra);
+      const blockedStart = new Date(bStart.getTime() - 15 * 60000);
+      const blockedEnd = new Date(bEnd.getTime() + 15 * 60000);
 
-      if (slotStart < bufferEnd && slotEnd > bufferStart) return false;
+      if (slot.start < blockedEnd && slot.end > blockedStart) {
+        return { available: false, reason: 'booked' };
+      }
     }
-    return true;
+    return { available: true, reason: 'ok' };
   };
 
-  const handleSlotClick = (slot: { label: string, date: Date }) => {
-    if (!isTimeSlotAvailable(slot)) return;
-    const slotDateTime = slot.date.toISOString();
+  const handleSlotClick = (slot: { start: Date, end: Date, label: string }) => {
+    const status = getSlotStatus(slot);
+    if (!status.available) {
+      if (status.reason === 'booked') toast.error('Khung giờ này đã bị trùng lịch.');
+      return;
+    }
 
-    if (!selectedSlots) {
-      onSlotsChange({ start: slotDateTime, end: slotDateTime });
-    } else if (selectedSlots.start === slotDateTime && selectedSlots.end === slotDateTime) {
-      onSlotsChange(null);
+    const slotStartStr = slot.start.toISOString();
+    // Check if exists
+    const exists = selectedSlots.find(s => s.start === slotStartStr);
+
+    if (exists) {
+      // Remove (Toggle off)
+      onSlotsChange(selectedSlots.filter(s => s.start !== slotStartStr));
     } else {
-      const startTime = new Date(selectedSlots.start);
-      const endTime = new Date(slotDateTime);
-      let from = startTime < endTime ? startTime : endTime;
-      let to = startTime < endTime ? endTime : startTime;
-
-      // Fix: kiểm tra toàn bộ khoảng from → to có bị giao thoa với bất kỳ booking nào không
-      let isRangeAvailable = true;
-      for (const booking of bookings) {
-        const bookingStart = new Date(booking.thoi_gian_nhan);
-        const bookingEnd = new Date(booking.thoi_gian_tra);
-        const blockedStart = new Date(bookingStart.getTime() - 30 * 60000);
-        const blockedEnd = new Date(bookingEnd.getTime() + 30 * 60000);
-        // Nếu khoảng chọn bị giao thoa với vùng buffer của bất kỳ booking nào thì không cho đặt
-        if (from < blockedEnd && to > blockedStart) {
-          isRangeAvailable = false;
-          break;
-        }
-      }
-      if (!isRangeAvailable) {
-        toast.error('Khoảng thời gian bạn chọn bị vướng lịch hoặc buffer của khách khác.');
-        return;
-      }
-
-      if (endTime > startTime) onSlotsChange({ start: selectedSlots.start, end: slotDateTime });
-      else onSlotsChange({ start: slotDateTime, end: slotDateTime });
+      // Add (Toggle on)
+      onSlotsChange([...selectedSlots, { 
+        start: slot.start.toISOString(), 
+        end: slot.end.toISOString(),
+        label: slot.label 
+      }]);
     }
   };
-
-  const getSlotStyle = (slot: { label: string, date: Date }, isAvailable: boolean, isSelected: boolean) => {
-    const baseStyle = {
-      padding: '6px 12px',
-      borderRadius: '999px',
-      fontSize: '12px',
-      fontWeight: isSelected ? '700' : '500',
-      cursor: 'pointer',
-      border: '1px solid transparent',
-      minWidth: '58px',
-      textAlign: 'center' as const,
-      transition: 'all 0.15s ease',
-    };
-
-    if (isSelected) {
-      return { ...baseStyle, backgroundColor: '#0f7072', color: '#fff', boxShadow: '0 2px 5px rgba(15, 112, 114, 0.4)', transform: 'scale(1.05)' };
-    }
-    if (!isAvailable) {
-      // Slot bị disable do trùng lịch hoặc buffer: màu đỏ
-      return { ...baseStyle, backgroundColor: '#ffe4e6', color: '#dc2626', border: '2px solid #dc2626', cursor: 'not-allowed', textDecoration: 'line-through', boxShadow: '0 0 0 2px #dc2626' };
-    }
-
-    const hour = slot.date.getHours();
-    const minute = slot.date.getMinutes();
-
-    if ((hour > 6 || (hour === 6 && minute >= 30)) && (hour < 22)) {
-      return { ...baseStyle, backgroundColor: '#fefce8', color: '#854d0e', border: '1px solid #fde047' };
-    }
-    if (hour >= 22 || hour < 6) {
-      return { ...baseStyle, backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #93c5fd' };
-    }
-    return baseStyle;
-  };
-
-  const renderGroup = (title: string, icon: any, groupSlots: any[], color: string) => (
-    <div style={{ marginBottom: '20px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', fontSize: '13px', fontWeight: '700', color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-        {icon} <span style={{ color: color }}>{title}</span>
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-        {groupSlots.map((slot) => {
-          const isAvailable = Boolean(isTimeSlotAvailable(slot));
-          const isSelected = Boolean(selectedSlots && slot.date >= new Date(selectedSlots.start) && slot.date <= new Date(selectedSlots.end));
-          const style = getSlotStyle(slot, isAvailable, isSelected);
-          return (
-            <button
-              key={slot.label + slot.date.toISOString()}
-              onClick={() => handleSlotClick(slot)}
-              disabled={!isAvailable}
-              style={style}
-              onMouseEnter={(e) => { if (isAvailable && !isSelected) e.currentTarget.style.transform = 'scale(1.05)'; }}
-              onMouseLeave={(e) => { if (isAvailable && !isSelected) e.currentTarget.style.transform = 'scale(1)'; }}
-            >
-              {slot.label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
 
   return (
     <div style={{ backgroundColor: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #f3f4f6', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.02)' }}>
@@ -511,25 +248,139 @@ function TimeSlotSelector({
           <p style={{ fontSize: '13px', color: '#6b7280' }}>Đang kiểm tra lịch...</p>
         </div>
       ) : (
-        <div>
-          {renderGroup('Sáng (06:00 - 12:00)', <Sunrise size={16} color="#f97316" />, timeSlots.filter(s => s.period === 'sang'), '#f97316')}
-          {renderGroup('Chiều (12:00 - 18:00)', <Sun size={16} color="#eab308" />, timeSlots.filter(s => s.period === 'chieu'), '#eab308')}
-          {renderGroup('Tối (18:00 - 24:00)', <Sunset size={16} color="#a855f7" />, timeSlots.filter(s => s.period === 'toi'), '#a855f7')}
-          {renderGroup('Đêm (00:00 - 06:00)', <Moon size={16} color="#3b82f6" />, timeSlots.filter(s => s.period === 'dem'), '#3b82f6')}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '12px' }}>
+          {slots.map((slot, index) => {
+            const status = getSlotStatus(slot);
+            const isSelected = selectedSlots.some(s => s.start === slot.start.toISOString());
+            
+            let bg = '#fff';
+            let color = '#334155';
+            let border = '1px solid #e2e8f0';
+            let cursor = 'pointer';
+            let opacity = 1;
+
+            if (isSelected) {
+              bg = '#0f7072'; color = '#fff'; border = '1px solid #0f7072';
+            } else if (!status.available) {
+              bg = '#f1f5f9'; color = '#94a3b8'; border = '1px solid #f1f5f9'; cursor = 'not-allowed'; opacity = 0.6;
+            } else {
+              bg = '#f8fafc';
+            }
+
+            return (
+              <button
+                key={index}
+                onClick={() => handleSlotClick(slot)}
+                disabled={!status.available}
+                style={{
+                  padding: '12px 8px',
+                  borderRadius: '10px',
+                  backgroundColor: bg,
+                  color: color,
+                  border: border,
+                  cursor: cursor,
+                  opacity: opacity,
+                  fontSize: '13px',
+                  fontWeight: isSelected ? '700' : '500',
+                  transition: 'all 0.2s',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '4px',
+                  boxShadow: isSelected ? '0 4px 6px -1px rgba(15, 112, 114, 0.3)' : 'none',
+                  position: 'relative'
+                }}
+              >
+                 {isSelected && <div style={{position: 'absolute', top: -6, right: -6, background: '#f59e0b', borderRadius: '50%', color: 'white', padding: 2}}><CheckCircle2 size={14} fill="#f59e0b" color="white"/></div>}
+                <span>{slot.label.split(' - ')[0]} - {slot.label.split(' - ')[1].split(' ')[0]}</span>
+                {slot.config.nextDay && <span style={{ fontSize: '10px', fontStyle: 'italic', opacity: 0.8 }}>(Qua đêm)</span>}
+                {!status.available && status.reason === 'booked' && <span style={{ fontSize: '10px', color: '#ef4444', fontWeight: 'bold' }}>Đã đặt</span>}
+              </button>
+            );
+          })}
         </div>
       )}
 
-      {selectedSlots && (
+      {selectedSlots.length > 0 && (
         <div style={{ marginTop: '20px', padding: '12px 16px', backgroundColor: '#f0fdf4', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #bbf7d0' }}>
           <span style={{ fontSize: '14px', fontWeight: '600', color: '#15803d' }}>
-            🕐 Đã chọn: {new Date(selectedSlots.start).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - {new Date(selectedSlots.end).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+             Đã chọn {selectedSlots.length} khung giờ
           </span>
-          <button style={{ fontSize: '12px', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontWeight: '600' }} onClick={() => onSlotsChange(null)}>Xóa</button>
+          <button style={{ fontSize: '12px', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontWeight: '600' }} onClick={() => onSlotsChange([])}>Xóa tất cả</button>
         </div>
       )}
     </div>
   );
 }
+
+// --- COMPONENT 3: HOURLY CALENDAR WRAPPER ---
+const HourlyCalendar = ({ selectedDate, setSelectedDate, selectedTimeSlots, onSlotsChange, roomId }: {
+  selectedDate: string;
+  setSelectedDate: (date: string) => void;
+  selectedTimeSlots: any[];
+  onSlotsChange: (slots: any[]) => void;
+  roomId: string;
+}) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const disabledDates = Array.from({ length: 365 * 2 }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() - (i + 1));
+    return d;
+  });
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '32px' }}>
+        <DayPicker
+          mode="single"
+          selected={selectedDate ? new Date(selectedDate) : undefined}
+          onSelect={d => {
+            if (d) {
+              setSelectedDate(format(d, 'yyyy-MM-dd'));
+              onSlotsChange([]); // Reset khi đổi ngày
+            }
+          }}
+          disabled={disabledDates}
+          weekStartsOn={1}
+          styles={{ day: { borderRadius: '8px' } }}
+        />
+        <div style={{ minWidth: '220px', padding: '16px 20px', background: '#f1f5f9', borderRadius: '12px', border: '1px solid #e2e8f0', color: '#334155', fontWeight: 600, fontSize: '15px', boxShadow: '0 2px 8px #64748b33' }}>
+          <div>Thông tin sử dụng:</div>
+          <div style={{ marginTop: '8px', fontSize: '16px' }}>
+            <span>Ngày sử dụng: </span>
+            <b>{selectedDate ? new Date(selectedDate).toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit' }) : ''}</b>
+          </div>
+          <div style={{ marginTop: '8px', fontSize: '16px' }}>
+            <span>Số khung giờ: </span>
+            <b>{selectedTimeSlots.length > 0 ? `${selectedTimeSlots.length} slot` : 'Chưa chọn'}</b>
+          </div>
+          {selectedTimeSlots.length > 0 && (
+             <div style={{marginTop: '12px', fontSize: '12px', color: '#64748b', display: 'flex', flexDirection: 'column', gap: '4px'}}>
+                {selectedTimeSlots.map((s, idx) => (
+                   <div key={idx}>- {s.label}</div>
+                ))}
+             </div>
+          )}
+        </div>
+      </div>
+      
+      <div>
+         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#334155', marginBottom: '12px' }}>Chọn khung giờ (có thể chọn nhiều):</label>
+         {selectedDate ? (
+           <TimeSlotSelector 
+             roomId={roomId} 
+             selectedDate={selectedDate} 
+             selectedSlots={selectedTimeSlots} 
+             onSlotsChange={onSlotsChange} 
+           />
+         ) : (
+           <p style={{ color: '#94a3b8', fontSize: '14px' }}>Vui lòng chọn ngày trước</p>
+         )}
+      </div>
+    </div>
+  );
+};
 
 // --- MAIN PAGE ---
 export default function BookingPage() {
@@ -546,7 +397,6 @@ export default function BookingPage() {
   const [selectedLocation, setSelectedLocation] = useState<string>('all');
   const [selectedConcept, setSelectedConcept] = useState<string>('all');
   const [priceRange, setPriceRange] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('trong');
 
   // Booking State
   const [selectedRoom, setSelectedRoom] = useState<any>(null);
@@ -556,7 +406,9 @@ export default function BookingPage() {
   const [bookingType, setBookingType] = useState<'ngay' | 'gio'>('ngay');
   const [selectedDate, setSelectedDate] = useState('');
   const [numberOfNights, setNumberOfNights] = useState(1);
-  const [selectedTimeSlots, setSelectedTimeSlots] = useState<{ start: string, end: string } | null>(null);
+  
+  // *** THAY ĐỔI: Chuyển thành Array ***
+  const [selectedTimeSlots, setSelectedTimeSlots] = useState<any[]>([]);
 
   // Customer Info
   const [fullName, setFullName] = useState('');
@@ -571,7 +423,6 @@ export default function BookingPage() {
   const [bookingData, setBookingData] = useState<any>(null);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
 
-  // Auto select today
   useEffect(() => {
     if (step === 2 && bookingType === 'gio' && !selectedDate) {
       const today = new Date();
@@ -590,7 +441,7 @@ export default function BookingPage() {
     setNumberOfNights(1);
   }, []);
 
-  useEffect(() => { filterRooms(); }, [allRooms, selectedLocation, selectedConcept, priceRange, statusFilter]);
+  useEffect(() => { filterRooms(); }, [allRooms, selectedLocation, selectedConcept, priceRange]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -629,17 +480,21 @@ export default function BookingPage() {
   const calculateTotal = () => {
     if (!selectedRoom) return 0;
     if (bookingType === 'ngay' && selectedDate && numberOfNights > 0) {
-      // Giá ngày
       const price = selectedRoom.loai_phong?.gia_dem ? Number(selectedRoom.loai_phong.gia_dem) : 0;
       return price * numberOfNights;
-    } else if (bookingType === 'gio' && selectedTimeSlots) {
-      // Giá giờ
-      const start = new Date(selectedTimeSlots.start);
-      const end = new Date(selectedTimeSlots.end);
-      let hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-      if (hours < 0.5) hours = 0.5; // Tối thiểu nửa tiếng
-      const price = selectedRoom.loai_phong?.gia_gio ? Number(selectedRoom.loai_phong.gia_gio) : 0;
-      return price * hours;
+    } else if (bookingType === 'gio' && selectedTimeSlots.length > 0) {
+      // *** TÍNH TỔNG TIỀN CHO NHIỀU SLOT ***
+      let total = 0;
+      const hourlyPrice = selectedRoom.loai_phong?.gia_gio ? Number(selectedRoom.loai_phong.gia_gio) : 0;
+      
+      selectedTimeSlots.forEach(slot => {
+         const start = new Date(slot.start);
+         const end = new Date(slot.end);
+         // Làm tròn thời gian cho từng slot (đã fix cứng trong FIXED_SLOTS rồi)
+         let hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+         total += hourlyPrice * hours;
+      });
+      return Math.round(total);
     }
     return 0;
   };
@@ -655,67 +510,20 @@ export default function BookingPage() {
         if (!selectedDate) { toast.error('Chọn ngày nhận phòng.'); return; }
         if (numberOfNights < 1) { toast.error('Số đêm tối thiểu là 1.'); return; }
 
-        // Cố định giờ check-in 14:00, check-out 12:00
         checkInDateTime = new Date(selectedDate);
         checkInDateTime.setHours(14, 0, 0, 0);
         checkOutDateTime = new Date(selectedDate);
         checkOutDateTime.setDate(checkOutDateTime.getDate() + numberOfNights);
         checkOutDateTime.setHours(12, 0, 0, 0);
+        
+        if (new Date() > checkInDateTime) { toast.error('Không thể đặt ngày trong quá khứ.'); return; }
       } else {
-        if (!selectedTimeSlots) { toast.error('Chọn khung giờ.'); return; }
-        // Đặt theo giờ: lấy đúng giờ đã chọn
-        checkInDateTime = new Date(selectedTimeSlots.start);
-        checkOutDateTime = new Date(selectedTimeSlots.end);
-        // Nếu chỉ chọn 1 slot thì end phải lớn hơn start ít nhất 30 phút
-        if (checkOutDateTime <= checkInDateTime) {
-          checkOutDateTime = new Date(checkInDateTime.getTime() + 30 * 60 * 1000);
-        }
+        if (selectedTimeSlots.length === 0) { toast.error('Chọn ít nhất 1 khung giờ.'); return; }
+        // Với nhiều slot, ta chỉ cần kiểm tra slot sớm nhất
+        // (Logic kiểm tra trùng lặp đã làm ở bước chọn slot rồi)
       }
 
-      if (new Date() > checkInDateTime && bookingType === 'ngay') { toast.error('Không thể đặt ngày trong quá khứ.'); return; }
-
-      setLoading(true);
-      try {
-        const bufferCheckStart = new Date(checkInDateTime);
-        bufferCheckStart.setDate(bufferCheckStart.getDate() - 30);
-        const bufferCheckEnd = new Date(checkOutDateTime);
-        bufferCheckEnd.setHours(23, 59, 59, 999);
-
-        const response = await fetch(
-          `${API_URL}/dat-phong?start_date=${bufferCheckStart.toISOString()}&end_date=${bufferCheckEnd.toISOString()}`,
-          { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
-        );
-        const data = await response.json();
-        let isAvailable = true;
-
-        if (data.success) {
-          const roomBookings = data.data.filter((booking: any) =>
-            booking.id_phong === selectedRoom.id && booking.trang_thai !== 'da_huy'
-          );
-
-          for (const booking of roomBookings) {
-            const bStart = new Date(booking.thoi_gian_nhan);
-            const bEnd = new Date(booking.thoi_gian_tra);
-
-            const blockedStart = new Date(bStart.getTime() - 30 * 60000);
-            const blockedEnd = new Date(bEnd.getTime() + 30 * 60000);
-
-            if (checkInDateTime < blockedEnd && checkOutDateTime > blockedStart) {
-              isAvailable = false; break;
-            }
-          }
-        }
-        if (!isAvailable) {
-          toast.error('Khung giờ/Ngày này đã bị trùng lịch.');
-          setLoading(false); return;
-        }
-
-        setCheckIn(checkInDateTime.toISOString().slice(0, 16));
-        setCheckOut(checkOutDateTime.toISOString().slice(0, 16));
-        setStep(3);
-      } catch (e) { console.error(e); toast.error('Lỗi kiểm tra phòng.'); } finally { setLoading(false); }
-
-      if (numberOfGuests < 1 || numberOfGuests > 10) { toast.error('Số khách không hợp lệ (1-10).'); return; }
+      setStep(3);
     } else if (step === 3) {
       handleSubmitBooking();
     }
@@ -737,9 +545,11 @@ export default function BookingPage() {
     else { setCccdBack(null); setCccdBackPreview(''); }
   };
 
+  // *** XỬ LÝ SUBMIT NHIỀU BOOKING ***
   const handleSubmitBooking = async () => {
     if (!fullName || !phone) return toast.error('Nhập đầy đủ họ tên và SĐT.');
     if (!/^0[0-9]{9,10}$/.test(phone)) return toast.error('SĐT không hợp lệ.');
+    
     setLoading(true);
     try {
       let cccdFrontUrl = null; let cccdBackUrl = null;
@@ -752,39 +562,91 @@ export default function BookingPage() {
         } catch { setUploadingCccd(false); setLoading(false); return toast.error('Lỗi upload ảnh.'); }
         setUploadingCccd(false);
       }
-      let thoi_gian_nhan = checkIn;
-      let thoi_gian_tra = checkOut;
-      if (bookingType === 'gio' && selectedTimeSlots) {
-        thoi_gian_nhan = toLocalISOString(new Date(selectedTimeSlots.start));
-        thoi_gian_tra = toLocalISOString(new Date(selectedTimeSlots.end));
-      }
-      const bookingPayload = {
+
+      // Payload cơ bản
+      const basePayload = {
         ho_ten: fullName, sdt: phone, email: email || null,
         cccd_mat_truoc: cccdFrontUrl, cccd_mat_sau: cccdBackUrl,
-        id_phong: selectedRoom.id, thoi_gian_nhan, thoi_gian_tra,
-        so_khach: numberOfGuests, tong_tien: calculateTotal(), coc_csvc: 0,
+        id_phong: selectedRoom.id,
+        so_khach: numberOfGuests, 
         kenh_dat: 'website', ghi_chu: notes || null, ghi_chu_khach: notes || null
       };
-      const res = await fetch(`${API_URL}/dat-phong`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
-        body: JSON.stringify(bookingPayload)
-      });
-      const result = await res.json();
-      if (result.success) {
-        let checkInDisplay, checkOutDisplay;
-        if (bookingType === 'gio' && selectedTimeSlots) {
-          checkInDisplay = new Date(selectedTimeSlots.start).toLocaleString('vi-VN');
-          checkOutDisplay = new Date(selectedTimeSlots.end).toLocaleString('vi-VN');
-        } else {
-          checkInDisplay = new Date(checkIn).toLocaleString('vi-VN');
-          checkOutDisplay = new Date(checkOut).toLocaleString('vi-VN');
-        }
-        setBookingData({
-          bookingCode: result.data.ma_dat, amount: calculateTotal(),
-          bookingDetails: { roomName: `${selectedRoom.loai_phong?.ten_loai} - ${selectedRoom.ma_phong}`, checkIn: checkInDisplay, checkOut: checkOutDisplay }
-        });
-        setShowPaymentDialog(true); toast.success('Đặt thành công!');
-      } else throw new Error(result.error);
+
+      if (bookingType === 'ngay') {
+          const payload = {
+              ...basePayload,
+              thoi_gian_nhan: checkIn,
+              thoi_gian_tra: checkOut,
+              tong_tien: calculateTotal(),
+              coc_csvc: 0
+          };
+          const res = await fetch(`${API_URL}/dat-phong`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
+              body: JSON.stringify(payload)
+          });
+          const result = await res.json();
+          if(!result.success) throw new Error(result.error);
+
+          setBookingData({
+            bookingCode: result.data.ma_dat, amount: calculateTotal(),
+            bookingDetails: { roomName: `${selectedRoom.loai_phong?.ten_loai} - ${selectedRoom.ma_phong}`, checkIn: new Date(checkIn).toLocaleString('vi-VN'), checkOut: new Date(checkOut).toLocaleString('vi-VN') }
+          });
+      } else {
+          // *** LOOP CREATE MULTIPLE BOOKINGS ***
+          // Với mỗi slot, ta tạo 1 booking riêng
+          const hourlyPrice = selectedRoom.loai_phong?.gia_gio ? Number(selectedRoom.loai_phong.gia_gio) : 0;
+          
+          // Dùng Promise.all để gửi đồng thời
+          const promises = selectedTimeSlots.map(slot => {
+             const start = new Date(slot.start);
+             const end = new Date(slot.end);
+             const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+             const slotPrice = Math.round(hourlyPrice * hours);
+
+             const payload = {
+                 ...basePayload,
+                 thoi_gian_nhan: toLocalISOString(start),
+                 thoi_gian_tra: toLocalISOString(end),
+                 tong_tien: slotPrice,
+                 coc_csvc: 0,
+                 ghi_chu: (notes || '') + ` (Slot: ${slot.label})` // Note thêm tên slot vào
+             };
+
+             return fetch(`${API_URL}/dat-phong`, {
+                 method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
+                 body: JSON.stringify(payload)
+             }).then(r => r.json());
+          });
+
+          const results = await Promise.all(promises);
+          
+          // Kiểm tra xem có lỗi nào không
+          const errors = results.filter(r => !r.success);
+          if (errors.length > 0) {
+              console.error(errors);
+              toast.warning(`Có ${errors.length} khung giờ bị lỗi (có thể do vừa bị đặt). Các khung giờ khác thành công.`);
+          }
+
+          // Lấy mã đặt của cái đầu tiên thành công để hiển thị QR
+          const successBooking = results.find(r => r.success);
+          if (successBooking) {
+              setBookingData({
+                  bookingCode: successBooking.data.ma_dat + '...', // Mã đại diện
+                  amount: calculateTotal(),
+                  bookingDetails: { 
+                      roomName: `${selectedRoom.loai_phong?.ten_loai} - ${selectedRoom.ma_phong}`, 
+                      checkIn: `${selectedTimeSlots.length} khung giờ`, 
+                      checkOut: new Date(selectedDate).toLocaleDateString('vi-VN') 
+                  }
+              });
+          } else {
+             throw new Error('Không thể đặt phòng.');
+          }
+      }
+
+      setShowPaymentDialog(true); 
+      toast.success('Đặt thành công!');
+
     } catch (e: any) { toast.error(e.message || 'Lỗi đặt phòng'); } finally { setLoading(false); }
   };
 
@@ -849,12 +711,9 @@ export default function BookingPage() {
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '24px' }}>
                 {filteredRooms.map(room => {
-                  // Kiểm tra phòng đã bị đặt trước theo giờ trong ngày đã chọn
                   let isBooked = false;
                   if (bookingType === 'gio' && selectedDate) {
-                    // Giả sử room.bookings là mảng các booking của phòng đó
                     const bookings = room.bookings || [];
-                    // Chỉ kiểm tra các booking cùng ngày
                     const dateStr = new Date(selectedDate).toISOString().slice(0, 10);
                     isBooked = bookings.some(b => {
                       const bookingDateStr = new Date(b.start).toISOString().slice(0, 10);
@@ -935,11 +794,12 @@ export default function BookingPage() {
                       setSelectedDate={setSelectedDate}
                       selectedTimeSlots={selectedTimeSlots}
                       onSlotsChange={setSelectedTimeSlots}
+                      roomId={selectedRoom.id}
                     />
                   )}
                 </div>
 
-                {bookingType === 'ngay' ? (
+                {bookingType === 'ngay' && (
                   <div>
                     <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#334155', marginBottom: '8px' }}>Số đêm lưu trú</label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -947,11 +807,6 @@ export default function BookingPage() {
                       <input type="number" readOnly value={numberOfNights} style={{ width: '60px', textAlign: 'center', border: 'none', fontSize: '16px', fontWeight: 'bold' }} />
                       <button onClick={() => setNumberOfNights(Math.min(30, numberOfNights + 1))} style={{ width: '40px', height: '40px', borderRadius: '10px', border: '1px solid #e2e8f0', backgroundColor: 'white', cursor: 'pointer' }}>+</button>
                     </div>
-                  </div>
-                ) : (
-                  <div>
-                    <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#334155', marginBottom: '12px' }}>Chọn khung giờ</label>
-                    {selectedDate ? <TimeSlotSelector roomId={selectedRoom.id} selectedDate={selectedDate} selectedSlots={selectedTimeSlots} onSlotsChange={setSelectedTimeSlots} /> : <p style={{ color: '#94a3b8', fontSize: '14px' }}>Vui lòng chọn ngày trước</p>}
                   </div>
                 )}
 
@@ -990,19 +845,16 @@ export default function BookingPage() {
                     <span>
                       {bookingType === 'ngay'
                         ? `${numberOfNights} đêm`
-                        : selectedTimeSlots
+                        : selectedTimeSlots.length > 0
                           ? (() => {
-                              const start = new Date(selectedTimeSlots.start);
-                              const end = new Date(selectedTimeSlots.end);
-                              let hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-                              if (hours < 0.5) hours = 0.5;
-                              if (hours % 1 === 0) {
-                                return `${hours} giờ`;
-                              } else if (hours % 1 === 0.5) {
-                                return `${Math.floor(hours)} giờ rưỡi`;
-                              } else {
-                                return `${hours.toFixed(2)} giờ`;
-                              }
+                              // Tổng giờ của tất cả các slot
+                              let totalHours = 0;
+                              selectedTimeSlots.forEach(s => {
+                                 const start = new Date(s.start);
+                                 const end = new Date(s.end);
+                                 totalHours += (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+                              });
+                              return `${totalHours.toFixed(2)} giờ (${selectedTimeSlots.length} slots)`;
                             })()
                           : '0 giờ'}
                     </span>
@@ -1024,7 +876,6 @@ export default function BookingPage() {
             <div style={{ backgroundColor: 'white', borderRadius: '20px', padding: '32px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
               <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#1e293b', marginBottom: '24px' }}>Thông tin của bạn</h2>
 
-              {/* Thông tin đặt phòng chi tiết */}
               <div style={{ marginBottom: '32px', background: '#fef9c3', borderRadius: '12px', padding: '20px', border: '1px solid #fde047', color: '#92400e', fontWeight: 600, fontSize: '15px' }}>
                 <h3 style={{ fontSize: '17px', fontWeight: '700', marginBottom: '12px', color: '#b45309' }}>Thông tin đặt phòng</h3>
                 <div>Loại đặt: <b>{bookingType === 'ngay' ? 'Theo ngày' : 'Theo giờ'}</b></div>
@@ -1039,11 +890,15 @@ export default function BookingPage() {
                 ) : (
                   <>
                     <div>Ngày sử dụng: <b>{selectedDate ? new Date(selectedDate).toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit' }) : ''}</b></div>
-                    <div>Giờ nhận: <b>{selectedTimeSlots ? new Date(selectedTimeSlots.start).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : ''}</b></div>
-                    <div>Giờ trả: <b>{selectedTimeSlots ? new Date(selectedTimeSlots.end).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : ''}</b></div>
+                    <div>Các khung giờ đã chọn:</div>
+                    <ul style={{marginTop: 4, paddingLeft: 20}}>
+                        {selectedTimeSlots.map((s, idx) => (
+                            <li key={idx}><b>{s.label}</b></li>
+                        ))}
+                    </ul>
                   </>
                 )}
-                <div>Tổng tiền: <b>{formatCurrency(calculateTotal())}</b></div>
+                <div style={{marginTop: 10}}>Tổng tiền: <b>{formatCurrency(calculateTotal())}</b></div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '32px' }}>

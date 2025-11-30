@@ -1,184 +1,134 @@
 import { useState, useEffect, useMemo } from 'react';
 import { uploadToCloudinary } from '../../utils/cloudinary';
-import { Calendar, Users, Clock, RefreshCw, Check, AlertCircle, UploadCloud, ChevronRight, ArrowLeft } from 'lucide-react';
+import { Calendar, Users, Clock, RefreshCw, Check, AlertCircle, UploadCloud, ChevronRight, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 
 const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-faeb1932`;
 
-// --- SUB-COMPONENT: TimeSlotSelector (Timeline chọn giờ) ---
+// --- SUB-COMPONENT: TimeSlotSelector (Fixed Slots + Multi-select) ---
 function TimeSlotSelector({
   roomId,
   selectedDate,
-  selectedSlots,
+  selectedSlots, // Array
   onSlotsChange,
   existingBookings
 }: {
   roomId: string;
   selectedDate: string;
-  selectedSlots: { start: string, end: string } | null;
-  onSlotsChange: (slots: { start: string, end: string } | null) => void;
+  selectedSlots: any[];
+  onSlotsChange: (slots: any[]) => void;
   existingBookings: any[];
 }) {
-  // Tạo timeline: 06:00 ngày N đến 06:00 ngày N+1 (30 phút/slot)
+  
+  // CẤU HÌNH KHUNG GIỜ CỐ ĐỊNH
+  const FIXED_SLOTS = [
+    { label: '07:30 - 08:45', startH: 7, startM: 30, endH: 8, endM: 45 },
+    { label: '09:00 - 10:15', startH: 9, startM: 0, endH: 10, endM: 15 },
+    { label: '10:30 - 11:45', startH: 10, startM: 30, endH: 11, endM: 45 },
+    { label: '12:00 - 13:15', startH: 12, startM: 0, endH: 13, endM: 15 },
+    { label: '13:30 - 14:45', startH: 13, startM: 30, endH: 14, endM: 45 },
+    { label: '15:00 - 16:15', startH: 15, startM: 0, endH: 16, endM: 15 },
+    { label: '16:30 - 17:45', startH: 16, startM: 30, endH: 17, endM: 45 },
+    { label: '18:00 - 19:15', startH: 18, startM: 0, endH: 19, endM: 15 },
+    { label: '19:30 - 20:45', startH: 19, startM: 30, endH: 20, endM: 45 },
+    { label: '21:00 - 22:15', startH: 21, startM: 0, endH: 22, endM: 15 },
+    { label: '22:30 - 07:00 (Hôm sau)', startH: 22, startM: 30, endH: 7, endM: 0, nextDay: true }
+  ];
+
   const timeSlots = useMemo(() => {
     if (!selectedDate) return [];
-    const slots = [];
-    // Dùng chuỗi ISO để đảm bảo ngày giờ chính xác
-    let date = new Date(`${selectedDate}T06:00:00`);
-    for (let i = 0; i < 48; i++) {
-      slots.push({
-        label: date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
-        date: new Date(date),
-      });
-      date = new Date(date.getTime() + 30 * 60 * 1000); // +30 phút
-    }
-    return slots;
+    return FIXED_SLOTS.map(config => {
+      const start = new Date(selectedDate);
+      start.setHours(config.startH, config.startM, 0, 0);
+      const end = new Date(selectedDate);
+      if (config.nextDay) {
+        end.setDate(end.getDate() + 1);
+      }
+      end.setHours(config.endH, config.endM, 0, 0);
+      return { label: config.label, start, end, config };
+    });
   }, [selectedDate]);
 
-  // Kiểm tra khả dụng (Logic Buffer chồng chéo, cho phép đặt nếu chạm đúng ranh buffer)
-  const isTimeSlotAvailable = (slot: { label: string, date: Date }) => {
-    const slotStart = slot.date;
-    const slotEnd = new Date(slot.date.getTime() + 30 * 60 * 1000);
+  // Kiểm tra khả dụng
+  const getSlotStatus = (slot: { start: Date, end: Date }) => {
+    const now = new Date();
+    // 1. Check quá khứ
+    if (slot.start < now) return { available: false, reason: 'past' };
 
+    // 2. Check trùng lịch
     for (const booking of existingBookings) {
-      const bookingStart = new Date(booking.thoi_gian_nhan);
-      const bookingEnd = new Date(booking.thoi_gian_tra);
-      const bufferStart = new Date(bookingStart.getTime() - 30 * 60 * 1000);
-      const bufferEnd = new Date(bookingEnd.getTime() + 30 * 60 * 1000);
+      const bStart = new Date(booking.thoi_gian_nhan);
+      const bEnd = new Date(booking.thoi_gian_tra);
+      // Buffer 15 phút
+      const blockedStart = new Date(bStart.getTime() - 15 * 60000);
+      const blockedEnd = new Date(bEnd.getTime() + 15 * 60000);
 
-      // Nếu slotEnd == bufferStart hoặc slotStart == bufferEnd thì cho phép đặt (chạm biên)
-      if (slotEnd.getTime() === bufferStart.getTime() || slotStart.getTime() === bufferEnd.getTime()) {
-        continue;
-      }
-      // Nếu slotStart < bufferEnd && slotEnd > bufferStart thì bị trùng
-      if (slotStart < bufferEnd && slotEnd > bufferStart) {
-        return false;
+      if (slot.start < blockedEnd && slot.end > blockedStart) {
+        return { available: false, reason: 'booked' };
       }
     }
-    return true;
+    return { available: true, reason: 'ok' };
   };
 
-  // Logic màu sắc timeline theo quy tắc mới
-  const getSlotColor = (slot: { label: string, date: Date }) => {
-    const hour = slot.date.getHours();
-    const minute = slot.date.getMinutes();
-
-    // 06:00–06:30 và 21:30–22:00 luôn màu xám, không cho đặt
-    const slotTime = hour * 60 + minute;
-    if ((slotTime >= 360 && slotTime < 390) || (slotTime >= 1290 && slotTime < 1320)) {
-      // 06:00–06:30 (360–390), 21:30–22:00 (1290–1320)
-      return 'bg-gray-200 text-gray-400 cursor-not-allowed border-gray-200';
+  const handleSlotClick = (slot: any) => {
+    const status = getSlotStatus(slot);
+    if (!status.available) {
+       if(status.reason === 'booked') toast.error('Khung giờ này đã có đơn đặt.');
+       return;
     }
 
-    if (!isTimeSlotAvailable(slot)) {
-      return 'bg-gray-200 text-gray-400 cursor-not-allowed border-gray-200'; // Màu xám (Đã đặt/Buffer)
-    }
+    const slotStartStr = slot.start.toISOString();
+    const exists = selectedSlots.find(s => s.start === slotStartStr);
 
-    // Vàng: 06:30–21:30 (390–1290)
-    if (slotTime >= 390 && slotTime < 1290) {
-      return 'bg-amber-100 hover:bg-amber-200 text-amber-800 border-amber-200';
-    }
-    // Xanh: 22:00–06:00 hôm sau (1320–1440 hoặc 0–360)
-    if ((slotTime >= 1320 && slotTime < 1440) || (slotTime >= 0 && slotTime < 360)) {
-      return 'bg-indigo-100 hover:bg-indigo-200 text-indigo-800 border-indigo-200';
-    }
-    // Default: xám
-    return 'bg-gray-200 text-gray-400 cursor-not-allowed border-gray-200';
-  };
-
-  const handleSlotClick = (slot: { label: string, date: Date }) => {
-    if (!isTimeSlotAvailable(slot)) return;
-
-    const slotDateTime = slot.date.toISOString();
-
-    if (!selectedSlots) {
-      // Chọn điểm đầu tiên
-      onSlotsChange({ start: slotDateTime, end: slotDateTime });
+    if (exists) {
+      // Bỏ chọn
+      onSlotsChange(selectedSlots.filter(s => s.start !== slotStartStr));
     } else {
-      const startTime = new Date(selectedSlots.start);
-      const endTime = new Date(selectedSlots.end);
-      const clickedTime = slot.date;
-
-      // Nếu click vào vùng đã chọn -> Hủy chọn
-      if (clickedTime.getTime() >= startTime.getTime() && clickedTime.getTime() <= endTime.getTime()) {
-        onSlotsChange(null);
-        return;
-      }
-
-      // Logic chọn khoảng (Range selection)
-      if (clickedTime < startTime) {
-        onSlotsChange({ start: slotDateTime, end: selectedSlots.end });
-      } else {
-        onSlotsChange({ start: selectedSlots.start, end: slotDateTime });
-      }
+      // Chọn thêm
+      onSlotsChange([...selectedSlots, { 
+        start: slot.start.toISOString(), 
+        end: slot.end.toISOString(),
+        label: slot.label 
+      }]);
     }
-  };
-
-  const isSlotSelected = (slotDate: Date) => {
-    if (!selectedSlots) return false;
-    const start = new Date(selectedSlots.start);
-    const end = new Date(selectedSlots.end);
-    return slotDate.getTime() >= start.getTime() && slotDate.getTime() <= end.getTime();
   };
 
   return (
     <div style={{ marginTop: 8, marginBottom: 8 }}>
       {/* Legend */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px 24px', fontSize: 14, color: '#555', marginBottom: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div style={{ width: 12, height: 12, borderRadius: '50%', background: '#fbbf24' }}></div>Ngày (06:30-21:30)</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div style={{ width: 12, height: 12, borderRadius: '50%', background: '#6366f1' }}></div>Đêm (21:30-06:30)</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div style={{ width: 12, height: 12, borderRadius: '50%', background: '#d1d5db' }}></div>Không khả dụng</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div style={{ width: 12, height: 12, borderRadius: '50%', background: '#14b8a6' }}></div>Đang chọn</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div style={{ width: 12, height: 12, borderRadius: 4, background: '#f8fafc', border: '1px solid #e2e8f0' }}></div>Trống</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div style={{ width: 12, height: 12, borderRadius: 4, background: '#0f7072' }}></div>Đang chọn</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div style={{ width: 12, height: 12, borderRadius: 4, background: '#f1f5f9', border: '1px solid #cbd5e1' }}></div>Đã đặt/Qua giờ</div>
       </div>
 
-      {/* Time Slot Grid */}
+      {/* Grid Slot */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(10, minmax(0, 1fr))',
-        gap: 8,
+        gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+        gap: 12,
         padding: 16,
-        background: '#f9fafb',
+        background: '#fff',
         borderRadius: 16,
         border: '1px solid #e5e7eb',
-        maxHeight: 320,
-        overflowY: 'auto',
-        boxSizing: 'border-box'
       }}>
         {timeSlots.map((slot, idx) => {
-          const isCurrentlySelected = isSlotSelected(slot.date);
-          const baseColorClass = getSlotColor(slot);
-          let style: React.CSSProperties = {
-            padding: '8px 4px',
-            fontSize: 12,
-            fontWeight: 600,
-            borderRadius: 8,
-            border: '1px solid',
-            transition: 'all 0.15s',
-            outline: 'none',
-            cursor: baseColorClass.includes('cursor-not-allowed') ? 'not-allowed' : 'pointer',
-            boxShadow: isCurrentlySelected ? '0 2px 8px rgba(20,184,166,0.15)' : undefined,
-            transform: isCurrentlySelected ? 'scale(1.08)' : undefined,
-            zIndex: isCurrentlySelected ? 10 : undefined,
-          };
-          // Color logic
-          if (isCurrentlySelected) {
-            style.background = '#14b8a6';
-            style.color = '#fff';
-            style.borderColor = '#14b8a6';
-          } else if (baseColorClass.includes('bg-gray-200')) {
-            style.background = '#d1d5db';
-            style.color = '#9ca3af';
-            style.borderColor = '#d1d5db';
-          } else if (baseColorClass.includes('bg-amber-100')) {
-            style.background = '#fef3c7';
-            style.color = '#b45309';
-            style.borderColor = '#fde68a';
-          } else if (baseColorClass.includes('bg-indigo-100')) {
-            style.background = '#e0e7ff';
-            style.color = '#3730a3';
-            style.borderColor = '#6366f1';
+          const status = getSlotStatus(slot);
+          const isSelected = selectedSlots.some(s => s.start === slot.start.toISOString());
+          
+          let bg = '#fff';
+          let color = '#334155';
+          let border = '1px solid #e2e8f0';
+          let cursor = 'pointer';
+
+          if (isSelected) {
+            bg = '#0f7072'; color = '#fff'; border = '1px solid #0f7072';
+          } else if (!status.available) {
+            bg = '#f1f5f9'; color = '#94a3b8'; border = '1px solid #f1f5f9'; cursor = 'not-allowed';
+          } else {
+            bg = '#f8fafc';
           }
 
           return (
@@ -186,10 +136,28 @@ function TimeSlotSelector({
               type="button"
               key={idx}
               onClick={() => handleSlotClick(slot)}
-              disabled={baseColorClass.includes('cursor-not-allowed')}
-              style={style}
+              disabled={!status.available}
+              style={{
+                padding: '12px 8px',
+                borderRadius: '10px',
+                backgroundColor: bg,
+                color: color,
+                border: border,
+                cursor: cursor,
+                fontSize: 13,
+                fontWeight: isSelected ? 700 : 500,
+                transition: 'all 0.15s',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 4,
+                position: 'relative'
+              }}
             >
-              {slot.label}
+              {isSelected && <div style={{position: 'absolute', top: -6, right: -6, background: '#f59e0b', borderRadius: '50%', color: 'white', padding: 2, zIndex: 10}}><CheckCircle2 size={14} fill="#f59e0b" color="white"/></div>}
+              <span>{slot.label.split(' - ')[0]} - {slot.label.split(' - ')[1].split(' ')[0]}</span>
+              {slot.config.nextDay && <span className="text-[10px] italic opacity-80">(Qua đêm)</span>}
+              {!status.available && status.reason === 'booked' && <span className="text-[10px] text-red-500 font-bold">Đã có đơn</span>}
             </button>
           );
         })}
@@ -213,7 +181,10 @@ export default function NewBooking() {
   // State Logic Đặt Lịch
   const [bookingType, setBookingType] = useState<'ngay' | 'gio'>('ngay');
   const [selectedDate, setSelectedDate] = useState<string>('');
-  const [selectedTimeSlots, setSelectedTimeSlots] = useState<{ start: string, end: string } | null>(null);
+  
+  // *** UPDATE: Đổi thành mảng để chọn nhiều ***
+  const [selectedTimeSlots, setSelectedTimeSlots] = useState<any[]>([]);
+  
   const [existingBookings, setExistingBookings] = useState<any[]>([]);
   const [fetchingBookings, setFetchingBookings] = useState(false);
 
@@ -239,20 +210,23 @@ export default function NewBooking() {
     } else {
       setExistingBookings([]);
     }
-    setSelectedTimeSlots(null);
+    // Reset slot khi đổi ngày/phòng
+    setSelectedTimeSlots([]);
   }, [formData.room, selectedDate]);
 
   const fetchBookingsForRoom = async () => {
     if (!formData.room || !selectedDate) return;
     setFetchingBookings(true);
     try {
-      const startOfDay = `${selectedDate}T00:00:00`;
-      const nextDay = new Date(selectedDate);
-      nextDay.setDate(nextDay.getDate() + 2); // Lấy dư ra 2 ngày để cover xuyên đêm
-      const endOfNextDay = `${nextDay.toISOString().split('T')[0]}T00:00:00`;
+      // Lấy buffer rộng hơn (trước 1 ngày, sau 2 ngày) để cover mọi trường hợp
+      const checkDate = new Date(selectedDate);
+      const bufferStart = new Date(checkDate);
+      bufferStart.setDate(bufferStart.getDate() - 1);
+      const bufferEnd = new Date(checkDate);
+      bufferEnd.setDate(bufferEnd.getDate() + 2);
 
       const response = await fetch(
-        `${API_URL}/dat-phong?start_date=${startOfDay}&end_date=${endOfNextDay}`,
+        `${API_URL}/dat-phong?start_date=${bufferStart.toISOString()}&end_date=${bufferEnd.toISOString()}`,
         { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
       );
       const data = await response.json();
@@ -300,7 +274,7 @@ export default function NewBooking() {
     } catch (error) { toast.error('Lỗi tải dữ liệu ban đầu'); }
   };
 
-  // --- VALIDATION HELPERS ---
+  // --- VALIDATION HELPERS (Cho booking ngày) ---
   const isDayBookingAvailable = useMemo(() => {
     if (!selectedDate || !formData.room) return false;
     const checkIn = new Date(`${selectedDate}T14:00:00`);
@@ -324,69 +298,89 @@ export default function NewBooking() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    let finalCheckIn = '';
-    let finalCheckOut = '';
-
-    if (bookingType === 'ngay') {
-      if (!selectedDate) return toast.error('Vui lòng chọn ngày');
-      if (!isDayBookingAvailable) return toast.error('Ngày này đã bị vướng lịch! Vui lòng kiểm tra lại.');
-
-      finalCheckIn = `${selectedDate}T14:00:00`;
-      const nextDay = new Date(selectedDate);
-      nextDay.setDate(nextDay.getDate() + 1);
-      finalCheckOut = `${nextDay.toISOString().split('T')[0]}T12:00:00`;
-
-    } else { // Theo giờ
-      if (!selectedTimeSlots) return toast.error('Vui lòng chọn khung giờ trên timeline');
-      finalCheckIn = selectedTimeSlots.start;
-      // Cộng thêm 30p vào slot cuối cùng để ra giờ trả
-      const endOfLastSlot = new Date(new Date(selectedTimeSlots.end).getTime() + 30 * 60 * 1000);
-      finalCheckOut = endOfLastSlot.toISOString();
-    }
-
-    // Validate chung
-    if (new Date(finalCheckIn) >= new Date(finalCheckOut)) return toast.error("Giờ trả phải sau giờ nhận.");
     if (!formData.customerName || !formData.customerPhone || !formData.room) return toast.error("Thiếu thông tin bắt buộc.");
-
+    
     setLoading(true);
+
     try {
-      const payload: any = {
-        ho_ten: formData.customerName,
-        sdt: formData.customerPhone,
-        email: formData.customerEmail || null,
-        id_phong: formData.room,
-        thoi_gian_nhan: finalCheckIn,
-        thoi_gian_tra: finalCheckOut,
-        so_khach: formData.numberOfGuests || 1,
-        ghi_chu: formData.notes || null,
-        ghi_chu_khach: formData.notes || null,
-        kenh_dat: formData.bookingSource,
-        trang_thai: 'da_coc',
-        cccd_mat_truoc: formData.cccdFront || null,
-        cccd_mat_sau: formData.cccdBack || null
-      };
+        // Payload cơ bản
+        const basePayload: any = {
+            ho_ten: formData.customerName,
+            sdt: formData.customerPhone,
+            email: formData.customerEmail || null,
+            id_phong: formData.room,
+            so_khach: formData.numberOfGuests || 1,
+            ghi_chu: formData.notes || null,
+            ghi_chu_khach: formData.notes || null,
+            kenh_dat: formData.bookingSource,
+            trang_thai: 'da_coc', // Mặc định đã cọc khi admin tạo? Hoặc 'cho_xac_nhan' tùy logic bạn
+            cccd_mat_truoc: formData.cccdFront || null,
+            cccd_mat_sau: formData.cccdBack || null
+        };
 
-      const response = await fetch(`${API_URL}/dat-phong`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
-        body: JSON.stringify(payload)
-      });
-      const data = await response.json();
+        if (bookingType === 'ngay') {
+            if (!selectedDate) throw new Error('Vui lòng chọn ngày');
+            if (!isDayBookingAvailable) throw new Error('Ngày này đã bị vướng lịch!');
 
-      if (data.success) {
-        toast.success(`Tạo đơn thành công! Mã: ${data.data?.ma_dat}`);
-        // Reset Form
+            const checkIn = `${selectedDate}T14:00:00`;
+            const nextDay = new Date(selectedDate);
+            nextDay.setDate(nextDay.getDate() + 1);
+            const checkOut = `${nextDay.toISOString().split('T')[0]}T12:00:00`;
+
+            const payload = {
+                ...basePayload,
+                thoi_gian_nhan: checkIn,
+                thoi_gian_tra: checkOut
+            };
+
+            const response = await fetch(`${API_URL}/dat-phong`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
+                body: JSON.stringify(payload)
+            });
+            const data = await response.json();
+            if (!data.success) throw new Error(data.error);
+            toast.success(`Tạo đơn ngày thành công! Mã: ${data.data?.ma_dat}`);
+
+        } else { // Booking Type: GIỜ (Multiple Slots)
+            if (selectedTimeSlots.length === 0) throw new Error('Vui lòng chọn ít nhất 1 khung giờ');
+
+            // Tạo mảng promise để gửi nhiều request
+            const promises = selectedTimeSlots.map(slot => {
+                const payload = {
+                    ...basePayload,
+                    thoi_gian_nhan: slot.start,
+                    thoi_gian_tra: slot.end,
+                    ghi_chu: (formData.notes || '') + ` (Slot: ${slot.label})`
+                };
+                return fetch(`${API_URL}/dat-phong`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
+                    body: JSON.stringify(payload)
+                }).then(r => r.json());
+            });
+
+            const results = await Promise.all(promises);
+            const errors = results.filter(r => !r.success);
+            
+            if (errors.length > 0) {
+                console.error(errors);
+                toast.warning(`Có ${errors.length} khung giờ thất bại. Các khung giờ khác đã tạo thành công.`);
+            } else {
+                toast.success(`Đã tạo thành công ${results.length} đơn đặt phòng theo giờ!`);
+            }
+        }
+
+        // Reset Form sau khi thành công
         setFormData(prev => ({ ...prev, customerName: '', customerPhone: '', customerEmail: '', notes: '', cccdFront: '', cccdBack: '' }));
-        setSelectedTimeSlots(null);
-        fetchBookingsForRoom(); // Refresh lại lịch
-      } else {
-        toast.error('Lỗi: ' + (data.error || 'Không xác định'));
-      }
-    } catch (error) {
-      console.error(error);
-      toast.error('Lỗi kết nối server');
+        setSelectedTimeSlots([]);
+        fetchBookingsForRoom();
+
+    } catch (error: any) {
+        console.error(error);
+        toast.error(error.message || 'Lỗi xử lý');
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
   };
 
@@ -404,7 +398,6 @@ export default function NewBooking() {
     }
   };
 
-  // Tailwind Input Class
   const inputClass = "w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all duration-200 outline-none";
 
   return (
@@ -579,20 +572,19 @@ export default function NewBooking() {
                   <div className="space-y-4">
                     {selectedDate ? (
                       <>
+                        <p className="text-sm font-semibold text-gray-700">Chọn khung giờ (Có thể chọn nhiều):</p>
                         <TimeSlotSelector roomId={formData.room} selectedDate={selectedDate} selectedSlots={selectedTimeSlots} onSlotsChange={setSelectedTimeSlots} existingBookings={existingBookings} />
-                        {selectedTimeSlots && (
-                          <div className="mt-4 p-4 bg-teal-50 border border-teal-200 rounded-xl text-teal-900 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                            <div className="flex items-center gap-3">
-                              <Clock className="w-5 h-5 text-teal-600" />
-                              <div>
-                                <p className="text-xs text-teal-600 font-semibold uppercase">Thời gian đã chọn</p>
-                                <p className="font-bold text-lg">
-                                  {new Date(selectedTimeSlots.start).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-                                  {' - '}
-                                  {new Date(new Date(selectedTimeSlots.end).getTime() + 30 * 60 * 1000).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-                                </p>
-                              </div>
+                        
+                        {selectedTimeSlots.length > 0 && (
+                          <div className="mt-4 p-4 bg-teal-50 border border-teal-200 rounded-xl text-teal-900 shadow-sm">
+                            <div className="flex items-center gap-2 mb-2 font-bold text-teal-700">
+                                <CheckCircle2 className="w-5 h-5"/> Đã chọn {selectedTimeSlots.length} khung giờ:
                             </div>
+                            <ul className="list-disc pl-5 text-sm space-y-1">
+                                {selectedTimeSlots.map((s, i) => (
+                                    <li key={i}>{s.label}</li>
+                                ))}
+                            </ul>
                           </div>
                         )}
                       </>
@@ -601,66 +593,6 @@ export default function NewBooking() {
                     )}
                   </div>
                 )}
-
-                {/* Button group moved up here */}
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'row',
-                  justifyContent: 'flex-end',
-                  gap: '14px',
-                  marginTop: '18px',
-                  marginBottom: '0',
-                }}>
-                  <button
-                    type="button"
-                    onClick={() => navigate(-1)}
-                    style={{
-                      padding: '8px 20px',
-                      borderRadius: '999px',
-                      border: '1.5px solid #e5e7eb',
-                      color: '#374151',
-                      fontWeight: 600,
-                      background: '#fff',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-                      fontSize: 15,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                    }}
-                    onMouseOver={e => (e.currentTarget.style.background = '#f3f4f6')}
-                    onMouseOut={e => (e.currentTarget.style.background = '#fff')}
-                  >
-                    <RefreshCw className="w-4 h-4 text-gray-400" />
-                    Hủy
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={loading || formData.cccdFrontUploading || formData.cccdBackUploading}
-                    style={{
-                      padding: '8px 26px',
-                      borderRadius: '999px',
-                      background: loading ? '#2dd4bf' : '#14b8a6',
-                      color: '#fff',
-                      fontWeight: 700,
-                      fontSize: 15,
-                      boxShadow: '0 2px 8px #99f6e4',
-                      border: 'none',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      opacity: loading || formData.cccdFrontUploading || formData.cccdBackUploading ? 0.5 : 1,
-                      cursor: loading || formData.cccdFrontUploading || formData.cccdBackUploading ? 'not-allowed' : 'pointer',
-                      transition: 'background 0.2s, box-shadow 0.2s',
-                    }}
-                    onMouseOver={e => { if (!loading && !formData.cccdFrontUploading && !formData.cccdBackUploading) e.currentTarget.style.background = '#0d9488'; }}
-                    onMouseOut={e => { if (!loading && !formData.cccdFrontUploading && !formData.cccdBackUploading) e.currentTarget.style.background = '#14b8a6'; }}
-                  >
-                    <Check className="w-4 h-4 text-white" />
-                    {loading ? 'Đang xử lý...' : 'Xác Nhận Tạo Đơn'}
-                  </button>
-                </div>
               </div>
             )}
           </div>
