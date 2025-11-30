@@ -136,27 +136,44 @@ const buildRevenueContent = (data: any) => {
   // Bảng chi tiết các đơn trong kỳ
   if (Array.isArray(data.orders) && data.orders.length > 0) {
     content.push(createSectionHeader('Danh sách chi tiết các đơn trong kỳ'));
-    const orderRows = data.orders.map((order: any, idx: number) => [
-      idx + 1,
-      order.branch || '-',
-      order.code || '-',
-      order.customer || '-',
-      order.room || '-',
-      order.checkin || '-',
-      order.checkout || '-',
-      formatCurrency(order.total)
-    ]);
+    const orderRows = data.orders.map((order: any, idx: number) => {
+      // Chỉ lấy ngày/tháng (dd/mm)
+      const shortCheckin = order.checkin ? order.checkin.substring(0, 5) : '-';
+      const shortCheckout = order.checkout ? order.checkout.substring(0, 5) : '-';
+      return [
+        { text: idx + 1, alignment: 'center' },
+        { text: order.branch || '-', alignment: 'left' },
+        { text: order.code || '-', alignment: 'left' },
+        { text: order.customer || 'Khách vãng lai', bold: true },
+        { text: order.room || '-', alignment: 'center' },
+        { text: shortCheckin, alignment: 'center' },
+        { text: shortCheckout, alignment: 'center' },
+        { text: formatCurrency(order.total), alignment: 'right' }
+      ];
+    });
     content.push({
       table: {
         headerRows: 1,
-        widths: [30, 60, 80, 80, 40, 60, 60, 70],
+        dontBreakRows: true,
+        widths: [20, 60, 50, '*', 35, 35, 35, 65],
         body: [
-          ['STT', 'Cơ sở', 'Mã đơn', 'Tên khách hàng', 'Phòng', 'Ngày nhận', 'Ngày trả', 'Tổng tiền'].map(t => ({ text: t, bold: true, fillColor: '#f0f0f0' })),
+          [
+            'STT', 'Cơ sở', 'Mã đơn', 'Khách hàng', 'Phòng', 'Vào', 'Ra', 'Tổng tiền'
+          ].map(t => ({ text: t, bold: true, fillColor: '#f0f0f0', alignment: 'center', fontSize: 8 })),
           ...orderRows
         ]
       },
-      layout: 'lightHorizontalLines',
-      fontSize: 9
+      layout: {
+        hLineWidth: (i: number, node: any) => (i === 0 || i === 1 || i === node.table.body.length) ? 1 : 0.5,
+        vLineWidth: () => 0,
+        hLineColor: () => '#e0e0e0',
+        paddingLeft: () => 4,
+        paddingRight: () => 4,
+        paddingTop: () => 4,
+        paddingBottom: () => 4,
+      },
+      fontSize: 8,
+      margin: [0, 0, 0, 10]
     });
   }
 

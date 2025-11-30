@@ -640,7 +640,13 @@ export async function getDetailedReports(filters?: { startDate?: string, endDate
     .select(`
       *,
       khach_hang(*),
-      phong(*, loai_phong(*))
+      phong(
+        *,
+        loai_phong(
+          *,
+          co_so(*)
+        )
+      )
     `)
     .order('thoi_gian_nhan', { ascending: false });
 
@@ -887,9 +893,17 @@ export async function getDetailedReports(filters?: { startDate?: string, endDate
     bookingSources,
     bookingStatus,
     roomUsageDetails,
-    
-    // --- QUAN TRỌNG: Thêm customersList vào return ---
-    customersList
+    customersList,
+    // BỔ SUNG: Trả về danh sách đơn chi tiết cho báo cáo doanh thu
+    orders: bookings.map(b => ({
+      branch: b.phong?.loai_phong?.co_so?.ten_co_so || '',
+      code: b.ma_dat || '',
+      customer: b.khach_hang?.ho_ten || '',
+      room: b.phong?.ma_phong || '',
+      checkin: b.thoi_gian_nhan ? new Date(b.thoi_gian_nhan).toLocaleDateString('vi-VN') : '',
+      checkout: b.thoi_gian_tra ? new Date(b.thoi_gian_tra).toLocaleDateString('vi-VN') : '',
+      total: b.tong_tien || 0
+    }))
   };
 }
 
