@@ -6,7 +6,7 @@ export const PAYMENT_CONFIG = {
     accountName: 'VU QUANG ANH',
 
     // Fixed QR code image URL
-    qrImageUrl: '/src/assets/payment-qr.jpg',
+    qrImageUrl: '/payment-qr.jpg',
 
     // Generate payment description
     generateDescription: (bookingCode: string) => {
