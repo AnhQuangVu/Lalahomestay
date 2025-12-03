@@ -1,34 +1,24 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Toaster, toast } from 'sonner';
 import {
-  Clock, UserCheck, LogOut, Sparkles,
-  FileText, Settings, User, Plus, X,
+  UserCheck, LogOut, Sparkles,
+  FileText, User, Plus, X,
   CreditCard, MapPin, Phone, StickyNote, AlertCircle,
-  LayoutGrid, BarChart2, Home, CheckCircle, XCircle, TrendingUp, BarChart3, PieChart as PieChartIcon,
-  ChevronDown, Edit, Save
+  Home, CheckCircle, XCircle, TrendingUp, BarChart3, PieChart as PieChartIcon,
+  Edit, Save
 } from 'lucide-react';
 import { 
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, 
   CartesianGrid, Tooltip, Legend, ResponsiveContainer 
 } from 'recharts';
-import { format, differenceInHours } from 'date-fns';
-import { vi } from 'date-fns/locale';
+import { differenceInHours } from 'date-fns';
+import { format } from 'date-fns'; // Đã thêm import format
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 
 // --- CONFIG ---
 const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-faeb1932`;
 
 // --- HELPER FUNCTIONS ---
-const getBookingStatusLabel = (status: string) => {
-  const map: Record<string, string> = {
-    'da_coc': 'Đã đặt cọc', 'da_tra': 'Đã trả phòng', 'dang_o': 'Đang ở',
-    'dang_dung': 'Đang sử dụng', 'da_huy': 'Đã hủy', 'cho_xac_nhan': 'Chờ xác nhận',
-    'checkout': 'Đã checkout', 'sap_nhan': 'Sắp nhận', 'sap_tra': 'Sắp trả',
-    'trong': 'Trống', '': 'Không xác định'
-  };
-  return map[status] || status;
-};
-
 const formatCurrency = (amount: number) => 
   new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(amount || 0);
 
@@ -55,7 +45,108 @@ interface ReportData {
   }>;
 }
 
-// --- SUB-COMPONENT: BÁO CÁO (Đã bỏ cột Thao tác) ---
+// --- STYLES OBJECT ---
+const styles: { [key: string]: React.CSSProperties } = {
+  container: {
+    maxWidth: '1280px',
+    margin: '0 auto',
+    padding: '24px 16px',
+    fontFamily: '"Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    color: '#1f2937',
+    paddingBottom: '80px',
+  },
+  // Header
+  pageHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' },
+  pageTitle: { fontSize: '24px', fontWeight: '700', color: '#111827', margin: 0 },
+  pageSubtitle: { fontSize: '14px', color: '#6b7280', marginTop: '4px' },
+  
+  // Filter
+  filterContainer: { display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '24px' },
+  filterBtn: {
+    padding: '8px 16px', borderRadius: '8px', fontSize: '14px', fontWeight: '500',
+    border: '1px solid transparent', cursor: 'pointer', transition: 'all 0.2s',
+  },
+
+  // Grid
+  gridRooms: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+    gap: '16px',
+  },
+  
+  // Room Card
+  roomCard: {
+    borderRadius: '12px',
+    overflow: 'hidden',
+    cursor: 'pointer',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+    transition: 'transform 0.2s',
+    display: 'flex',
+    flexDirection: 'column',
+    minHeight: '190px',
+    position: 'relative',
+    backgroundColor: 'white',
+  },
+  roomHeader: {
+    padding: '12px 16px',
+    borderBottom: '1px solid rgba(0,0,0,0.05)',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.5)',
+  },
+  roomNumber: { fontSize: '20px', fontWeight: '800', color: '#111827', lineHeight: 1 },
+  roomConcept: { fontSize: '12px', fontWeight: '500', color: '#6b7280', marginTop: '4px' },
+  roomBadge: {
+    padding: '2px 8px', borderRadius: '99px', fontSize: '10px',
+    fontWeight: '700', textTransform: 'uppercase', border: '1px solid rgba(0,0,0,0.05)',
+    backgroundColor: 'white',
+  },
+  roomBody: { padding: '16px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' },
+  roomFooterLine: { height: '4px', width: '100%' },
+
+  // Report Section
+  reportSection: { marginTop: '48px', paddingTop: '32px', borderTop: '1px solid #e5e7eb' },
+  kpiGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' },
+  kpiCard: {
+    borderRadius: '12px', padding: '24px', border: '1px solid',
+    background: 'linear-gradient(to bottom right, var(--tw-gradient-from), var(--tw-gradient-to))',
+  },
+  chartGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', marginBottom: '24px' },
+  chartCard: { backgroundColor: 'white', borderRadius: '12px', padding: '24px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' },
+  
+  // Table
+  tableCard: { backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' },
+  tableHeader: { padding: '24px', borderBottom: '1px solid #f3f4f6', backgroundColor: '#f9fafb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  tableContainer: { overflowX: 'auto', maxHeight: '500px' },
+  table: { width: '100%', borderCollapse: 'collapse', fontSize: '14px' },
+  th: { padding: '12px 24px', textAlign: 'left', fontWeight: 'bold', color: '#4b5563', fontSize: '12px', textTransform: 'uppercase', backgroundColor: '#f3f4f6', position: 'sticky', top: 0 },
+  td: { padding: '12px 24px', borderBottom: '1px solid #f3f4f6', color: '#374151' },
+
+  // Modal
+  modalOverlay: {
+    position: 'fixed', inset: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    zIndex: 50, padding: '16px',
+  },
+  modalContent: {
+    backgroundColor: 'white', borderRadius: '16px', width: '100%', maxWidth: '400px',
+    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', overflow: 'hidden',
+  },
+  modalHeader: { padding: '16px 24px', borderBottom: '1px solid #e5e7eb', backgroundColor: '#f9fafb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' },
+  modalBody: { padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' },
+  
+  // Form Elements
+  input: { width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '14px', outline: 'none' },
+  label: { display: 'block', fontSize: '12px', color: '#6b7280', marginBottom: '4px' },
+  btnAction: {
+    width: '100%', padding: '12px', borderRadius: '12px', fontWeight: 'bold',
+    border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.05)', transition: 'background-color 0.2s',
+  },
+};
+
+// --- SUB-COMPONENT: BÁO CÁO ---
 const RoomsReportSection = ({ reportData, onRowClick }: { reportData: ReportData, onRowClick: (room: Room) => void }) => {
   const occupancyData = [
     { name: 'Đang sử dụng', value: reportData.occupiedRooms, color: '#8b5cf6' },
@@ -63,37 +154,53 @@ const RoomsReportSection = ({ reportData, onRowClick }: { reportData: ReportData
   ];
 
   return (
-    <div className="space-y-6 mt-12 pt-8 border-t border-gray-200 animate-in fade-in slide-in-from-bottom-8 duration-700">
-      <div className="flex items-center gap-2 mb-4">
-        <BarChart3 className="w-6 h-6 text-gray-700"/>
-        <h2 className="text-2xl font-bold text-gray-800">Báo cáo hiệu suất & Thống kê</h2>
+    <div style={styles.reportSection}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+        <BarChart3 size={24} color="#374151" />
+        <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#1f2937' }}>Báo cáo hiệu suất & Thống kê</h2>
       </div>
 
       {/* 1. KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-6 border border-purple-200">
-          <div className="flex justify-between mb-3"><div className="w-12 h-12 bg-purple-500 rounded-lg flex items-center justify-center"><Home className="w-6 h-6 text-white" /></div></div>
-          <p className="text-sm text-purple-700">Tổng số phòng</p><p className="text-3xl font-bold text-purple-900">{reportData.totalRooms}</p>
+      <div style={styles.kpiGrid}>
+        {/* Purple Card */}
+        <div style={{ ...styles.kpiCard, backgroundColor: '#faf5ff', borderColor: '#e9d5ff' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '8px', backgroundColor: '#a855f7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Home color="white" size={24} /></div>
+          </div>
+          <p style={{ fontSize: '14px', color: '#7e22ce' }}>Tổng số phòng</p>
+          <p style={{ fontSize: '30px', fontWeight: 'bold', color: '#581c87' }}>{reportData.totalRooms}</p>
         </div>
-        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-6 border border-green-200">
-          <div className="flex justify-between mb-3"><div className="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center"><CheckCircle className="w-6 h-6 text-white" /></div></div>
-          <p className="text-sm text-green-700">Đang sử dụng</p><p className="text-3xl font-bold text-green-900">{reportData.occupiedRooms}</p>
+        {/* Green Card */}
+        <div style={{ ...styles.kpiCard, backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '8px', backgroundColor: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CheckCircle color="white" size={24} /></div>
+          </div>
+          <p style={{ fontSize: '14px', color: '#15803d' }}>Đang sử dụng</p>
+          <p style={{ fontSize: '30px', fontWeight: 'bold', color: '#14532d' }}>{reportData.occupiedRooms}</p>
         </div>
-        <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-6 border border-gray-200">
-          <div className="flex justify-between mb-3"><div className="w-12 h-12 bg-gray-500 rounded-lg flex items-center justify-center"><XCircle className="w-6 h-6 text-white" /></div></div>
-          <p className="text-sm text-gray-700">Còn trống</p><p className="text-3xl font-bold text-gray-900">{reportData.availableRooms}</p>
+        {/* Gray Card */}
+        <div style={{ ...styles.kpiCard, backgroundColor: '#f9fafb', borderColor: '#e5e7eb' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '8px', backgroundColor: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><XCircle color="white" size={24} /></div>
+          </div>
+          <p style={{ fontSize: '14px', color: '#374151' }}>Còn trống</p>
+          <p style={{ fontSize: '30px', fontWeight: 'bold', color: '#111827' }}>{reportData.availableRooms}</p>
         </div>
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 border border-blue-200">
-          <div className="flex justify-between mb-3"><div className="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center"><TrendingUp className="w-6 h-6 text-white" /></div></div>
-          <p className="text-sm text-blue-700">Công suất</p><p className="text-3xl font-bold text-blue-900">{reportData.occupancyRate}%</p>
+        {/* Blue Card */}
+        <div style={{ ...styles.kpiCard, backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '8px', backgroundColor: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><TrendingUp color="white" size={24} /></div>
+          </div>
+          <p style={{ fontSize: '14px', color: '#1d4ed8' }}>Công suất</p>
+          <p style={{ fontSize: '30px', fontWeight: 'bold', color: '#1e3a8a' }}>{reportData.occupancyRate}%</p>
         </div>
       </div>
 
       {/* 2. Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-          <h3 className="font-bold text-lg mb-6 flex items-center gap-2"><PieChartIcon className="w-5 h-5 text-gray-400"/> Tỷ lệ lấp đầy</h3>
-          <div className="h-[300px]">
+      <div style={styles.chartGrid}>
+        <div style={styles.chartCard}>
+          <h3 style={{ fontWeight: '700', fontSize: '16px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}><PieChartIcon size={20} color="#9ca3af"/> Tỷ lệ lấp đầy</h3>
+          <div style={{ height: '300px' }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie data={occupancyData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={5} dataKey="value">
@@ -106,8 +213,8 @@ const RoomsReportSection = ({ reportData, onRowClick }: { reportData: ReportData
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-          <h3 className="font-bold text-lg mb-6 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-gray-400"/> Hiệu suất doanh thu (Top 5)</h3>
+        <div style={styles.chartCard}>
+          <h3 style={{ fontWeight: '700', fontSize: '16px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}><BarChart3 size={20} color="#9ca3af"/> Hiệu suất doanh thu (Top 5)</h3>
           {reportData.topRooms.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={reportData.topRooms} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
@@ -118,52 +225,58 @@ const RoomsReportSection = ({ reportData, onRowClick }: { reportData: ReportData
                 <Bar yAxisId="right" dataKey="revenue" fill="#10b981" name="Doanh thu" radius={[4, 4, 0, 0]} barSize={40} />
               </BarChart>
             </ResponsiveContainer>
-          ) : <div className="h-[300px] flex items-center justify-center text-gray-400">Chưa có dữ liệu doanh thu</div>}
+          ) : <div style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af' }}>Chưa có dữ liệu doanh thu</div>}
         </div>
       </div>
 
       {/* 3. Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="p-6 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
-            <h3 className="font-bold text-lg text-gray-800">Chi tiết trạng thái phòng</h3>
-            <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded border">Real-time</span>
+      <div style={styles.tableCard}>
+        <div style={styles.tableHeader}>
+            <h3 style={{ fontSize: '18px', fontWeight: '700', color: '#111827', margin: 0 }}>Chi tiết trạng thái phòng</h3>
+            <span style={{ fontSize: '12px', color: '#6b7280', backgroundColor: 'white', padding: '4px 8px', borderRadius: '4px', border: '1px solid #e5e7eb' }}>Real-time</span>
         </div>
-        <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
-          <table className="w-full">
-            <thead className="bg-gray-100 sticky top-0 z-10">
+        <div style={styles.tableContainer}>
+          <table style={styles.table}>
+            <thead>
               <tr>
-                <th className="text-left py-3 px-6 text-xs font-bold text-gray-600 uppercase whitespace-nowrap">Cơ sở / Phòng</th>
-                <th className="text-center py-3 px-6 text-xs font-bold text-gray-600 uppercase whitespace-nowrap">Trạng thái</th>
-                <th className="text-center py-3 px-6 text-xs font-bold text-gray-600 uppercase whitespace-nowrap">Công suất</th>
-                <th className="text-center py-3 px-6 text-xs font-bold text-gray-600 uppercase whitespace-nowrap">Đơn hiện tại</th>
+                <th style={styles.th}>Cơ sở / Phòng</th>
+                <th style={{ ...styles.th, textAlign: 'center' }}>Trạng thái</th>
+                <th style={{ ...styles.th, textAlign: 'center' }}>Công suất</th>
+                <th style={{ ...styles.th, textAlign: 'center' }}>Đơn hiện tại</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {reportData.roomUsageDetails.map((room, idx) => (
                 <tr 
                     key={idx} 
                     onClick={() => onRowClick(room.originalRoom)} 
-                    className="hover:bg-blue-50 transition-colors cursor-pointer group"
+                    style={{ cursor: 'pointer', transition: 'background-color 0.2s', backgroundColor: idx % 2 === 0 ? 'white' : '#f9fafb' }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#eff6ff'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = idx % 2 === 0 ? 'white' : '#f9fafb'}
                 >
-                  <td className="py-3 px-6">
-                      <div className="font-bold text-gray-800 group-hover:text-blue-600 transition-colors">{room.room}</div>
-                      <div className="text-xs text-gray-500">{room.branch} - {room.type}</div>
+                  <td style={styles.td}>
+                      <div style={{ fontWeight: 'bold', color: '#1f2937' }}>{room.room}</div>
+                      <div style={{ fontSize: '12px', color: '#6b7280' }}>{room.branch} - {room.type}</div>
                   </td>
-                  <td className="py-3 px-6 text-center">
+                  <td style={{ ...styles.td, textAlign: 'center' }}>
                       {room.occupancy === 100 ? 
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Đang dùng</span> : 
-                        (room.occupancy === 50 ? <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">Sắp đến</span> : <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Trống</span>)
+                        <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '12px', fontWeight: '500', backgroundColor: '#dbeafe', color: '#1e40af' }}>Đang dùng</span> : 
+                        (room.occupancy === 50 ? <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '12px', fontWeight: '500', backgroundColor: '#ffedd5', color: '#9a3412' }}>Sắp đến</span> : 
+                        <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '12px', fontWeight: '500', backgroundColor: '#dcfce7', color: '#166534' }}>Trống</span>)
                       }
                   </td>
-                  <td className="py-3 px-6 text-center">
-                    <div className="flex flex-col items-center gap-1">
-                      <span className="text-xs font-medium text-gray-700">{room.occupancy}%</span>
-                      <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                          <div className={`h-full rounded-full ${room.occupancy === 100 ? 'bg-blue-500' : (room.occupancy === 50 ? 'bg-orange-400' : 'bg-green-500')}`} style={{ width: `${room.occupancy}%` }} />
+                  <td style={{ ...styles.td, textAlign: 'center' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: '500' }}>{room.occupancy}%</span>
+                      <div style={{ width: '64px', height: '6px', backgroundColor: '#e5e7eb', borderRadius: '99px', overflow: 'hidden' }}>
+                          <div style={{ 
+                            height: '100%', borderRadius: '99px', width: `${room.occupancy}%`,
+                            backgroundColor: room.occupancy === 100 ? '#3b82f6' : (room.occupancy === 50 ? '#fb923c' : '#22c55e') 
+                          }} />
                       </div>
                     </div>
                   </td>
-                  <td className="py-3 px-6 text-sm text-center font-medium text-gray-700">{room.bookings}</td>
+                  <td style={{ ...styles.td, textAlign: 'center', fontWeight: '500' }}>{room.bookings}</td>
                 </tr>
               ))}
             </tbody>
@@ -181,14 +294,9 @@ export default function StaffDashboard() {
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [loading, setLoading] = useState(true);
   
-  // State: Edit Room Info (Prices/Number)
   const [isEditingInfo, setIsEditingInfo] = useState(false);
   const [infoForm, setInfoForm] = useState({ number: '', concept: '', price2h: 0, priceNight: 0 });
-
-  // State: Loading for actions
   const [actionLoading, setActionLoading] = useState(false);
-
-  // Modal States
   const [bookingDetail, setBookingDetail] = useState<any | null>(null);
   const [showBookingForm, setShowBookingForm] = useState(false);
 
@@ -268,7 +376,6 @@ export default function StaffDashboard() {
     } catch (error) { console.error(error); setRooms([]); } finally { setLoading(false); }
   };
 
-  // --- CALCULATION FOR REPORT ---
   const reportData: ReportData = useMemo(() => {
     const totalRooms = rooms.length;
     const occupiedRooms = rooms.filter(r => ['occupied', 'checkout-soon'].includes(r.status)).length;
@@ -294,7 +401,6 @@ export default function StaffDashboard() {
     };
   }, [rooms]);
 
-  // --- API HELPER & ACTIONS ---
   const updateRoomStatusApi = async (roomId: string, status: string, cleanStatus: string) => {
     const statusMap: any = { 'available': 'trong', 'occupied': 'dang_dung', 'checkout-soon': 'sap_tra', 'checkin-soon': 'sap_nhan', 'maintenance': 'bao_tri' };
     const cleanMap: any = { 'clean': 'sach', 'cleaning': 'dang_don', 'dirty': 'chua_don' };
@@ -349,7 +455,6 @@ export default function StaffDashboard() {
   const handleCheckIn = async () => { if (!selectedRoom) return; try { setActionLoading(true); await updateRoomStatusApi(selectedRoom.id, 'occupied', selectedRoom.cleanStatus); toast.success('Đã nhận phòng!'); setSelectedRoom(null); loadRooms(); } catch { toast.error('Lỗi'); } finally { setActionLoading(false); } };
   const handleShowDetail = async () => { if (!selectedRoom?.currentBooking) return; try { const res = await fetch(`${API_URL}/dat-phong/ma/${selectedRoom.currentBooking.code}`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }); const data = await res.json(); if (data.success) setBookingDetail(data.data); } catch { toast.error('Lỗi'); } };
 
-  // --- STYLES ---
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'occupied': return { bg: '#eff6ff', border: '#bfdbfe', text: '#1d4ed8', label: 'Đang ở' };
@@ -362,75 +467,100 @@ export default function StaffDashboard() {
   };
   const filteredRooms = filter === 'all' ? rooms : rooms.filter(r => r.status === filter);
 
-  if (loading) return <div className="flex justify-center p-20"><div className="w-10 h-10 border-4 border-gray-200 border-t-blue-600 rounded-full animate-spin"></div></div>;
+  if (loading) return <div style={{display: 'flex', justifyContent: 'center', padding: '80px'}}><div style={{width: '40px', height: '40px', border: '4px solid #e5e7eb', borderTop: '4px solid #3b82f6', borderRadius: '50%', animation: 'spin 1s linear infinite'}}></div></div>;
 
   return (
-    <div className="max-w-7xl mx-auto pb-20 px-4 pt-6 font-sans overflow-x-hidden">
+    <div style={styles.container}>
       <Toaster position="top-right" richColors closeButton />
 
       {/* HEADER */}
-      <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+      <div style={styles.pageHeader}>
         <div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-1">Lịch đặt phòng</h1>
-            <p className="text-sm text-gray-500">Quản lý tình trạng phòng và đơn đặt</p>
+            <h1 style={styles.pageTitle}>Lịch đặt phòng</h1>
+            <p style={styles.pageSubtitle}>Quản lý tình trạng phòng và đơn đặt</p>
         </div>
       </div>
 
       {/* FILTER BUTTONS */}
-      <div className="flex flex-wrap gap-2 mb-6">
-          {[ { val: 'all', label: 'Tất cả', bg: '#1f2937' }, { val: 'available', label: 'Phòng Trống', bg: '#16a34a' }, { val: 'occupied', label: 'Đang ở', bg: '#2563eb' }, { val: 'checkin-soon', label: 'Sắp nhận', bg: '#f97316' }, { val: 'checkout-soon', label: 'Sắp trả', bg: '#eab308' }, { val: 'maintenance', label: 'Bảo trì', bg: '#6b7280' } ].map(btn => (
-              <button key={btn.val} onClick={() => setFilter(btn.val)} style={{backgroundColor: filter === btn.val ? btn.bg : '#fff', color: filter === btn.val ? '#fff' : '#4b5563'}} className={`px-4 py-2 rounded-lg text-sm font-medium border transition-all ${filter !== btn.val ? 'border-gray-200 hover:bg-gray-50' : 'border-transparent shadow-sm'}`}>{btn.label}</button>
+      <div style={styles.filterContainer}>
+          {[ 
+            { val: 'all', label: 'Tất cả', bg: '#1f2937' }, 
+            { val: 'available', label: 'Phòng Trống', bg: '#16a34a' }, 
+            { val: 'occupied', label: 'Đang ở', bg: '#2563eb' }, 
+            { val: 'checkin-soon', label: 'Sắp nhận', bg: '#f97316' }, 
+            { val: 'checkout-soon', label: 'Sắp trả', bg: '#eab308' }, 
+            { val: 'maintenance', label: 'Bảo trì', bg: '#6b7280' } 
+          ].map(btn => (
+              <button 
+                key={btn.val} 
+                onClick={() => setFilter(btn.val)} 
+                style={{
+                    ...styles.filterBtn,
+                    backgroundColor: filter === btn.val ? btn.bg : 'white',
+                    color: filter === btn.val ? 'white' : '#4b5563',
+                    borderColor: filter === btn.val ? 'transparent' : '#e5e7eb',
+                    boxShadow: filter !== btn.val ? '0 1px 2px rgba(0,0,0,0.05)' : 'none'
+                }}
+              >
+                {btn.label}
+              </button>
           ))}
       </div>
 
       {/* GRID ROOMS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div style={styles.gridRooms}>
           {filteredRooms.map(room => {
           const conf = getStatusColor(room.status);
           const isOccupied = ['occupied', 'checkout-soon'].includes(room.status);
           const isCheckin = room.status === 'checkin-soon';
 
           return (
-              <div key={room.id} onClick={() => { setSelectedRoom(room); setIsEditingInfo(false); }} className="relative overflow-hidden rounded-xl cursor-pointer shadow-sm hover:-translate-y-1 transition-transform duration-200 flex flex-col min-h-[190px]" style={{ backgroundColor: conf.bg, border: `1px solid ${conf.border}` }}>
+              <div 
+                key={room.id} 
+                onClick={() => { setSelectedRoom(room); setIsEditingInfo(false); }} 
+                style={{ ...styles.roomCard, backgroundColor: conf.bg, border: `1px solid ${conf.border}` }}
+                onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-4px)'}
+                onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+              >
               
               {/* CARD HEADER */}
-              <div className="px-4 py-3 border-b flex justify-between items-start" style={{ borderColor: conf.border, backgroundColor: 'rgba(255,255,255,0.4)' }}>
-                  <div><h3 className="text-xl font-bold text-gray-900 leading-none">{room.number}</h3><p className="text-xs font-medium text-gray-500 mt-1">{room.concept}</p></div>
-                  <div className="flex flex-col items-end">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide border" style={{ backgroundColor: 'rgba(255,255,255,0.8)', borderColor: 'rgba(0,0,0,0.05)', color: conf.text }}>{conf.label}</span>
-                      {room.currentBooking && <span className="text-[10px] font-bold text-gray-400 mt-1 uppercase">{room.currentBooking.source === 'facebook' ? 'FB' : room.currentBooking.source}</span>}
+              <div style={{ ...styles.roomHeader, borderColor: conf.border }}>
+                  <div><h3 style={styles.roomNumber}>{room.number}</h3><p style={styles.roomConcept}>{room.concept}</p></div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                      <span style={{ ...styles.roomBadge, color: conf.text }}>{conf.label}</span>
+                      {room.currentBooking && <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#9ca3af', marginTop: '4px', textTransform: 'uppercase' }}>{room.currentBooking.source === 'facebook' ? 'FB' : room.currentBooking.source}</span>}
                   </div>
               </div>
 
               {/* CARD BODY */}
-              <div className="p-4 flex-1 flex flex-col justify-center">
+              <div style={styles.roomBody}>
                   {(isOccupied || isCheckin) && room.currentBooking ? (
                   <>
-                      <div className="flex items-center gap-2 mb-3">
-                          <User size={16} className="text-gray-500"/>
-                          <span className="font-bold text-gray-800 text-sm truncate">{room.currentBooking.customerName}</span>
-                          {room.currentBooking.note && <StickyNote size={14} className="text-amber-500 ml-auto" />}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                          <User size={16} color="#6b7280"/>
+                          <span style={{ fontWeight: 'bold', color: '#1f2937', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{room.currentBooking.customerName}</span>
+                          {room.currentBooking.note && <StickyNote size={14} color="#f59e0b" style={{ marginLeft: 'auto' }} />}
                       </div>
-                      <div className="flex items-center justify-between text-xs text-gray-600 mb-3 bg-white/50 p-2 rounded-lg">
-                          <div className="text-center"><div className="text-[9px] uppercase text-gray-400">Đến</div><div className="font-bold">{format(new Date(room.currentBooking.checkIn), 'HH:mm dd/MM')}</div></div>
-                          <div className="text-gray-300">➜</div>
-                          <div className="text-center"><div className="text-[9px] uppercase text-gray-400">Đi</div><div className="font-bold">{format(new Date(room.currentBooking.checkOut), 'HH:mm dd/MM')}</div></div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px', color: '#4b5563', marginBottom: '12px', backgroundColor: 'rgba(255,255,255,0.6)', padding: '8px', borderRadius: '8px' }}>
+                          <div style={{ textAlign: 'center' }}><div style={{ fontSize: '9px', textTransform: 'uppercase', color: '#9ca3af' }}>Đến</div><div style={{ fontWeight: 'bold' }}>{format(new Date(room.currentBooking.checkIn), 'HH:mm dd/MM')}</div></div>
+                          <div style={{ color: '#d1d5db' }}>➜</div>
+                          <div style={{ textAlign: 'center' }}><div style={{ fontSize: '9px', textTransform: 'uppercase', color: '#9ca3af' }}>Đi</div><div style={{ fontWeight: 'bold' }}>{format(new Date(room.currentBooking.checkOut), 'HH:mm dd/MM')}</div></div>
                       </div>
-                      <div className="flex justify-between items-center text-xs">
-                          <div className="flex items-center gap-1 text-green-600 font-semibold"><CreditCard size={12}/> {room.currentBooking.deposit > 0 ? `Cọc: ${formatCurrency(room.currentBooking.deposit)}` : 'Chưa cọc'}</div>
-                          <div className="font-bold text-gray-800">{formatCurrency(room.currentBooking.totalPrice)}</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#16a34a', fontWeight: '600' }}><CreditCard size={12}/> {room.currentBooking.deposit > 0 ? `Cọc: ${formatCurrency(room.currentBooking.deposit)}` : 'Chưa cọc'}</div>
+                          <div style={{ fontWeight: 'bold', color: '#1f2937' }}>{formatCurrency(room.currentBooking.totalPrice)}</div>
                       </div>
                   </>
                   ) : (
-                  <div className="space-y-2">
-                      <div className="flex justify-between text-xs text-gray-500 border-b border-dashed border-gray-200 pb-1"><span>2h đầu</span><span className="font-bold text-gray-700">{formatCurrency(room.price2h)}</span></div>
-                      <div className="flex justify-between text-xs text-gray-500"><span>Qua đêm</span><span className="font-bold text-gray-700">{formatCurrency(room.priceNight)}</span></div>
-                      {room.cleanStatus === 'dirty' && <div className="mt-2 bg-red-50 text-red-600 text-xs font-bold text-center py-1.5 rounded-md flex items-center justify-center gap-1"><Sparkles size={12}/> Cần dọn dẹp</div>}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#6b7280', borderBottom: '1px dashed #e5e7eb', paddingBottom: '4px' }}><span>2h đầu</span><span style={{ fontWeight: 'bold', color: '#374151' }}>{formatCurrency(room.price2h)}</span></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#6b7280' }}><span>Qua đêm</span><span style={{ fontWeight: 'bold', color: '#374151' }}>{formatCurrency(room.priceNight)}</span></div>
+                      {room.cleanStatus === 'dirty' && <div style={{ marginTop: '8px', backgroundColor: '#fef2f2', color: '#dc2626', fontSize: '12px', fontWeight: 'bold', textAlign: 'center', padding: '6px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}><Sparkles size={12}/> Cần dọn dẹp</div>}
                   </div>
                   )}
               </div>
               {/* Color Strip */}
-              <div className={`h-1 w-full ${room.cleanStatus === 'dirty' ? 'bg-red-500' : (isOccupied ? 'bg-blue-500' : (isCheckin ? 'bg-orange-500' : 'bg-green-500'))}`}></div>
+              <div style={{ height: '4px', width: '100%', backgroundColor: room.cleanStatus === 'dirty' ? '#ef4444' : (isOccupied ? '#3b82f6' : (isCheckin ? '#f97316' : '#22c55e')) }}></div>
               </div>
           );
           })}
@@ -439,101 +569,90 @@ export default function StaffDashboard() {
       {/* --- REPORT SECTION --- */}
       <RoomsReportSection reportData={reportData} onRowClick={(r) => { setSelectedRoom(r); setIsEditingInfo(false); }} />
 
-      {/* MODAL ROOM DETAIL (Tích hợp Edit Info, Bỏ Edit Status) */}
+      {/* MODAL ROOM DETAIL */}
       {selectedRoom && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
-            {/* Modal Header with Edit Button */}
-            <div className="px-6 py-4 border-b bg-gray-50 flex justify-between items-start">
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalContent}>
+            {/* Modal Header */}
+            <div style={styles.modalHeader}>
               {isEditingInfo ? (
-                  <div className="w-full mr-4">
+                  <div style={{ width: '100%', marginRight: '16px' }}>
                       <input 
-                        type="text" 
-                        value={infoForm.number} 
+                        type="text" value={infoForm.number} 
                         onChange={(e) => setInfoForm({...infoForm, number: e.target.value})}
-                        className="w-full font-bold text-xl mb-1 bg-white border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 outline-none"
-                        placeholder="Số phòng"
+                        style={{ ...styles.input, fontWeight: 'bold', fontSize: '20px', marginBottom: '4px' }} placeholder="Số phòng"
                       />
                       <input 
-                        type="text" 
-                        value={infoForm.concept} 
+                        type="text" value={infoForm.concept} 
                         onChange={(e) => setInfoForm({...infoForm, concept: e.target.value})}
-                        className="w-full text-sm text-gray-500 bg-white border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 outline-none"
-                        placeholder="Loại phòng"
+                        style={styles.input} placeholder="Loại phòng"
                       />
                   </div>
               ) : (
                   <div>
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-xl font-bold text-gray-800">Phòng {selectedRoom.number}</h2>
-                        {/* Edit Button */}
-                        <button onClick={() => setIsEditingInfo(true)} className="p-1.5 rounded-full hover:bg-gray-200 text-gray-400 hover:text-blue-600 transition"><Edit size={14}/></button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#1f2937', margin: 0 }}>Phòng {selectedRoom.number}</h2>
+                        <button onClick={() => setIsEditingInfo(true)} style={{ padding: '6px', borderRadius: '50%', border: 'none', backgroundColor: 'transparent', cursor: 'pointer', color: '#9ca3af' }}><Edit size={14}/></button>
                       </div>
-                      <p className="text-sm text-gray-500">{selectedRoom.concept} • {selectedRoom.location}</p>
+                      <p style={{ fontSize: '14px', color: '#6b7280', margin: '4px 0 0 0' }}>{selectedRoom.concept} • {selectedRoom.location}</p>
                   </div>
               )}
-              <button onClick={() => setSelectedRoom(null)} className="p-2 rounded-full hover:bg-gray-200 transition"><X size={20} className="text-gray-500" /></button>
+              <button onClick={() => setSelectedRoom(null)} style={{ padding: '8px', borderRadius: '50%', border: 'none', backgroundColor: 'transparent', cursor: 'pointer', color: '#6b7280' }}><X size={20} /></button>
             </div>
 
             {/* Modal Body */}
-            <div className="p-6 space-y-6">
-                
-                {/* Editing Prices Section */}
+            <div style={styles.modalBody}>
                 {isEditingInfo && (
-                    <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-200 space-y-3 animate-in fade-in">
-                        <h4 className="text-xs font-bold uppercase text-yellow-700">Cập nhật thông tin</h4>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label className="text-xs text-gray-500 block mb-1">Giá 2h</label>
-                                <input type="number" value={infoForm.price2h} onChange={(e) => setInfoForm({...infoForm, price2h: parseInt(e.target.value)})} className="w-full p-2 rounded border border-yellow-300 focus:outline-none focus:border-yellow-500 text-sm"/>
-                            </div>
-                            <div>
-                                <label className="text-xs text-gray-500 block mb-1">Giá đêm</label>
-                                <input type="number" value={infoForm.priceNight} onChange={(e) => setInfoForm({...infoForm, priceNight: parseInt(e.target.value)})} className="w-full p-2 rounded border border-yellow-300 focus:outline-none focus:border-yellow-500 text-sm"/>
-                            </div>
+                    <div style={{ backgroundColor: '#fefce8', padding: '16px', borderRadius: '12px', border: '1px solid #fef08a' }}>
+                        <h4 style={{ fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', color: '#a16207', marginBottom: '12px', margin: 0 }}>Cập nhật thông tin</h4>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                            <div><label style={styles.label}>Giá 2h</label><input type="number" value={infoForm.price2h} onChange={(e) => setInfoForm({...infoForm, price2h: parseInt(e.target.value)})} style={styles.input}/></div>
+                            <div><label style={styles.label}>Giá đêm</label><input type="number" value={infoForm.priceNight} onChange={(e) => setInfoForm({...infoForm, priceNight: parseInt(e.target.value)})} style={styles.input}/></div>
                         </div>
-                        <div className="flex gap-2 mt-2">
-                            <button onClick={handleUpdateRoomInfo} disabled={actionLoading} className="flex-1 bg-yellow-600 text-white py-2 rounded-lg text-sm font-bold hover:bg-yellow-700 flex items-center justify-center gap-1 shadow-sm"><Save size={14}/> Lưu</button>
-                            <button onClick={() => setIsEditingInfo(false)} className="flex-1 bg-white text-gray-600 border border-gray-300 py-2 rounded-lg text-sm font-bold hover:bg-gray-50">Hủy</button>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <button onClick={handleUpdateRoomInfo} disabled={actionLoading} style={{ ...styles.btnAction, flex: 1, backgroundColor: '#ca8a04', color: 'white' }}><Save size={14}/> Lưu</button>
+                            <button onClick={() => setIsEditingInfo(false)} style={{ ...styles.btnAction, flex: 1, backgroundColor: 'white', color: '#4b5563', border: '1px solid #d1d5db' }}>Hủy</button>
                         </div>
                     </div>
                 )}
 
-                {/* Status Badges */}
-                <div className="flex gap-3">
-                    <div className={`flex-1 p-3 rounded-xl border text-center ${selectedRoom.cleanStatus === 'clean' ? 'bg-green-50 border-green-100 text-green-700' : 'bg-red-50 border-red-100 text-red-700'}`}>
-                        <p className="text-[10px] uppercase font-bold opacity-70 mb-1">Vệ sinh</p><p className="font-bold">{selectedRoom.cleanStatus === 'clean' ? 'Sạch sẽ' : 'Cần dọn'}</p>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                    <div style={{ flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid', textAlign: 'center', backgroundColor: selectedRoom.cleanStatus === 'clean' ? '#f0fdf4' : '#fef2f2', borderColor: selectedRoom.cleanStatus === 'clean' ? '#dcfce7' : '#fee2e2', color: selectedRoom.cleanStatus === 'clean' ? '#15803d' : '#b91c1c' }}>
+                        <p style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold', opacity: 0.7, margin: '0 0 4px 0' }}>Vệ sinh</p>
+                        <p style={{ fontWeight: 'bold', margin: 0 }}>{selectedRoom.cleanStatus === 'clean' ? 'Sạch sẽ' : 'Cần dọn'}</p>
                     </div>
-                    <div className="flex-1 p-3 rounded-xl border text-center" style={{backgroundColor: getStatusColor(selectedRoom.status).bg, borderColor: getStatusColor(selectedRoom.status).border, color: getStatusColor(selectedRoom.status).text}}>
-                        <p className="text-[10px] uppercase font-bold opacity-70 mb-1">Trạng thái</p><p className="font-bold">{getStatusColor(selectedRoom.status).label}</p>
+                    <div style={{ flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid', textAlign: 'center', backgroundColor: getStatusColor(selectedRoom.status).bg, borderColor: getStatusColor(selectedRoom.status).border, color: getStatusColor(selectedRoom.status).text }}>
+                        <p style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold', opacity: 0.7, margin: '0 0 4px 0' }}>Trạng thái</p>
+                        <p style={{ fontWeight: 'bold', margin: 0 }}>{getStatusColor(selectedRoom.status).label}</p>
                     </div>
                 </div>
 
-                {/* Modal Booking Info */}
                 {selectedRoom.currentBooking && (
-                    <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 space-y-4">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-blue-600 shadow-sm"><User size={20}/></div>
-                            <div><p className="text-[10px] uppercase font-bold text-gray-500">Khách hàng</p><p className="font-bold text-gray-900 text-lg">{selectedRoom.currentBooking.customerName}</p></div>
+                    <div style={{ backgroundColor: '#eff6ff', borderRadius: '12px', padding: '16px', border: '1px solid #dbeafe' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                            <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb' }}><User size={20}/></div>
+                            <div><p style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold', color: '#6b7280', margin: 0 }}>Khách hàng</p><p style={{ fontWeight: 'bold', color: '#111827', fontSize: '18px', margin: 0 }}>{selectedRoom.currentBooking.customerName}</p></div>
                         </div>
-                        <div className="grid grid-cols-2 gap-4 pt-3 border-t border-blue-100">
-                            <div><p className="text-[10px] uppercase font-bold text-gray-500">Check-in</p><p className="font-semibold text-gray-800 text-sm">{format(new Date(selectedRoom.currentBooking.checkIn), 'HH:mm dd/MM')}</p></div>
-                            <div><p className="text-[10px] uppercase font-bold text-gray-500">Check-out</p><p className="font-semibold text-gray-800 text-sm">{format(new Date(selectedRoom.currentBooking.checkOut), 'HH:mm dd/MM')}</p></div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', paddingTop: '12px', borderTop: '1px solid #dbeafe' }}>
+                            <div><p style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold', color: '#6b7280', margin: 0 }}>Check-in</p><p style={{ fontWeight: '600', color: '#1f2937', fontSize: '14px', margin: 0 }}>{format(new Date(selectedRoom.currentBooking.checkIn), 'HH:mm dd/MM')}</p></div>
+                            <div><p style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold', color: '#6b7280', margin: 0 }}>Check-out</p><p style={{ fontWeight: '600', color: '#1f2937', fontSize: '14px', margin: 0 }}>{format(new Date(selectedRoom.currentBooking.checkOut), 'HH:mm dd/MM')}</p></div>
                         </div>
                     </div>
                 )}
 
-                {/* Actions */}
-                <div className="space-y-3">
-                    {selectedRoom.cleanStatus === 'dirty' && selectedRoom.status === 'available' && <button onClick={handleCleanRoom} className="w-full py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition"><Sparkles size={18}/> Xác nhận dọn xong</button>}
-                    {selectedRoom.status === 'occupied' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {selectedRoom.cleanStatus === 'dirty' && selectedRoom.status === 'available' && <button onClick={handleCleanRoom} style={{ ...styles.btnAction, backgroundColor: '#16a34a', color: 'white' }}><Sparkles size={18}/> Xác nhận dọn xong</button>}
+                    
+                    {/* BUTTONS: Check-out and View Detail */}
+                    {['occupied', 'checkout-soon'].includes(selectedRoom.status) && (
                         <>
-                            <button onClick={handleCheckout} className="w-full py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition"><LogOut size={18}/> Trả phòng</button>
-                            <button onClick={handleShowDetail} className="w-full py-3 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-xl font-bold flex items-center justify-center gap-2 transition"><FileText size={18}/> Xem chi tiết đơn</button>
+                            <button onClick={handleCheckout} style={{ ...styles.btnAction, backgroundColor: '#ea580c', color: 'white' }}><LogOut size={18}/> Trả phòng</button>
+                            <button onClick={handleShowDetail} style={{ ...styles.btnAction, backgroundColor: 'white', color: '#374151', border: '1px solid #e5e7eb' }}><FileText size={18}/> Xem chi tiết đơn</button>
                         </>
                     )}
-                    {selectedRoom.status === 'checkin-soon' && <button onClick={handleCheckIn} className="w-full py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition"><UserCheck size={18}/> Khách nhận phòng</button>}
-                    {selectedRoom.status === 'available' && selectedRoom.cleanStatus === 'clean' && <button onClick={() => setShowBookingForm(true)} className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition"><Plus size={18}/> Tạo đơn mới</button>}
+
+                    {selectedRoom.status === 'checkin-soon' && <button onClick={handleCheckIn} style={{ ...styles.btnAction, backgroundColor: '#0d9488', color: 'white' }}><UserCheck size={18}/> Khách nhận phòng</button>}
+                    {selectedRoom.status === 'available' && selectedRoom.cleanStatus === 'clean' && <button onClick={() => setShowBookingForm(true)} style={{ ...styles.btnAction, backgroundColor: '#2563eb', color: 'white' }}><Plus size={18}/> Tạo đơn mới</button>}
                 </div>
             </div>
           </div>
@@ -542,29 +661,29 @@ export default function StaffDashboard() {
 
       {/* MODAL BOOKING DETAIL */}
       {bookingDetail && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
-                <div className="bg-gray-800 p-5 text-white">
-                    <h3 className="font-bold text-lg flex items-center gap-2"><FileText size={18}/> Chi tiết đơn đặt</h3>
-                    <p className="text-xs opacity-70 mt-1 font-mono">#{bookingDetail.ma_dat}</p>
+        <div style={{ ...styles.modalOverlay, zIndex: 60 }}>
+            <div style={{ ...styles.modalContent, overflow: 'hidden' }}>
+                <div style={{ backgroundColor: '#1f2937', padding: '20px', color: 'white' }}>
+                    <h3 style={{ fontWeight: 'bold', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}><FileText size={18}/> Chi tiết đơn đặt</h3>
+                    <p style={{ fontSize: '12px', opacity: 0.7, marginTop: '4px', fontFamily: 'monospace' }}>#{bookingDetail.ma_dat}</p>
                 </div>
-                <div className="p-6">
-                    <div className="mb-5 flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-600"><User size={20}/></div>
-                        <div><p className="font-bold text-gray-900">{bookingDetail.khach_hang?.ho_ten || bookingDetail.ho_ten}</p><p className="text-sm text-gray-500 flex items-center gap-1"><Phone size={12}/> {bookingDetail.khach_hang?.sdt || bookingDetail.sdt}</p></div>
+                <div style={{ padding: '24px' }}>
+                    <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4b5563' }}><User size={20}/></div>
+                        <div><p style={{ fontWeight: 'bold', color: '#111827', margin: 0 }}>{bookingDetail.khach_hang?.ho_ten || bookingDetail.ho_ten}</p><p style={{ fontSize: '14px', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px', margin: 0 }}><Phone size={12}/> {bookingDetail.khach_hang?.sdt || bookingDetail.sdt}</p></div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4 py-4 border-y border-dashed border-gray-200 text-sm mb-5">
-                        <div><p className="text-[10px] uppercase font-bold text-gray-400">Phòng</p><div className="font-semibold flex items-center gap-1"><MapPin size={12}/> {bookingDetail.phong?.ma_phong || selectedRoom?.number}</div></div>
-                        <div><p className="text-[10px] uppercase font-bold text-gray-400">Trạng thái</p><span className="text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded-full text-xs">{getBookingStatusLabel(bookingDetail.trang_thai)}</span></div>
-                        <div><p className="text-[10px] uppercase font-bold text-gray-400">Check-in</p><div className="font-semibold">{format(new Date(bookingDetail.thoi_gian_nhan), 'HH:mm dd/MM')}</div></div>
-                        <div><p className="text-[10px] uppercase font-bold text-gray-400">Check-out</p><div className="font-semibold">{format(new Date(bookingDetail.thoi_gian_tra), 'HH:mm dd/MM')}</div></div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', padding: '16px 0', borderTop: '1px dashed #e5e7eb', borderBottom: '1px dashed #e5e7eb', fontSize: '14px', marginBottom: '20px' }}>
+                        <div><p style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold', color: '#9ca3af', margin: 0 }}>Phòng</p><div style={{ fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}><MapPin size={12}/> {bookingDetail.phong?.ma_phong || selectedRoom?.number}</div></div>
+                        <div><p style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold', color: '#9ca3af', margin: 0 }}>Trạng thái</p><span style={{ color: '#2563eb', fontWeight: 'bold', backgroundColor: '#eff6ff', padding: '2px 8px', borderRadius: '99px', fontSize: '12px' }}>{bookingDetail.trang_thai}</span></div>
+                        <div><p style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold', color: '#9ca3af', margin: 0 }}>Check-in</p><div style={{ fontWeight: '600' }}>{format(new Date(bookingDetail.thoi_gian_nhan), 'HH:mm dd/MM')}</div></div>
+                        <div><p style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold', color: '#9ca3af', margin: 0 }}>Check-out</p><div style={{ fontWeight: '600' }}>{format(new Date(bookingDetail.thoi_gian_tra), 'HH:mm dd/MM')}</div></div>
                     </div>
-                    <div className="bg-gray-50 p-3 rounded-lg text-sm space-y-2 mb-5">
-                        <div className="flex justify-between text-gray-600"><span>Tổng tiền</span><span className="font-bold text-gray-900">{formatCurrency(bookingDetail.tong_tien || 0)}</span></div>
-                        <div className="flex justify-between text-gray-600"><span>Đã cọc</span><span className="font-bold text-green-600">{formatCurrency(bookingDetail.tien_coc || 0)}</span></div>
+                    <div style={{ backgroundColor: '#f9fafb', padding: '12px', borderRadius: '8px', fontSize: '14px', marginBottom: '20px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#4b5563', marginBottom: '8px' }}><span>Tổng tiền</span><span style={{ fontWeight: 'bold', color: '#111827' }}>{formatCurrency(bookingDetail.tong_tien || 0)}</span></div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#4b5563' }}><span>Đã cọc</span><span style={{ fontWeight: 'bold', color: '#16a34a' }}>{formatCurrency(bookingDetail.tien_coc || 0)}</span></div>
                     </div>
-                    {bookingDetail.ghi_chu && <div className="mb-5"><p className="text-[10px] uppercase font-bold text-gray-400">Ghi chú</p><p className="text-sm text-gray-600 italic flex gap-1"><StickyNote size={14}/> {bookingDetail.ghi_chu}</p></div>}
-                    <button onClick={() => setBookingDetail(null)} className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition">Đóng</button>
+                    {bookingDetail.ghi_chu && <div style={{ marginBottom: '20px' }}><p style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold', color: '#9ca3af', margin: 0 }}>Ghi chú</p><p style={{ fontSize: '14px', color: '#4b5563', fontStyle: 'italic', display: 'flex', gap: '4px', margin: 0 }}><StickyNote size={14}/> {bookingDetail.ghi_chu}</p></div>}
+                    <button onClick={() => setBookingDetail(null)} style={{ ...styles.btnAction, backgroundColor: '#f3f4f6', color: '#374151' }}>Đóng</button>
                 </div>
             </div>
         </div>
@@ -572,12 +691,12 @@ export default function StaffDashboard() {
 
       {/* MODAL CREATE BOOKING PLACEHOLDER */}
       {showBookingForm && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-            <div className="bg-white p-6 rounded-2xl w-full max-w-sm shadow-xl text-center">
-                <AlertCircle className="w-12 h-12 text-blue-500 mx-auto mb-4"/>
-                <h3 className="font-bold text-lg mb-2">Tạo đơn mới</h3>
-                <p className="text-gray-500 text-sm mb-6">Vui lòng chuyển sang trang "Tạo Booking" trên thanh menu để thực hiện thao tác này.</p>
-                <button onClick={() => setShowBookingForm(false)} className="w-full py-2 bg-gray-100 hover:bg-gray-200 rounded-lg font-semibold text-gray-700">Đóng</button>
+        <div style={{ ...styles.modalOverlay, zIndex: 60 }}>
+            <div style={{ ...styles.modalContent, padding: '24px', textAlign: 'center' }}>
+                <AlertCircle size={48} color="#3b82f6" style={{ margin: '0 auto 16px auto' }}/>
+                <h3 style={{ fontWeight: 'bold', fontSize: '18px', marginBottom: '8px', margin: 0 }}>Tạo đơn mới</h3>
+                <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '24px' }}>Vui lòng chuyển sang trang "Tạo Booking" trên thanh menu để thực hiện thao tác này.</p>
+                <button onClick={() => setShowBookingForm(false)} style={{ ...styles.btnAction, backgroundColor: '#f3f4f6', color: '#374151' }}>Đóng</button>
             </div>
         </div>
       )}

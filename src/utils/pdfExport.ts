@@ -94,52 +94,19 @@ const buildOverviewContent = (data: any) => {
   return content;
 };
 
-// 2. REPORT DOANH THU (Revenue)
+// 2. REPORT DOANH THU (Revenue) - Đã xóa KPI và Biểu đồ
 const buildRevenueContent = (data: any) => {
   const content: any[] = [];
   
-  // Tổng quan doanh thu
-  content.push(createSectionHeader('Phân tích tài chính'));
-  content.push(createKPIGrid([
-    { label: 'DOANH THU TỔNG', value: formatCurrency(data.totalRevenue), color: '#27ae60' },
-    { label: 'TỔNG SỐ ĐƠN', value: data.totalBookings },
-    { label: 'DOANH THU TB/ĐƠN', value: formatCurrency(data.averageBookingValue) },
-    { label: 'TĂNG TRƯỞNG', value: formatPercent(data.growthRate), color: data.growthRate >= 0 ? 'green' : 'red' }
-  ]));
-
-  // Biểu đồ doanh thu theo ngày
-  content.push(createSectionHeader('Biểu đồ doanh thu theo thời gian'));
-  const dailyRows = (data.dailyRevenue || []).map((d: any) => [
-    d.date,
-    { text: formatCurrency(d.revenue), alignment: 'right' },
-    { text: d.bookings, alignment: 'center' },
-    { text: formatCurrency(d.bookings ? Math.round(d.revenue/d.bookings) : 0), alignment: 'right' }
-  ]);
-  content.push({
-    table: {
-      headerRows: 1,
-      widths: ['auto', '*', 'auto', '*'],
-      body: [
-        ['Ngày', 'Doanh thu', 'Số booking', 'TB/Booking'].map(t => ({ text: t, bold: true, fillColor: '#f0f0f0' })),
-        ...dailyRows,
-        [
-          { text: 'TỔNG CỘNG', bold: true },
-          { text: formatCurrency(data.totalRevenue), bold: true, alignment: 'right' },
-          { text: data.totalBookings, bold: true, alignment: 'center' },
-          { text: formatCurrency(data.averageBookingValue), bold: true, alignment: 'right' }
-        ]
-      ]
-    },
-    layout: 'lightHorizontalLines'
-  });
-
   // Bảng chi tiết các đơn trong kỳ
   if (Array.isArray(data.orders) && data.orders.length > 0) {
     content.push(createSectionHeader('Danh sách chi tiết các đơn trong kỳ'));
+    
     const orderRows = data.orders.map((order: any, idx: number) => {
-      // Chỉ lấy ngày/tháng (dd/mm)
+      // Chỉ lấy ngày/tháng (dd/mm) cho gọn
       const shortCheckin = order.checkin ? order.checkin.substring(0, 5) : '-';
       const shortCheckout = order.checkout ? order.checkout.substring(0, 5) : '-';
+      
       return [
         { text: idx + 1, alignment: 'center' },
         { text: order.branch || '-', alignment: 'left' },
@@ -151,10 +118,12 @@ const buildRevenueContent = (data: any) => {
         { text: formatCurrency(order.total), alignment: 'right' }
       ];
     });
+
     content.push({
       table: {
         headerRows: 1,
         dontBreakRows: true,
+        // Căn chỉnh lại độ rộng cột cho đẹp trên khổ A4
         widths: [20, 60, 50, '*', 35, 35, 35, 65],
         body: [
           [
@@ -175,6 +144,8 @@ const buildRevenueContent = (data: any) => {
       fontSize: 8,
       margin: [0, 0, 0, 10]
     });
+  } else {
+    content.push({ text: 'Không có dữ liệu đơn hàng trong kỳ này.', italics: true, alignment: 'center', margin: [0, 20] });
   }
 
   // Tổng kết cuối report
@@ -189,7 +160,7 @@ const buildRevenueContent = (data: any) => {
       ]
     },
     layout: 'lightHorizontalLines',
-    margin: [0,0,0,10]
+    margin: [0, 0, 0, 10]
   });
 
   return content;
@@ -270,15 +241,12 @@ const buildRoomsContent = (data: any) => {
   }
 
 // 4. REPORT KHÁCH HÀNG (Customers)
-// 4. REPORT KHÁCH HÀNG (Fixed Layout & Data)
 const buildCustomersContent = (data: any) => {
   const content: any[] = [];
+  
   // --- TÍNH TOÁN DỮ LIỆU CÒN THIẾU TẠI FRONTEND ---
-  // Backend trả về list đã sort theo booking trong kỳ, nên phần tử đầu tiên là Top trong kỳ
   const customerList = data.customersList || [];
   const topCustomerPeriod = customerList.length > 0 ? customerList[0] : null;
-  // Tìm khách có tổng lượt đặt tích lũy cao nhất
-  // Clone mảng để không ảnh hưởng thứ tự mảng gốc
   const topCustomerOverall = customerList.length > 0 
     ? [...customerList].sort((a: any, b: any) => b.totalBookings - a.totalBookings)[0]
     : null;
@@ -293,9 +261,10 @@ const buildCustomersContent = (data: any) => {
     { label: 'DOANH THU/KHÁCH', value: formatCurrency(data.totalCustomers ? Math.round(data.totalRevenue/data.totalCustomers) : 0) }
   ]));
 
-  // Bảng danh sách khách hàng chi tiết (Đã sửa lại column cho vừa khổ giấy A4)
+  // Bảng danh sách khách hàng chi tiết (Layout chuẩn A4)
   content.push(createSectionHeader('Danh sách khách hàng tiêu biểu trong kỳ'));
-  // Chỉ lấy Top 50 khách để tránh file PDF quá nặng nếu danh sách dài
+  
+  // Chỉ lấy Top 50 khách để tránh file PDF quá nặng
   const displayList = customerList.slice(0, 50); 
 
   const customerRows = displayList.map((c: any, idx: number) => [
@@ -311,18 +280,11 @@ const buildCustomersContent = (data: any) => {
   content.push({
     table: {
       headerRows: 1,
-      // Tổng width ~ 515 là đẹp. 
       // widths: [STT, Tên, SĐT, Email, Kỳ, Tổng, Ngày]
       widths: [25, '*', 75, 90, 50, 50, 65], 
       body: [
         [
-          'STT',
-          'Tên khách hàng',
-          'Số điện thoại',
-          'Email',
-          'Đơn kỳ',
-          'Tổng đơn',
-          'Gần nhất'
+          'STT', 'Tên khách hàng', 'Số điện thoại', 'Email', 'Đơn kỳ', 'Tổng đơn', 'Gần nhất'
         ].map(t => ({ text: t, bold: true, fillColor: '#f0f0f0', fontSize: 9 })),
         ...customerRows
       ]
@@ -335,7 +297,7 @@ const buildCustomersContent = (data: any) => {
     content.push({ text: `...và còn ${customerList.length - 50} khách hàng khác.`, italics: true, fontSize: 9, margin: [0, 5, 0, 0] });
   }
 
-  // Tổng kết cuối report (Sử dụng dữ liệu đã tính toán ở trên)
+  // Tổng kết cuối report
   content.push(createSectionHeader('Tổng kết khách hàng'));
   content.push({
     table: {
