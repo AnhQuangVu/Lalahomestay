@@ -11,8 +11,7 @@ import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, 
   CartesianGrid, Tooltip, Legend, ResponsiveContainer 
 } from 'recharts';
-import { differenceInHours } from 'date-fns';
-import { format } from 'date-fns'; // Đã thêm import format
+import { differenceInHours, format } from 'date-fns';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 
 // --- CONFIG ---
@@ -45,7 +44,7 @@ interface ReportData {
   }>;
 }
 
-// --- STYLES OBJECT ---
+// --- STYLES OBJECT (Inline CSS) ---
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
     maxWidth: '1280px',
@@ -103,8 +102,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     backgroundColor: 'white',
   },
   roomBody: { padding: '16px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' },
-  roomFooterLine: { height: '4px', width: '100%' },
-
+  
   // Report Section
   reportSection: { marginTop: '48px', paddingTop: '32px', borderTop: '1px solid #e5e7eb' },
   kpiGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' },
@@ -162,7 +160,6 @@ const RoomsReportSection = ({ reportData, onRowClick }: { reportData: ReportData
 
       {/* 1. KPIs */}
       <div style={styles.kpiGrid}>
-        {/* Purple Card */}
         <div style={{ ...styles.kpiCard, backgroundColor: '#faf5ff', borderColor: '#e9d5ff' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
             <div style={{ width: '48px', height: '48px', borderRadius: '8px', backgroundColor: '#a855f7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Home color="white" size={24} /></div>
@@ -170,7 +167,6 @@ const RoomsReportSection = ({ reportData, onRowClick }: { reportData: ReportData
           <p style={{ fontSize: '14px', color: '#7e22ce' }}>Tổng số phòng</p>
           <p style={{ fontSize: '30px', fontWeight: 'bold', color: '#581c87' }}>{reportData.totalRooms}</p>
         </div>
-        {/* Green Card */}
         <div style={{ ...styles.kpiCard, backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
             <div style={{ width: '48px', height: '48px', borderRadius: '8px', backgroundColor: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CheckCircle color="white" size={24} /></div>
@@ -178,7 +174,6 @@ const RoomsReportSection = ({ reportData, onRowClick }: { reportData: ReportData
           <p style={{ fontSize: '14px', color: '#15803d' }}>Đang sử dụng</p>
           <p style={{ fontSize: '30px', fontWeight: 'bold', color: '#14532d' }}>{reportData.occupiedRooms}</p>
         </div>
-        {/* Gray Card */}
         <div style={{ ...styles.kpiCard, backgroundColor: '#f9fafb', borderColor: '#e5e7eb' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
             <div style={{ width: '48px', height: '48px', borderRadius: '8px', backgroundColor: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><XCircle color="white" size={24} /></div>
@@ -186,7 +181,6 @@ const RoomsReportSection = ({ reportData, onRowClick }: { reportData: ReportData
           <p style={{ fontSize: '14px', color: '#374151' }}>Còn trống</p>
           <p style={{ fontSize: '30px', fontWeight: 'bold', color: '#111827' }}>{reportData.availableRooms}</p>
         </div>
-        {/* Blue Card */}
         <div style={{ ...styles.kpiCard, backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
             <div style={{ width: '48px', height: '48px', borderRadius: '8px', backgroundColor: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><TrendingUp color="white" size={24} /></div>
@@ -643,8 +637,7 @@ export default function StaffDashboard() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {selectedRoom.cleanStatus === 'dirty' && selectedRoom.status === 'available' && <button onClick={handleCleanRoom} style={{ ...styles.btnAction, backgroundColor: '#16a34a', color: 'white' }}><Sparkles size={18}/> Xác nhận dọn xong</button>}
                     
-                    {/* BUTTONS: Check-out and View Detail */}
-                    {['occupied', 'checkout-soon'].includes(selectedRoom.status) && (
+                    {['occupied', 'checkout-soon', 'overdue'].includes(selectedRoom.status) && (
                         <>
                             <button onClick={handleCheckout} style={{ ...styles.btnAction, backgroundColor: '#ea580c', color: 'white' }}><LogOut size={18}/> Trả phòng</button>
                             <button onClick={handleShowDetail} style={{ ...styles.btnAction, backgroundColor: 'white', color: '#374151', border: '1px solid #e5e7eb' }}><FileText size={18}/> Xem chi tiết đơn</button>

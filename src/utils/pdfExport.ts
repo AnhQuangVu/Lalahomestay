@@ -94,7 +94,7 @@ const buildOverviewContent = (data: any) => {
   return content;
 };
 
-// 2. REPORT DOANH THU (Revenue) - Đã xóa KPI và Biểu đồ
+// 2. REPORT DOANH THU (Revenue) - ĐÃ XÓA PHÂN TÍCH, CHỈ CÒN DANH SÁCH
 const buildRevenueContent = (data: any) => {
   const content: any[] = [];
   
