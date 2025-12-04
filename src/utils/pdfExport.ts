@@ -94,7 +94,7 @@ const buildOverviewContent = (data: any) => {
   return content;
 };
 
-// 2. REPORT DOANH THU (Revenue) - ĐÃ XÓA PHÂN TÍCH, CHỈ CÒN DANH SÁCH
+// 2. REPORT DOANH THU (Revenue) - Đã xóa KPI và Biểu đồ
 const buildRevenueContent = (data: any) => {
   const content: any[] = [];
   
@@ -103,7 +103,6 @@ const buildRevenueContent = (data: any) => {
     content.push(createSectionHeader('Danh sách chi tiết các đơn trong kỳ'));
     
     const orderRows = data.orders.map((order: any, idx: number) => {
-      // Chỉ lấy ngày/tháng (dd/mm) cho gọn
       const shortCheckin = order.checkin ? order.checkin.substring(0, 5) : '-';
       const shortCheckout = order.checkout ? order.checkout.substring(0, 5) : '-';
       
@@ -123,7 +122,6 @@ const buildRevenueContent = (data: any) => {
       table: {
         headerRows: 1,
         dontBreakRows: true,
-        // Căn chỉnh lại độ rộng cột cho đẹp trên khổ A4
         widths: [20, 60, 50, '*', 35, 35, 35, 65],
         body: [
           [
@@ -166,20 +164,11 @@ const buildRevenueContent = (data: any) => {
   return content;
 };
 
-// 3. REPORT PHÒNG (Rooms)
+// 3. REPORT PHÒNG (Rooms) - ĐÃ XÓA KPI
 const buildRoomsContent = (data: any) => {
     const content: any[] = [];
 
-    // Tiêu đề section
-    content.push(createSectionHeader('BÁO CÁO CÔNG SUẤT PHÒNG'));
-
-    // KPI tổng quan
-    content.push(createKPIGrid([
-      { label: 'TỔNG SỐ PHÒNG', value: data.totalRooms },
-      { label: 'ĐANG SỬ DỤNG', value: data.occupiedRooms },
-      { label: 'PHÒNG TRỐNG', value: data.availableRooms },
-      { label: 'CÔNG SUẤT TB', value: formatPercent(data.occupancyRate) }
-    ]));
+    // ĐÃ XÓA PHẦN KPI GRID Ở ĐÂY
 
     // Bảng chi tiết công suất phòng
     content.push(createSectionHeader('Bảng chi tiết công suất phòng'));
@@ -240,31 +229,22 @@ const buildRoomsContent = (data: any) => {
     return content;
   }
 
-// 4. REPORT KHÁCH HÀNG (Customers)
+// 4. REPORT KHÁCH HÀNG (Customers) - ĐÃ XÓA PHÂN TÍCH KPI
 const buildCustomersContent = (data: any) => {
   const content: any[] = [];
   
-  // --- TÍNH TOÁN DỮ LIỆU CÒN THIẾU TẠI FRONTEND ---
+  // --- TÍNH TOÁN DỮ LIỆU ---
   const customerList = data.customersList || [];
   const topCustomerPeriod = customerList.length > 0 ? customerList[0] : null;
   const topCustomerOverall = customerList.length > 0 
     ? [...customerList].sort((a: any, b: any) => b.totalBookings - a.totalBookings)[0]
     : null;
 
-  // KPI Header
-  const newRate = data.totalCustomers ? (data.newCustomers / data.totalCustomers) * 100 : 0;
-  content.push(createSectionHeader('Phân tích khách hàng'));
-  content.push(createKPIGrid([
-    { label: 'TỔNG KHÁCH', value: data.totalCustomers },
-    { label: 'KHÁCH MỚI', value: data.newCustomers, subtext: `(${formatPercent(newRate)})` },
-    { label: 'KHÁCH CŨ', value: data.totalCustomers - data.newCustomers },
-    { label: 'DOANH THU/KHÁCH', value: formatCurrency(data.totalCustomers ? Math.round(data.totalRevenue/data.totalCustomers) : 0) }
-  ]));
+  // ĐÃ XÓA PHẦN PHÂN TÍCH KHÁCH HÀNG (KPI HEADER) Ở ĐÂY
 
-  // Bảng danh sách khách hàng chi tiết (Layout chuẩn A4)
+  // Bảng danh sách khách hàng chi tiết
   content.push(createSectionHeader('Danh sách khách hàng tiêu biểu trong kỳ'));
   
-  // Chỉ lấy Top 50 khách để tránh file PDF quá nặng
   const displayList = customerList.slice(0, 50); 
 
   const customerRows = displayList.map((c: any, idx: number) => [
@@ -280,7 +260,6 @@ const buildCustomersContent = (data: any) => {
   content.push({
     table: {
       headerRows: 1,
-      // widths: [STT, Tên, SĐT, Email, Kỳ, Tổng, Ngày]
       widths: [25, '*', 75, 90, 50, 50, 65], 
       body: [
         [
