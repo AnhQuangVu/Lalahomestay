@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { uploadToCloudinary } from '../../utils/cloudinary';
-// --- ĐÃ THÊM FileText VÀO DÒNG DƯỚI ĐÂY ---
-import { Calendar, Users, Clock, RefreshCw, Check, AlertCircle, UploadCloud, ChevronRight, ArrowLeft, CheckCircle2, Info, FileText } from 'lucide-react';
+import { 
+  Calendar, Users, Clock, RefreshCw, Check, AlertCircle, UploadCloud, 
+  ChevronRight, ArrowLeft, CheckCircle2, Info, FileText, Search, Grid, List, Plus 
+} from 'lucide-react';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
@@ -22,18 +24,19 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     alignItems: 'center',
     gap: '16px',
-    marginBottom: '32px',
+    marginBottom: '24px',
   },
   backBtn: {
     padding: '10px',
     borderRadius: '50%',
     border: 'none',
-    backgroundColor: 'transparent',
+    backgroundColor: 'white',
     cursor: 'pointer',
     transition: 'background-color 0.2s',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
   },
   pageTitle: { fontSize: '24px', fontWeight: '700', color: '#111827', margin: 0 },
   pageSubtitle: { fontSize: '14px', color: '#6b7280', marginTop: '4px', margin: 0 },
@@ -199,6 +202,64 @@ const styles: { [key: string]: React.CSSProperties } = {
     alignItems: 'center',
     fontSize: '13px',
     boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+  },
+
+  // LOOKUP SECTION STYLES
+  lookupContainer: {
+    backgroundColor: '#f8fafc',
+    border: '1px solid #e2e8f0',
+    borderRadius: '16px',
+    padding: '20px',
+    marginBottom: '32px'
+  },
+  lookupHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '16px',
+    flexWrap: 'wrap',
+    gap: '16px'
+  },
+  searchBox: {
+    display: 'flex',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    border: '1px solid #cbd5e1',
+    borderRadius: '8px',
+    padding: '0 12px',
+    flex: 1,
+    minWidth: '200px'
+  },
+  searchInput: {
+    border: 'none',
+    outline: 'none',
+    padding: '10px 0',
+    fontSize: '14px',
+    width: '100%',
+    marginLeft: '8px'
+  },
+  roomGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
+    gap: '12px'
+  },
+  roomItem: {
+    backgroundColor: 'white',
+    borderRadius: '8px',
+    padding: '12px',
+    border: '1px solid #e2e8f0',
+    textAlign: 'center',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    position: 'relative',
+    overflow: 'hidden'
+  },
+  roomItemStatus: {
+    fontSize: '10px',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    marginTop: '4px',
+    display: 'block'
   }
 };
 
@@ -283,31 +344,65 @@ function TimeSlotSelector({ roomId, selectedDate, selectedSlots, onSlotsChange, 
 // --- MAIN COMPONENT ---
 export default function NewBooking() {
   const navigate = useNavigate();
+  // State Form
   const [formData, setFormData] = useState({ customerName: '', customerPhone: '', customerEmail: '', location: '', concept: '', room: '', numberOfGuests: 2, notes: '', bookingSource: 'facebook', paymentMethod: 'transfer', cccdFront: '', cccdBack: '', cccdFrontUploading: false, cccdBackUploading: false });
   const [bookingType, setBookingType] = useState<'ngay' | 'gio'>('ngay');
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedTimeSlots, setSelectedTimeSlots] = useState<any[]>([]);
   const [existingBookings, setExistingBookings] = useState<any[]>([]);
+  
+  // State Data & Lookup
   const [fetchingBookings, setFetchingBookings] = useState(false);
   const [loading, setLoading] = useState(false);
   const [locations, setLocations] = useState<any[]>([]);
   const [concepts, setConcepts] = useState<any[]>([]);
   const [rooms, setRooms] = useState<any[]>([]);
+  
+  // State for Lookup Tool
+  const [lookupDate, setLookupDate] = useState<string>('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [lookupBookings, setLookupBookings] = useState<any[]>([]);
+  const [isLookingUp, setIsLookingUp] = useState(false);
+  const [todayBookings, setTodayBookings] = useState<any[]>([]); // New state for dropdown status
+
   const [filteredConcepts, setFilteredConcepts] = useState<any[]>([]);
   const [filteredRooms, setFilteredRooms] = useState<any[]>([]);
 
-  useEffect(() => { fetchData(); const today = new Date().toISOString().split('T')[0]; setSelectedDate(today); }, []);
-  useEffect(() => { if (formData.room && selectedDate) { fetchBookingsForRoom(); } else { setExistingBookings([]); } setSelectedTimeSlots([]); }, [formData.room, selectedDate]);
+  // Init
+  useEffect(() => { 
+      fetchData(); 
+      const today = new Date().toISOString().split('T')[0]; 
+      setSelectedDate(today); 
+      setLookupDate(today);
+  }, []);
+
+  // Filter Logic
   useEffect(() => { if (formData.location) { setFilteredConcepts(concepts.filter((c: any) => c.id_co_so === formData.location)); } else setFilteredConcepts([]); setFormData(prev => ({ ...prev, concept: '', room: '' })); }, [formData.location, concepts]);
   useEffect(() => { if (formData.concept) { setFilteredRooms(rooms.filter((r: any) => r.id_loai_phong === formData.concept && r.trang_thai === 'trong')); } else setFilteredRooms([]); setFormData(prev => ({ ...prev, room: '' })); }, [formData.concept, rooms]);
 
+  // Trigger Booking Fetch for Room
+  useEffect(() => { if (formData.room && selectedDate) { fetchBookingsForRoom(); } else { setExistingBookings([]); } setSelectedTimeSlots([]); }, [formData.room, selectedDate]);
+  
+  // Trigger Lookup Fetch
+  useEffect(() => { if (lookupDate) fetchAllBookingsForLookup(); }, [lookupDate]);
+
   const fetchData = async () => {
     try {
-      const [locRes, conceptRes, roomRes] = await Promise.all([ fetch(`${API_URL}/co-so`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }), fetch(`${API_URL}/loai-phong`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }), fetch(`${API_URL}/phong`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }) ]);
-      const [locData, conceptData, roomData] = await Promise.all([ locRes.json(), conceptRes.json(), roomRes.json() ]);
+      const today = new Date().toISOString().split('T')[0];
+      const start = new Date(today); start.setHours(0,0,0,0);
+      const end = new Date(today); end.setHours(23,59,59,999);
+
+      const [locRes, conceptRes, roomRes, bookingRes] = await Promise.all([ 
+          fetch(`${API_URL}/co-so`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }), 
+          fetch(`${API_URL}/loai-phong`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }), 
+          fetch(`${API_URL}/phong`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }),
+          fetch(`${API_URL}/dat-phong?start_date=${start.toISOString()}&end_date=${end.toISOString()}`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } })
+      ]);
+      const [locData, conceptData, roomData, bookingData] = await Promise.all([ locRes.json(), conceptRes.json(), roomRes.json(), bookingRes.json() ]);
       if (locData.success) setLocations(locData.data || []);
       if (conceptData.success) setConcepts(conceptData.data || []);
       if (roomData.success) setRooms((roomData.data || []).filter((r: any) => r.trang_thai !== 'dinh_chi'));
+      if (bookingData.success) setTodayBookings(bookingData.data || []);
     } catch (error) { toast.error('Lỗi tải dữ liệu ban đầu'); }
   };
 
@@ -325,6 +420,67 @@ export default function NewBooking() {
         setExistingBookings(roomBookings);
       }
     } catch (error) { console.error(error); } finally { setFetchingBookings(false); }
+  };
+
+  // --- LOOKUP TOOL LOGIC ---
+  const fetchAllBookingsForLookup = async () => {
+      setIsLookingUp(true);
+      try {
+          const date = new Date(lookupDate);
+          const start = new Date(date); start.setHours(0,0,0,0);
+          const end = new Date(date); end.setHours(23,59,59,999);
+          const response = await fetch(`${API_URL}/dat-phong?start_date=${start.toISOString()}&end_date=${end.toISOString()}`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } });
+          const data = await response.json();
+          if(data.success) {
+              setLookupBookings(data.data.filter((b:any) => b.trang_thai !== 'da_huy'));
+          }
+      } catch (e) { console.error(e) } finally { setIsLookingUp(false); }
+  };
+
+  const getRoomStatusForLookup = (roomId: string) => {
+      // Check booking trong lookupBookings
+      const booking = lookupBookings.find(b => b.id_phong === roomId);
+      if (booking) return { status: 'booked', label: 'Đã đặt', color: '#fef3c7', text: '#b45309', border: '#fcd34d' };
+      
+      const room = rooms.find(r => r.id === roomId);
+      if (room && room.trang_thai === 'bao_tri') return { status: 'maintenance', label: 'Bảo trì', color: '#f3f4f6', text: '#6b7280', border: '#e5e7eb' };
+      if (room && room.trang_thai === 'dang_dung') return { status: 'occupied', label: 'Đang ở', color: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe' };
+      
+      return { status: 'free', label: 'Trống', color: '#f0fdf4', text: '#15803d', border: '#bbf7d0' };
+  };
+
+  const lookupRooms = rooms.filter(r => 
+    r.ma_phong.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    r.loai_phong?.ten_loai?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const handleSelectRoomFromLookup = (room: any) => {
+      setFormData(prev => ({
+          ...prev,
+          location: room.loai_phong?.id_co_so || '',
+          concept: room.id_loai_phong || '',
+          room: room.id
+      }));
+      window.scrollTo({ top: 500, behavior: 'smooth' });
+  };
+
+  // Helper cho Dropdown Chọn phòng
+  const getRoomStatusLabel = (room: any) => {
+      if (room.trang_thai === 'bao_tri') return 'Bảo trì';
+      
+      const roomBooking = todayBookings.find((b: any) => 
+          b.id_phong === room.id && 
+          b.trang_thai !== 'da_huy' &&
+          b.trang_thai !== 'da_tra' &&
+          b.trang_thai !== 'checkout'
+      );
+
+      if (roomBooking) {
+          if (['da_nhan_phong', 'dang_o', 'dang_dung'].includes(roomBooking.trang_thai)) return 'Đang ở';
+          return 'Đã đặt'; 
+      }
+
+      return 'Trống';
   };
 
   const isDayBookingAvailable = useMemo(() => {
@@ -364,6 +520,7 @@ export default function NewBooking() {
       setFormData(prev => ({ ...prev, customerName: '', customerPhone: '', customerEmail: '', notes: '', cccdFront: '', cccdBack: '' }));
       setSelectedTimeSlots([]);
       fetchBookingsForRoom();
+      fetchAllBookingsForLookup(); 
     } catch (error: any) { toast.error(error.message || 'Lỗi xử lý'); } finally { setLoading(false); }
   };
 
@@ -383,6 +540,53 @@ export default function NewBooking() {
         <div>
           <h1 style={styles.pageTitle}>Tạo Đơn Đặt Phòng</h1>
           <p style={styles.pageSubtitle}>Dành cho Admin & Staff</p>
+        </div>
+      </div>
+
+      {/* --- NEW: ROOM AVAILABILITY LOOKUP TOOL --- */}
+      <div style={styles.lookupContainer}>
+        <div style={styles.lookupHeader}>
+             <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#1f2937', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Grid size={18} /> Tra cứu nhanh trạng thái phòng
+             </h3>
+             <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <label style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Ngày xem:</label>
+                    <input type="date" value={lookupDate} onChange={(e) => setLookupDate(e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none' }} />
+                 </div>
+                 <div style={styles.searchBox}>
+                    <Search size={14} color="#94a3b8"/>
+                    <input type="text" placeholder="Tìm phòng..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={styles.searchInput} />
+                 </div>
+             </div>
+        </div>
+
+        {/* Legend */}
+        <div style={{ display: 'flex', gap: '16px', marginBottom: '16px', fontSize: '12px', color: '#64748b' }}>
+             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#22c55e' }}></div> Trống</div>
+             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#f59e0b' }}></div> Đã đặt (Trong ngày)</div>
+             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#3b82f6' }}></div> Đang ở</div>
+             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#6b7280' }}></div> Bảo trì</div>
+        </div>
+
+        {/* Room Grid */}
+        <div style={styles.roomGrid}>
+            {lookupRooms.map(room => {
+                const info = getRoomStatusForLookup(room.id);
+                return (
+                    <div 
+                        key={room.id} 
+                        style={{ ...styles.roomItem, backgroundColor: info.color, borderColor: info.border }}
+                        onClick={() => info.status === 'free' ? handleSelectRoomFromLookup(room) : toast.info(`Phòng này ${info.label.toLowerCase()} vào ngày ${format(new Date(lookupDate), 'dd/MM')}`)}
+                    >
+                        <div style={{ fontWeight: 'bold', color: '#1e293b' }}>{room.ma_phong}</div>
+                        <div style={{ fontSize: '10px', color: '#64748b', marginBottom: '4px' }}>{room.loai_phong?.ten_loai}</div>
+                        <span style={{ ...styles.roomItemStatus, color: info.text }}>{info.label}</span>
+                        {info.status === 'free' && <span style={{ position: 'absolute', top: 4, right: 4, opacity: 0.5 }}><Plus size={12} color="#166534"/></span>}
+                    </div>
+                )
+            })}
+            {lookupRooms.length === 0 && <p style={{ fontSize: '13px', color: '#94a3b8', fontStyle: 'italic', gridColumn: '1 / -1' }}>Không tìm thấy phòng nào.</p>}
         </div>
       </div>
 
@@ -477,7 +681,17 @@ export default function NewBooking() {
                     <div>
                          <label style={styles.label}>Phòng số</label>
                          <select style={styles.select} value={formData.room} onChange={e => setFormData({ ...formData, room: e.target.value })} disabled={!formData.concept}>
-                             <option value="">-- Chọn phòng --</option>{filteredRooms.map(r => <option key={r.id} value={r.id}>{r.ma_phong} ({r.trang_thai === 'trong' ? 'Trống' : 'Đang dùng'})</option>)}
+                             <option value="">-- Chọn phòng --</option>
+                             {filteredRooms.map(r => {
+                                 const statusLabel = getRoomStatusLabel(r);
+                                 // Disable nếu phòng đang ở hoặc bảo trì
+                                 const isDisabled = statusLabel === 'Bảo trì'; 
+                                 return (
+                                     <option key={r.id} value={r.id} disabled={isDisabled} style={{ color: statusLabel === 'Trống' ? 'green' : 'red' }}>
+                                         {r.ma_phong} ({statusLabel})
+                                     </option>
+                                 )
+                             })}
                          </select>
                     </div>
                     {formData.concept && filteredRooms.length === 0 && <p style={{ fontSize: '13px', color: '#d97706', display: 'flex', alignItems: 'center', gap: '6px' }}><AlertCircle size={14}/> Hết phòng trống loại này.</p>}

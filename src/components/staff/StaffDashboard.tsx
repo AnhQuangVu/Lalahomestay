@@ -1,17 +1,13 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Toaster, toast } from 'sonner';
 import {
   UserCheck, LogOut, Sparkles,
   FileText, User, Plus, X,
   CreditCard, MapPin, Phone, StickyNote, AlertCircle,
-  Home, CheckCircle, XCircle, TrendingUp, BarChart3, PieChart as PieChartIcon,
-  Edit, Save, Check, Image as ImageIcon, Clock, Ban
+  Clock, Ban, Check, Image as ImageIcon,
+  Home, CheckCircle, XCircle, TrendingUp
 } from 'lucide-react';
-import { 
-  BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, 
-  CartesianGrid, Tooltip, Legend, ResponsiveContainer 
-} from 'recharts';
-import { differenceInHours, format } from 'date-fns';
+import { differenceInHours, format, isValid } from 'date-fns';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 
 // --- CONFIG ---
@@ -36,20 +32,11 @@ interface Room {
   };
 }
 
-interface ReportData {
-  totalRooms: number; occupiedRooms: number; availableRooms: number;
-  occupancyRate: number; totalNights: number;
-  topRooms: Array<{ name: string; bookings: number; revenue: number; }>;
-  roomUsageDetails: Array<{
-    branch: string; room: string; type: string;
-    usedDays: number; availableDays: number; occupancy: number; bookings: number;
-    originalRoom: Room;
-  }>;
-}
-
 // --- STYLES OBJECT (Inline CSS) ---
 const styles: { [key: string]: React.CSSProperties } = {
   container: { maxWidth: '1280px', margin: '0 auto', padding: '24px 16px', fontFamily: '"Segoe UI", Roboto, Helvetica, Arial, sans-serif', color: '#1f2937', paddingBottom: '80px' },
+  
+  // Header
   pageHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' },
   pageTitle: { fontSize: '24px', fontWeight: '700', color: '#111827', margin: 0 },
   pageSubtitle: { fontSize: '14px', color: '#6b7280', marginTop: '4px' },
@@ -58,10 +45,10 @@ const styles: { [key: string]: React.CSSProperties } = {
   filterContainer: { display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '24px' },
   filterBtn: { padding: '8px 16px', borderRadius: '8px', fontSize: '14px', fontWeight: '500', border: '1px solid transparent', cursor: 'pointer', transition: 'all 0.2s' },
   
-  // Grid
-  gridRooms: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '20px' }, // Tăng kích thước tối thiểu chút
+  // Grid Rooms
+  gridRooms: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '20px' },
   
-  // New Room Card Design
+  // Room Card Design
   roomCard: {
     borderRadius: '16px',
     overflow: 'hidden',
@@ -93,28 +80,15 @@ const styles: { [key: string]: React.CSSProperties } = {
   
   // Status Bar at Bottom
   statusBar: { padding: '8px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', fontWeight: '600' },
-  
-  // Badge
   statusDot: { width: '8px', height: '8px', borderRadius: '50%', display: 'inline-block', marginRight: '6px' },
 
-  // Report Section
-  reportSection: { marginTop: '48px', paddingTop: '32px', borderTop: '1px solid #e5e7eb' },
-  kpiGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' },
-  kpiCard: { borderRadius: '12px', padding: '24px', border: '1px solid', background: 'linear-gradient(to bottom right, var(--tw-gradient-from), var(--tw-gradient-to))' },
-  chartGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', marginBottom: '24px' },
-  chartCard: { backgroundColor: 'white', borderRadius: '12px', padding: '24px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' },
-  tableCard: { backgroundColor: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' },
-  tableHeader: { padding: '24px', borderBottom: '1px solid #f3f4f6', backgroundColor: '#f9fafb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  tableContainer: { overflowX: 'auto', maxHeight: '500px' },
-  table: { width: '100%', borderCollapse: 'collapse', fontSize: '14px' },
-  th: { padding: '12px 24px', textAlign: 'left', fontWeight: 'bold', color: '#4b5563', fontSize: '12px', textTransform: 'uppercase', backgroundColor: '#f3f4f6', position: 'sticky', top: 0 },
-  td: { padding: '12px 24px', borderBottom: '1px solid #f3f4f6', color: '#374151' },
-  
   // Modal
   modalOverlay: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: '16px' },
   modalContent: { backgroundColor: 'white', borderRadius: '20px', width: '100%', maxWidth: '480px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', overflow: 'hidden', maxHeight: '90vh', overflowY: 'auto' },
   modalHeader: { padding: '20px 24px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ffffff' },
   modalBody: { padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' },
+  
+  // Form Elements inside Modal
   input: { width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', outline: 'none', transition: 'border-color 0.2s' },
   label: { display: 'block', fontSize: '13px', color: '#4b5563', marginBottom: '6px', fontWeight: '500' },
   btnAction: { width: '100%', padding: '12px', borderRadius: '12px', fontWeight: '600', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.2s' },
@@ -129,53 +103,6 @@ const styles: { [key: string]: React.CSSProperties } = {
   pendingBanner: { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: '#ca8a04', color: 'white', fontSize: '10px', fontWeight: '800', textAlign: 'center', padding: '4px', zIndex: 10, letterSpacing: '0.5px' },
 };
 
-// --- SUB-COMPONENT: BÁO CÁO ---
-const RoomsReportSection = ({ reportData, onRowClick }: { reportData: ReportData, onRowClick: (room: Room) => void }) => {
-  // ... (Code báo cáo giữ nguyên)
-  const occupancyData = [ { name: 'Đang sử dụng', value: reportData.occupiedRooms, color: '#8b5cf6' }, { name: 'Còn trống', value: reportData.availableRooms, color: '#e5e7eb' } ];
-  return (
-    <div style={styles.reportSection}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-        <BarChart3 size={24} color="#374151" />
-        <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#1f2937' }}>Báo cáo hiệu suất & Thống kê</h2>
-      </div>
-      <div style={styles.kpiGrid}>
-          <div style={{ ...styles.kpiCard, backgroundColor: '#faf5ff', borderColor: '#e9d5ff' }}><p style={{ fontSize: '14px', color: '#7e22ce' }}>Tổng số phòng</p><p style={{ fontSize: '30px', fontWeight: 'bold', color: '#581c87' }}>{reportData.totalRooms}</p></div>
-          <div style={{ ...styles.kpiCard, backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }}><p style={{ fontSize: '14px', color: '#15803d' }}>Đang sử dụng</p><p style={{ fontSize: '30px', fontWeight: 'bold', color: '#14532d' }}>{reportData.occupiedRooms}</p></div>
-          <div style={{ ...styles.kpiCard, backgroundColor: '#f9fafb', borderColor: '#e5e7eb' }}><p style={{ fontSize: '14px', color: '#374151' }}>Còn trống</p><p style={{ fontSize: '30px', fontWeight: 'bold', color: '#111827' }}>{reportData.availableRooms}</p></div>
-          <div style={{ ...styles.kpiCard, backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }}><p style={{ fontSize: '14px', color: '#1d4ed8' }}>Công suất</p><p style={{ fontSize: '30px', fontWeight: 'bold', color: '#1e3a8a' }}>{reportData.occupancyRate}%</p></div>
-      </div>
-      <div style={styles.chartGrid}>
-        <div style={styles.chartCard}>
-             <div style={{ height: '300px' }}>
-            <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={occupancyData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={5} dataKey="value">{occupancyData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}</Pie><Tooltip /><Legend verticalAlign="bottom" height={36}/></PieChart></ResponsiveContainer>
-          </div>
-        </div>
-        <div style={styles.chartCard}>
-            {reportData.topRooms.length > 0 ? (<ResponsiveContainer width="100%" height={300}><BarChart data={reportData.topRooms} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" tick={{fontSize: 12}} /><YAxis yAxisId="right" orientation="right" stroke="#10b981" fontSize={12} tickFormatter={(val) => `${val/1000}k`} /><Tooltip formatter={(value: number) => formatCurrency(value)} /><Bar yAxisId="right" dataKey="revenue" fill="#10b981" name="Doanh thu" radius={[4, 4, 0, 0]} barSize={40} /></BarChart></ResponsiveContainer>) : <div style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af' }}>Chưa có dữ liệu doanh thu</div>}
-        </div>
-      </div>
-      <div style={styles.tableCard}>
-         <div style={styles.tableContainer}>
-          <table style={styles.table}>
-            <thead><tr><th style={styles.th}>Cơ sở / Phòng</th><th style={{ ...styles.th, textAlign: 'center' }}>Trạng thái</th><th style={{ ...styles.th, textAlign: 'center' }}>Công suất</th><th style={{ ...styles.th, textAlign: 'center' }}>Đơn hiện tại</th></tr></thead>
-            <tbody>
-              {reportData.roomUsageDetails.map((room, idx) => (
-                <tr key={idx} onClick={() => onRowClick(room.originalRoom)} style={{ cursor: 'pointer', transition: 'background-color 0.2s', backgroundColor: idx % 2 === 0 ? 'white' : '#f9fafb' }}>
-                  <td style={styles.td}><div style={{ fontWeight: 'bold', color: '#1f2937' }}>{room.room}</div><div style={{ fontSize: '12px', color: '#6b7280' }}>{room.branch} - {room.type}</div></td>
-                  <td style={{ ...styles.td, textAlign: 'center' }}>{room.occupancy === 100 ? <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '12px', fontWeight: '500', backgroundColor: '#dbeafe', color: '#1e40af' }}>Đang dùng</span> : (room.occupancy === 50 ? <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '12px', fontWeight: '500', backgroundColor: '#ffedd5', color: '#9a3412' }}>Sắp đến</span> : <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '12px', fontWeight: '500', backgroundColor: '#dcfce7', color: '#166534' }}>Trống</span>)}</td>
-                  <td style={{ ...styles.td, textAlign: 'center' }}><div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}><span style={{ fontSize: '12px', fontWeight: '500' }}>{room.occupancy}%</span><div style={{ width: '64px', height: '6px', backgroundColor: '#e5e7eb', borderRadius: '99px', overflow: 'hidden' }}><div style={{ height: '100%', borderRadius: '99px', width: `${room.occupancy}%`, backgroundColor: room.occupancy === 100 ? '#3b82f6' : (room.occupancy === 50 ? '#fb923c' : '#22c55e') }} /></div></div></td>
-                  <td style={{ ...styles.td, textAlign: 'center', fontWeight: '500' }}>{room.bookings}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 // --- MAIN COMPONENT ---
 export default function StaffDashboard() {
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -183,6 +110,7 @@ export default function StaffDashboard() {
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [loading, setLoading] = useState(true);
   
+  // Modal & Form States
   const [isEditingInfo, setIsEditingInfo] = useState(false);
   const [infoForm, setInfoForm] = useState({ number: '', concept: '', price2h: 0, priceNight: 0 });
   const [actionLoading, setActionLoading] = useState(false);
@@ -190,13 +118,18 @@ export default function StaffDashboard() {
   const [bookingDetail, setBookingDetail] = useState<any | null>(null);
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState<{ type: 'approve' | 'reject', bookingId: string } | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // --- DATA FETCHING LOGIC ---
-  const loadRooms = async () => {
+  const loadRooms = useCallback(async () => {
     try {
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
       const [roomsRes, bookingsRes] = await Promise.all([
-        fetch(`${API_URL}/phong`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }),
-        fetch(`${API_URL}/dat-phong`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } })
+        fetch(`${API_URL}/phong`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` }, signal: controller.signal }),
+        fetch(`${API_URL}/dat-phong`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` }, signal: controller.signal })
       ]);
 
       if (!roomsRes.ok || !bookingsRes.ok) throw new Error('API Error');
@@ -216,7 +149,7 @@ export default function StaffDashboard() {
             if (!b.thoi_gian_nhan || !b.thoi_gian_tra) return false;
             const start = new Date(b.thoi_gian_nhan);
             const end = new Date(b.thoi_gian_tra);
-            return now <= end && (now >= start || differenceInHours(start, now) <= 24);
+            return isValid(start) && isValid(end) && now <= end && (now >= start || differenceInHours(start, now) <= 24);
         });
 
         if (!currentBooking) {
@@ -230,11 +163,13 @@ export default function StaffDashboard() {
              } else {
                  const start = new Date(currentBooking.thoi_gian_nhan);
                  const end = new Date(currentBooking.thoi_gian_tra);
-                 if (r.trang_thai === 'bao_tri') derivedStatus = 'maintenance';
-                 else if (now >= start && now <= end) {
-                     derivedStatus = 'occupied';
-                     if (differenceInHours(end, now) < 1) derivedStatus = 'checkout-soon';
-                 } else if (now < start && differenceInHours(start, now) <= 24) derivedStatus = 'checkin-soon';
+                 if (isValid(start) && isValid(end)) {
+                     if (r.trang_thai === 'bao_tri') derivedStatus = 'maintenance';
+                     else if (now >= start && now <= end) {
+                         derivedStatus = 'occupied';
+                         if (differenceInHours(end, now) < 1) derivedStatus = 'checkout-soon';
+                     } else if (now < start && differenceInHours(start, now) <= 24) derivedStatus = 'checkin-soon';
+                 }
              }
         } else if (r.trang_thai === 'bao_tri') {
             derivedStatus = 'maintenance';
@@ -259,14 +194,16 @@ export default function StaffDashboard() {
         };
       });
       setRooms(mapped);
-    } catch (error) { console.error("Load rooms error", error); } finally { setLoading(false); }
-  };
+    } catch (error: any) { 
+        if (error.name !== 'AbortError') console.error("Load rooms error", error); 
+    } finally { setLoading(false); }
+  }, []);
 
   useEffect(() => {
     loadRooms();
     const interval = setInterval(loadRooms, 15000);
-    return () => clearInterval(interval);
-  }, []);
+    return () => { clearInterval(interval); if (abortControllerRef.current) abortControllerRef.current.abort(); };
+  }, [loadRooms]);
 
   useEffect(() => {
     if (selectedRoom) {
@@ -276,25 +213,6 @@ export default function StaffDashboard() {
       else setBookingDetail(null);
     }
   }, [selectedRoom]);
-
-  // --- MEMO REPORT ---
-  const reportData: ReportData = useMemo(() => {
-    const totalRooms = rooms.length;
-    const occupiedRooms = rooms.filter(r => ['occupied', 'checkout-soon'].includes(r.status)).length;
-    const availableRooms = rooms.filter(r => r.status === 'available').length;
-    const roomUsageDetails = rooms.map(r => {
-        const isOccupied = ['occupied', 'checkout-soon'].includes(r.status);
-        return {
-            branch: r.location, room: r.number, type: r.concept,
-            usedDays: isOccupied ? 1 : 0, availableDays: 1,
-            occupancy: isOccupied ? 100 : (r.status === 'checkin-soon' ? 50 : 0),
-            bookings: r.currentBooking ? 1 : 0,
-            originalRoom: r
-        };
-    });
-    const topRooms = rooms.filter(r => r.currentBooking).map(r => ({ name: r.number, bookings: 1, revenue: r.currentBooking?.totalPrice || 0 })).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
-    return { totalRooms, occupiedRooms, availableRooms, occupancyRate: totalRooms > 0 ? Math.round((occupiedRooms / totalRooms) * 100) : 0, totalNights: occupiedRooms, topRooms, roomUsageDetails };
-  }, [rooms]);
 
   // --- ACTIONS ---
   const updateRoomStatusApi = async (roomId: string, status: string, cleanStatus: string) => {
@@ -349,49 +267,39 @@ export default function StaffDashboard() {
       } catch { } 
   };
 
-  // XỬ LÝ DUYỆT / HỦY CỌC
   const handleProcessBooking = async () => {
     if (!showConfirmDialog) return;
     const { type, bookingId } = showConfirmDialog;
-    
     setActionLoading(true);
     try {
         const status = type === 'approve' ? 'da_coc' : 'da_huy';
         const noteUpdate = type === 'reject' ? (bookingDetail?.ghi_chu ? `${bookingDetail.ghi_chu} [Đã từ chối]` : '[Đã từ chối]') : undefined;
-
         const body: any = { trang_thai: status };
         if (noteUpdate) body.ghi_chu = noteUpdate;
-
         const response = await fetch(`${API_URL}/dat-phong/${bookingId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
             body: JSON.stringify(body)
         });
-        
         const result = await response.json();
         if (result.success) {
-            toast.success(type === 'approve' ? 'Đã xác nhận cọc!' : 'Đã từ chối đơn!');
+            toast.success(type === 'approve' ? 'Đã xác nhận thanh toán!' : 'Đã từ chối đơn!');
             setShowConfirmDialog(null);
             setSelectedRoom(null);
             loadRooms(); 
         } else {
             toast.error('Lỗi: ' + result.error);
         }
-    } catch {
-        toast.error('Lỗi kết nối');
-    } finally {
-        setActionLoading(false);
-    }
+    } catch { toast.error('Lỗi kết nối'); } finally { setActionLoading(false); }
   };
 
-  // --- COLORS & STYLES ---
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'occupied': return { bg: '#eff6ff', border: '#bfdbfe', text: '#1d4ed8', label: 'Đang ở' };
       case 'available': return { bg: '#ffffff', border: '#e5e7eb', text: '#374151', label: 'Trống' };
       case 'checkin-soon': return { bg: '#fff7ed', border: '#fed7aa', text: '#c2410c', label: 'Sắp nhận' };
       case 'checkout-soon': return { bg: '#fefce8', border: '#fef08a', text: '#a16207', label: 'Sắp trả' };
-      case 'pending': return { bg: '#fffbeb', border: '#fcd34d', text: '#b45309', label: 'Chờ cọc' };
+      case 'pending': return { bg: '#fffbeb', border: '#fcd34d', text: '#b45309', label: 'Chưa thanh toán' };
       case 'maintenance': return { bg: '#f3f4f6', border: '#d1d5db', text: '#6b7280', label: 'Bảo trì' };
       default: return { bg: '#fff', border: '#e5e7eb', text: '#000', label: 'Unknown' };
     }
@@ -419,7 +327,7 @@ export default function StaffDashboard() {
             { val: 'all', label: 'Tất cả', bg: '#1f2937' }, 
             { val: 'available', label: 'Trống', bg: '#ffffff' }, 
             { val: 'occupied', label: 'Đang ở', bg: '#2563eb' }, 
-            { val: 'pending', label: 'Chờ cọc', bg: '#d97706' }, 
+            { val: 'pending', label: 'Chưa thanh toán', bg: '#d97706' }, 
             { val: 'checkin-soon', label: 'Sắp nhận', bg: '#f97316' }, 
             { val: 'checkout-soon', label: 'Sắp trả', bg: '#eab308' }, 
             { val: 'maintenance', label: 'Bảo trì', bg: '#6b7280' } 
@@ -441,7 +349,7 @@ export default function StaffDashboard() {
           ))}
       </div>
 
-      {/* GRID ROOMS (NEW DESIGN) */}
+      {/* GRID ROOMS */}
       <div style={styles.gridRooms}>
           {filteredRooms.map(room => {
           const conf = getStatusColor(room.status);
@@ -456,10 +364,8 @@ export default function StaffDashboard() {
                 onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
               >
               
-              {/* Pending Banner */}
-              {room.status === 'pending' && <div style={styles.pendingBanner}>⚠ CẦN XỬ LÝ</div>}
+              {room.status === 'pending' && <div style={styles.pendingBanner}>⚠ CHƯA THANH TOÁN</div>}
 
-              {/* HEADER: Room Number */}
               <div style={styles.roomTop}>
                   <div>
                       <div style={styles.roomNumberLarge}>{room.number}</div>
@@ -468,7 +374,6 @@ export default function StaffDashboard() {
                   {room.cleanStatus === 'dirty' && <Sparkles size={16} color="#ef4444" />}
               </div>
 
-              {/* BODY: Info */}
               <div style={styles.roomContent}>
                   {(isOccupied && room.currentBooking) ? (
                     <>
@@ -478,7 +383,7 @@ export default function StaffDashboard() {
                             </p>
                             <div style={{ display: 'flex', gap: '6px' }}>
                                 <span style={styles.priceTag}>{room.currentBooking.source}</span>
-                                {room.currentBooking.deposit > 0 && <span style={{ ...styles.priceTag, backgroundColor: '#dcfce7', color: '#166534' }}>Đã cọc</span>}
+                                {room.currentBooking.deposit > 0 && <span style={{ ...styles.priceTag, backgroundColor: '#dcfce7', color: '#166534' }}>Đã TT</span>}
                             </div>
                         </div>
                         <div style={styles.infoRow}>
@@ -500,7 +405,6 @@ export default function StaffDashboard() {
                   )}
               </div>
               
-              {/* FOOTER: Status Bar */}
               <div style={{ ...styles.statusBar, backgroundColor: conf.bg, color: conf.text }}>
                   <div style={{ display: 'flex', alignItems: 'center' }}>
                       <span style={{ ...styles.statusDot, backgroundColor: conf.text }}></span>
@@ -513,14 +417,10 @@ export default function StaffDashboard() {
           })}
       </div>
 
-      {/* --- REPORT SECTION --- */}
-      <RoomsReportSection reportData={reportData} onRowClick={(r) => { setSelectedRoom(r); setIsEditingInfo(false); }} />
-
       {/* MODAL ROOM DETAIL */}
       {selectedRoom && (
         <div style={styles.modalOverlay}>
           <div style={styles.modalContent}>
-            {/* Modal Header */}
             <div style={styles.modalHeader}>
                 <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#1f2937', margin: 0 }}>Phòng {selectedRoom.number}</h2>
                 <button onClick={() => setSelectedRoom(null)} style={{ padding: '8px', borderRadius: '50%', border: 'none', backgroundColor: 'transparent', cursor: 'pointer', color: '#6b7280' }}><X size={20} /></button>
@@ -560,7 +460,7 @@ export default function StaffDashboard() {
                                 <div style={{ fontWeight: 'bold', color: '#111827' }}>{formatCurrency(selectedRoom.currentBooking.totalPrice)}</div>
                              </div>
                              <div style={{ backgroundColor: 'white', padding: '8px', borderRadius: '6px', border: '1px solid #e5e7eb' }}>
-                                <span style={{ color: '#6b7280', fontSize: '11px' }}>Tiền cọc</span>
+                                <span style={{ color: '#6b7280', fontSize: '11px' }}>Thanh toán</span>
                                 <div style={{ fontWeight: 'bold', color: '#16a34a' }}>{formatCurrency(selectedRoom.currentBooking.deposit)}</div>
                              </div>
                         </div>
@@ -569,18 +469,18 @@ export default function StaffDashboard() {
 
                 {/* Actions */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {/* PENDING ACTIONS: APPROVE / REJECT */}
+                    {/* PENDING ACTIONS */}
                     {selectedRoom.status === 'pending' && selectedRoom.currentBooking && (
                         <div style={styles.paymentSection}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: '#b45309', fontSize: '13px', fontWeight: '600' }}>
-                                <AlertCircle size={16}/> Xác nhận đặt phòng này?
+                                <AlertCircle size={16}/> Khách chưa thanh toán?
                             </div>
                             <div style={{ display: 'flex', gap: '10px' }}>
                                 <button onClick={() => setShowConfirmDialog({ type: 'reject', bookingId: selectedRoom.currentBooking!.id })} style={styles.rejectBtn}>
                                     <Ban size={16}/> Từ chối
                                 </button>
                                 <button onClick={() => setShowConfirmDialog({ type: 'approve', bookingId: selectedRoom.currentBooking!.id })} style={styles.confirmBtn}>
-                                    <Check size={16}/> Xác nhận cọc
+                                    <Check size={16}/> Xác nhận thanh toán
                                 </button>
                             </div>
                         </div>
@@ -609,11 +509,11 @@ export default function StaffDashboard() {
                     {showConfirmDialog.type === 'approve' ? <Check size={24} color="#16a34a"/> : <X size={24} color="#dc2626"/>}
                 </div>
                 <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#111827', marginBottom: '8px' }}>
-                    {showConfirmDialog.type === 'approve' ? 'Xác nhận tiền cọc?' : 'Từ chối đơn này?'}
+                    {showConfirmDialog.type === 'approve' ? 'Xác nhận thanh toán?' : 'Từ chối đơn này?'}
                 </h3>
                 <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '24px', lineHeight: '1.5' }}>
                     {showConfirmDialog.type === 'approve' 
-                        ? 'Trạng thái sẽ chuyển sang "Đã cọc". Hãy chắc chắn bạn đã nhận được tiền.' 
+                        ? 'Đơn sẽ chuyển sang trạng thái "Đã thanh toán".' 
                         : 'Đơn đặt phòng sẽ bị HỦY và phòng sẽ trống trở lại.'}
                 </p>
                 <div style={{ display: 'flex', gap: '12px' }}>
