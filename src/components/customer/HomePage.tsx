@@ -31,18 +31,22 @@ export default function HomePage() {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
       });
       const locResult = await locResponse.json();
+      console.log('Locations API result:', locResult);
 
       // Fetch rooms
       const roomsResponse = await fetch(`${API_URL}/phong`, {
         headers: { 'Authorization': `Bearer ${publicAnonKey}` }
       });
       const roomsResult = await roomsResponse.json();
+      console.log('Rooms API result:', roomsResult);
 
       if (locResult.success) {
+        // Lọc cơ sở đang hoạt động
+        const activeLocations = (locResult.data || []).filter((loc: any) => loc.trang_thai === true);
         // Count rooms per location
-        const locationsWithRoomCount = locResult.data.map((loc: any) => {
+        const locationsWithRoomCount = activeLocations.map((loc: any) => {
           const roomCount = roomsResult.data?.filter(
-            (room: any) => room.loai_phong?.id_co_so === loc.id
+            (room: any) => room.loai_phong?.id_co_so === loc.id && room.trang_thai !== 'dinh_chi'
           ).length || 0;
 
           return {
@@ -54,9 +58,9 @@ export default function HomePage() {
       }
 
       if (roomsResult.success && roomsResult.data) {
-        // Get 6 featured rooms (available rooms only)
+        // Get 6 featured rooms (không phải dinh_chi hoặc bao_tri)
         const availableRooms = roomsResult.data.filter(
-          (room: any) => room.trang_thai === 'trong'
+          (room: any) => room.trang_thai !== 'dinh_chi' && room.trang_thai !== 'bao_tri'
         ).slice(0, 6);
         setFeaturedRooms(availableRooms);
       }
