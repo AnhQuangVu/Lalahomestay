@@ -715,7 +715,7 @@ export default function BookingPage() {
                   if (bookingType === 'gio' && selectedDate) {
                     const bookings = room.bookings || [];
                     const dateStr = new Date(selectedDate).toISOString().slice(0, 10);
-                    isBooked = bookings.some(b => {
+                    isBooked = bookings.some((b: { start: string }) => {
                       const bookingDateStr = new Date(b.start).toISOString().slice(0, 10);
                       return bookingDateStr === dateStr;
                     });
@@ -728,21 +728,26 @@ export default function BookingPage() {
                         border: isBooked ? '2px solid #ef4444' : (selectedRoom?.id === room.id ? '2px solid #0f7072' : '1px solid #e2e8f0'),
                         borderRadius: '16px',
                         overflow: 'hidden',
-                        cursor: 'pointer',
+                        cursor: room.trang_thai === 'bao_tri' ? 'not-allowed' : 'pointer',
                         transition: 'all 0.2s',
                         backgroundColor: 'white',
                         position: 'relative',
                         transform: selectedRoom?.id === room.id ? 'translateY(-4px)' : 'none',
-                        boxShadow: selectedRoom?.id === room.id ? '0 10px 15px -3px rgba(15, 112, 114, 0.1)' : 'none'
+                        boxShadow: selectedRoom?.id === room.id ? '0 10px 15px -3px rgba(15, 112, 114, 0.1)' : 'none',
+                        opacity: room.trang_thai === 'bao_tri' ? 0.5 : 1,
+                        pointerEvents: room.trang_thai === 'bao_tri' ? 'none' : 'auto'
                       }}
                     >
                       <div style={{ position: 'relative', aspectRatio: '16/10' }}>
-                        <RoomImageCarousel images={room.anh_chinh ? [room.anh_chinh] : getRoomImages(room.id)} alt={room.ma_phong} />
+                        <RoomImageCarousel images={[room.anh_chinh, ...(room.anh_phu || [])].filter(Boolean)} alt={`Phòng ${room.ma_phong}`} />
                         <div style={{ position: 'absolute', top: '12px', left: '12px', backgroundColor: 'rgba(0,0,0,0.6)', color: 'white', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: '600', backdropFilter: 'blur(4px)' }}>{room.loai_phong?.ten_loai}</div>
-                        {isBooked && (
+                        {room.trang_thai === 'bao_tri' && (
+                          <div style={{ position: 'absolute', top: '12px', right: '12px', backgroundColor: '#6b7280', color: 'white', borderRadius: '8px', padding: '4px 8px', fontSize: '12px', fontWeight: '700' }}>Bảo trì</div>
+                        )}
+                        {isBooked && room.trang_thai !== 'bao_tri' && (
                           <div style={{ position: 'absolute', top: '12px', right: '12px', backgroundColor: '#ef4444', color: 'white', borderRadius: '8px', padding: '4px 8px', fontSize: '12px', fontWeight: '700' }}>Đã có khách</div>
                         )}
-                        {selectedRoom?.id === room.id && !isBooked && (
+                        {selectedRoom?.id === room.id && !isBooked && room.trang_thai !== 'bao_tri' && (
                           <div style={{ position: 'absolute', top: '12px', right: '12px', backgroundColor: '#0f7072', color: 'white', borderRadius: '50%', padding: '6px' }}><div style={{ width: '10px', height: '10px', backgroundColor: 'white', borderRadius: '50%' }}></div></div>
                         )}
                       </div>
