@@ -1,13 +1,13 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { uploadToCloudinary } from '../../utils/cloudinary';
 import { 
   Calendar, Users, Clock, RefreshCw, Check, AlertCircle, UploadCloud, 
-  ChevronRight, ArrowLeft, CheckCircle2, Info, FileText, Search, Grid, List, Plus, Eye, Ban, Phone, MapPin, StickyNote, Image as ImageIcon, PenTool, X, Loader2
+  ChevronRight, ArrowLeft, CheckCircle2, Info, FileText, Search, Grid, List, Plus, Eye, Ban, Phone, MapPin, StickyNote, Image as ImageIcon, PenTool, X, User
 } from 'lucide-react';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
-import { format, differenceInMinutes, isValid, differenceInHours, isSameDay } from 'date-fns';
+import { format, differenceInMinutes, isValid, differenceInHours } from 'date-fns';
 
 const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-faeb1932`;
 
@@ -26,6 +26,14 @@ const formatDate = (dateStr: string) => {
             </div>
         );
     } catch { return '-'; }
+};
+
+const formatTimeRange = (startStr: string, endStr: string) => {
+    try {
+        const start = new Date(startStr);
+        const end = new Date(endStr);
+        return `${format(start, 'HH:mm')} - ${format(end, 'HH:mm')}`;
+    } catch { return 'Errors'; }
 };
 
 const calculateDuration = (start: string, end: string) => {
@@ -48,251 +56,57 @@ const getStatusBadge = (status: string) => {
     const styleBase: React.CSSProperties = { padding: '4px 10px', borderRadius: '99px', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap', border: '1px solid', display: 'inline-block' };
     
     switch (status) {
-        case 'cho_coc': 
-            return <span style={{...styleBase, backgroundColor: '#fff7ed', color: '#c2410c', borderColor: '#fdba74'}}>Chưa thanh toán</span>;
-        case 'da_coc': 
-            return <span style={{...styleBase, backgroundColor: '#f0fdf4', color: '#15803d', borderColor: '#86efac'}}>Đã thanh toán</span>;
-        case 'da_nhan_phong': 
-            return <span style={{...styleBase, backgroundColor: '#eff6ff', color: '#1d4ed8', borderColor: '#93c5fd'}}>Đã nhận</span>;
-        case 'da_tra_phong': 
-            return <span style={{...styleBase, backgroundColor: '#f3f4f6', color: '#4b5563', borderColor: '#d1d5db'}}>Đã trả</span>;
-        case 'da_huy': 
-            return <span style={{...styleBase, backgroundColor: '#fef2f2', color: '#b91c1c', borderColor: '#fca5a5'}}>Đã hủy</span>;
-        default: 
-            return <span style={{...styleBase, backgroundColor: '#f3f4f6', color: '#4b5563', borderColor: '#d1d5db'}}>{status}</span>;
+        case 'cho_coc': return <span style={{...styleBase, backgroundColor: '#fff7ed', color: '#c2410c', borderColor: '#fdba74'}}>Chưa thanh toán</span>;
+        case 'da_coc': return <span style={{...styleBase, backgroundColor: '#f0fdf4', color: '#15803d', borderColor: '#86efac'}}>Đã thanh toán</span>;
+        case 'da_nhan_phong': return <span style={{...styleBase, backgroundColor: '#eff6ff', color: '#1d4ed8', borderColor: '#93c5fd'}}>Đã nhận</span>;
+        case 'da_tra_phong': return <span style={{...styleBase, backgroundColor: '#f3f4f6', color: '#4b5563', borderColor: '#d1d5db'}}>Đã trả</span>;
+        case 'da_huy': return <span style={{...styleBase, backgroundColor: '#fef2f2', color: '#b91c1c', borderColor: '#fca5a5'}}>Đã hủy</span>;
+        default: return <span style={{...styleBase, backgroundColor: '#f3f4f6', color: '#4b5563', borderColor: '#d1d5db'}}>{status}</span>;
     }
+};
+
+const getChannelBadge = (channel: string) => {
+    return <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '11px', backgroundColor: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', textTransform: 'capitalize' }}>{channel}</span>
 };
 
 // --- STYLES OBJECT ---
 const styles: { [key: string]: React.CSSProperties } = {
-  container: {
-    maxWidth: '1400px', // Bảng to hơn
-    margin: '0 auto',
-    padding: '20px 16px',
-    paddingBottom: '100px',
-    fontFamily: '"Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-    color: '#1f2937',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '16px',
-    marginBottom: '24px',
-  },
-  backBtn: {
-    padding: '10px',
-    borderRadius: '50%',
-    border: 'none',
-    backgroundColor: 'white',
-    cursor: 'pointer',
-    transition: 'background-color 0.2s',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-  },
+  container: { maxWidth: '1400px', margin: '0 auto', padding: '20px 16px', paddingBottom: '100px', fontFamily: '"Segoe UI", Roboto, Helvetica, Arial, sans-serif', color: '#1f2937' },
+  header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' },
+  headerLeft: { display: 'flex', alignItems: 'center', gap: '16px' },
+  backBtn: { padding: '10px', borderRadius: '50%', border: 'none', backgroundColor: 'white', cursor: 'pointer', transition: 'background-color 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
   pageTitle: { fontSize: '24px', fontWeight: '700', color: '#111827', margin: 0 },
   pageSubtitle: { fontSize: '14px', color: '#6b7280', marginTop: '4px', margin: 0 },
   
   // Layout
-  grid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
-    gap: '32px',
-  },
-  col: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '24px',
-  },
-  card: {
-    backgroundColor: 'white',
-    borderRadius: '16px',
-    padding: '24px',
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)',
-    border: '1px solid #f3f4f6',
-  },
-  cardHeader: {
-    fontSize: '16px',
-    fontWeight: '700',
-    color: '#1f2937',
-    marginBottom: '20px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-  },
-  stepBadge: {
-    width: '24px',
-    height: '24px',
-    borderRadius: '50%',
-    backgroundColor: '#ccfbf1',
-    color: '#0f766e',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '12px',
-    fontWeight: 'bold',
-  },
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '32px' },
+  col: { display: 'flex', flexDirection: 'column', gap: '24px' },
+  card: { backgroundColor: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)', border: '1px solid #f3f4f6' },
+  cardHeader: { fontSize: '16px', fontWeight: '700', color: '#1f2937', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' },
+  stepBadge: { width: '24px', height: '24px', borderRadius: '50%', backgroundColor: '#ccfbf1', color: '#0f766e', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold' },
 
   // Form Elements
   formGroup: { display: 'flex', flexDirection: 'column', gap: '16px' },
   inputWrapper: { width: '100%' },
   label: { display: 'block', fontSize: '12px', fontWeight: '600', color: '#6b7280', marginBottom: '6px', textTransform: 'uppercase' },
-  input: {
-    width: '100%',
-    padding: '12px 16px',
-    borderRadius: '10px',
-    border: '1px solid #d1d5db',
-    fontSize: '14px',
-    outline: 'none',
-    transition: 'border-color 0.2s',
-    boxSizing: 'border-box',
-  },
-  select: {
-    width: '100%',
-    padding: '12px 16px',
-    borderRadius: '10px',
-    border: '1px solid #d1d5db',
-    fontSize: '14px',
-    outline: 'none',
-    backgroundColor: 'white',
-    boxSizing: 'border-box',
-  },
-  textarea: {
-    width: '100%',
-    padding: '12px 16px',
-    borderRadius: '10px',
-    border: '1px solid #d1d5db',
-    fontSize: '14px',
-    outline: 'none',
-    minHeight: '80px',
-    resize: 'vertical',
-    boxSizing: 'border-box',
-    fontFamily: 'inherit',
-  },
-
-  // Booking Type Switcher
+  input: { width: '100%', padding: '12px 16px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', outline: 'none', transition: 'border-color 0.2s', boxSizing: 'border-box' },
+  select: { width: '100%', padding: '12px 16px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', outline: 'none', backgroundColor: 'white', boxSizing: 'border-box' },
+  textarea: { width: '100%', padding: '12px 16px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', outline: 'none', minHeight: '80px', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' },
   tabContainer: { display: 'flex', gap: '12px', marginBottom: '24px' },
-  tabBtn: {
-    flex: 1,
-    padding: '12px',
-    borderRadius: '12px',
-    fontWeight: '600',
-    fontSize: '14px',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
-    transition: 'all 0.2s',
-  },
-
-  // Upload Area
+  tabBtn: { flex: 1, padding: '12px', borderRadius: '12px', fontWeight: '600', fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.2s' },
   uploadGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' },
-  uploadBox: {
-    height: '110px',
-    border: '2px dashed #e5e7eb',
-    borderRadius: '12px',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
-    backgroundColor: '#f9fafb',
-    transition: 'all 0.2s',
-    position: 'relative',
-    overflow: 'hidden',
-  },
+  uploadBox: { height: '110px', border: '2px dashed #e5e7eb', borderRadius: '12px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backgroundColor: '#f9fafb', transition: 'all 0.2s', position: 'relative', overflow: 'hidden' },
   uploadedImg: { width: '100%', height: '100%', objectFit: 'cover' },
-  removeBtn: {
-    position: 'absolute', top: '6px', right: '6px',
-    width: '24px', height: '24px', borderRadius: '50%',
-    backgroundColor: '#ef4444', color: 'white', border: 'none',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-  },
-
-  // Status Banners
+  removeBtn: { position: 'absolute', top: '6px', right: '6px', width: '24px', height: '24px', borderRadius: '50%', backgroundColor: '#ef4444', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
   statusBox: { padding: '16px', borderRadius: '12px', border: '1px solid', display: 'flex', alignItems: 'start', gap: '12px' },
-  
-  // Footer Actions
-  footer: {
-    marginTop: '24px',
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '16px',
-    marginBottom: '40px',
-  },
-  btn: {
-    padding: '12px 32px',
-    borderRadius: '99px',
-    fontSize: '15px',
-    fontWeight: '700',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    border: 'none',
-    transition: 'all 0.2s',
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-  },
-  
-  // Existing Bookings Panel
-  bookingListCard: {
-    backgroundColor: '#fffbeb', 
-    border: '1px solid #fcd34d',
-    borderRadius: '12px',
-    padding: '16px',
-    marginTop: '16px',
-  },
-  bookingListItem: {
-    backgroundColor: 'white',
-    padding: '10px 12px',
-    borderRadius: '8px',
-    border: '1px solid #fde68a',
-    marginBottom: '8px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    fontSize: '13px',
-    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-  },
-
-  // LOOKUP SECTION STYLES
-  lookupContainer: {
-    backgroundColor: '#f8fafc',
-    border: '1px solid #e2e8f0',
-    borderRadius: '16px',
-    padding: '20px',
-    marginBottom: '32px'
-  },
-  lookupHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '16px',
-    flexWrap: 'wrap',
-    gap: '16px'
-  },
-  searchBox: {
-    display: 'flex',
-    alignItems: 'center',
-    backgroundColor: 'white',
-    border: '1px solid #cbd5e1',
-    borderRadius: '8px',
-    padding: '0 12px',
-    flex: 1,
-    minWidth: '200px'
-  },
-  searchInput: {
-    border: 'none',
-    outline: 'none',
-    padding: '10px 0',
-    fontSize: '14px',
-    width: '100%',
-    marginLeft: '8px'
-  },
-  
-  // Modal Detail Styles
+  footer: { marginTop: '24px', display: 'flex', justifyContent: 'flex-end', gap: '16px', marginBottom: '40px' },
+  btn: { padding: '12px 32px', borderRadius: '99px', fontSize: '15px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', border: 'none', transition: 'all 0.2s', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' },
+  bookingListCard: { backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '12px', padding: '16px', marginTop: '16px' },
+  bookingListItem: { backgroundColor: 'white', padding: '10px 12px', borderRadius: '8px', border: '1px solid #fde68a', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' },
+  lookupContainer: { backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '20px', marginBottom: '32px' },
+  lookupHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '16px' },
+  searchBox: { display: 'flex', alignItems: 'center', backgroundColor: 'white', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', flex: 1, minWidth: '200px' },
+  searchInput: { border: 'none', outline: 'none', padding: '10px 0', fontSize: '14px', width: '100%', marginLeft: '8px' },
   modalOverlay: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: '16px' },
   modalContent: { backgroundColor: 'white', borderRadius: '20px', width: '100%', maxWidth: '480px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', overflow: 'hidden', maxHeight: '90vh', overflowY: 'auto' },
   modalHeader: { padding: '20px 24px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ffffff' },
@@ -304,28 +118,14 @@ const styles: { [key: string]: React.CSSProperties } = {
   confirmBtn: { flex: 1, padding: '10px', borderRadius: '8px', fontWeight: 'bold', backgroundColor: '#16a34a', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' },
   rejectBtn: { flex: 1, padding: '10px', borderRadius: '8px', fontWeight: 'bold', backgroundColor: '#ef4444', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' },
   btnAction: { width: '100%', padding: '12px', borderRadius: '12px', fontWeight: '600', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.2s' },
-
-  // Manual Button
-  manualBtn: {
-    padding: '8px 16px',
-    borderRadius: '8px',
-    backgroundColor: '#fff',
-    border: '1px solid #d1d5db',
-    fontSize: '13px',
-    fontWeight: '600',
-    color: '#374151',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px'
-  }
+  manualBtn: { padding: '8px 16px', borderRadius: '8px', backgroundColor: '#fff', border: '1px solid #d1d5db', fontSize: '13px', fontWeight: '600', color: '#374151', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' },
+  toggleBtn: { padding: '8px 16px', borderRadius: '8px', backgroundColor: '#3b82f6', color: 'white', border: 'none', fontSize: '13px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 5px rgba(59, 130, 246, 0.3)' }
 };
 
-// --- STYLES BỔ SUNG CHO BẢNG TRA CỨU ---
 const tableStyles: { [key: string]: React.CSSProperties } = {
   table: { width: '100%', borderCollapse: 'collapse', fontSize: '12px', marginTop: '16px' },
-  th: { textAlign: 'left', padding: '12px', borderBottom: '1px solid #e2e8f0', color: '#64748b', fontWeight: '700', backgroundColor: '#f8fafc', whiteSpace: 'nowrap' },
-  td: { padding: '12px', borderBottom: '1px solid #f1f5f9', color: '#334155', verticalAlign: 'middle' },
+  th: { textAlign: 'left', padding: '10px', borderBottom: '1px solid #e2e8f0', color: '#64748b', fontWeight: '700', backgroundColor: '#f8fafc', whiteSpace: 'nowrap' },
+  td: { padding: '10px', borderBottom: '1px solid #f1f5f9', color: '#334155', verticalAlign: 'middle' },
   tr: { cursor: 'pointer', transition: 'background-color 0.15s' },
   badge: { padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '600', display: 'inline-block' },
   availableBadge: {
@@ -342,7 +142,6 @@ const tableStyles: { [key: string]: React.CSSProperties } = {
 
 // --- SUB-COMPONENT: TimeSlotSelector ---
 function TimeSlotSelector({ roomId, selectedDate, selectedSlots, onSlotsChange, existingBookings }: any) {
-  // (Logic giữ nguyên)
   const FIXED_SLOTS = [
     { label: '07:30 - 08:45', startH: 7, startM: 30, endH: 8, endM: 45 },
     { label: '09:00 - 10:15', startH: 9, startM: 0, endH: 10, endM: 15 },
@@ -375,9 +174,7 @@ function TimeSlotSelector({ roomId, selectedDate, selectedSlots, onSlotsChange, 
     for (const booking of existingBookings) {
       const bStart = new Date(booking.thoi_gian_nhan);
       const bEnd = new Date(booking.thoi_gian_tra);
-      const blockedStart = new Date(bStart.getTime() - 15 * 60000);
-      const blockedEnd = new Date(bEnd.getTime() + 15 * 60000);
-      if (slot.start < blockedEnd && slot.end > blockedStart) return { available: false, reason: 'booked' };
+      if (slot.start < bEnd && slot.end > bStart) return { available: false, reason: 'booked' };
     }
     return { available: true, reason: 'ok' };
   };
@@ -441,9 +238,7 @@ export default function NewBooking() {
   const [searchTerm, setSearchTerm] = useState('');
   const [lookupBookings, setLookupBookings] = useState<any[]>([]);
   const [isLookingUp, setIsLookingUp] = useState(false);
-  
-  // *** LOADING STATES FOR BUTTONS ***
-  const [viewLoadingId, setViewLoadingId] = useState<string | null>(null);
+  const [showHistoryTable, setShowHistoryTable] = useState(false); // Toggle 2 bảng
 
   // Modal & Form Visibility
   const [bookingDetail, setBookingDetail] = useState<any | null>(null);
@@ -451,6 +246,7 @@ export default function NewBooking() {
   const [actionLoading, setActionLoading] = useState(false);
   const [showBookingSection, setShowBookingSection] = useState(false);
   const formRef = useRef<HTMLDivElement>(null);
+  const [viewLoadingId, setViewLoadingId] = useState<string | null>(null);
 
   const [filteredConcepts, setFilteredConcepts] = useState<any[]>([]);
   const [filteredRooms, setFilteredRooms] = useState<any[]>([]);
@@ -461,20 +257,22 @@ export default function NewBooking() {
       const today = new Date().toISOString().split('T')[0]; 
       setSelectedDate(today); 
       setLookupDate(today);
-      fetchAllBookingsForLookup(); 
+      fetchAllBookingsForLookup(today); 
   }, []);
 
-  // Filter Logic
   useEffect(() => { if (formData.location) { setFilteredConcepts(concepts.filter((c: any) => c.id_co_so === formData.location)); } else setFilteredConcepts([]); }, [formData.location, concepts]);
   useEffect(() => { if (formData.concept) { setFilteredRooms(rooms.filter((r: any) => r.id_loai_phong === formData.concept && r.trang_thai === 'trong')); } else setFilteredRooms([]); }, [formData.concept, rooms]);
-
-  // Trigger Booking Fetch for Room
   useEffect(() => { if (formData.room && selectedDate) { fetchBookingsForRoom(); } else { setExistingBookings([]); } setSelectedTimeSlots([]); }, [formData.room, selectedDate]);
   
-  // Trigger Lookup Fetch
+  // Khi đổi ngày trong "Tra cứu nhanh", load lại dữ liệu
   useEffect(() => { 
-      if (lookupDate) fetchAllBookingsForLookup(); 
-  }, [lookupDate]);
+      if (lookupDate && !showHistoryTable) fetchAllBookingsForLookup(lookupDate); 
+  }, [lookupDate, showHistoryTable]);
+
+  // Khi bật "Lịch sử đơn", load ALL
+  useEffect(() => {
+      if (showHistoryTable) fetchAllHistoryBookings();
+  }, [showHistoryTable]);
 
   const fetchData = async () => {
     try {
@@ -496,8 +294,7 @@ export default function NewBooking() {
     try {
       const checkDate = new Date(selectedDate);
       const bufferStart = new Date(checkDate); bufferStart.setDate(bufferStart.getDate() - 1);
-      const bufferEnd = new Date(checkDate); bufferEnd.setDate(bufferEnd.getDate() + 2);
-      const response = await fetch(`${API_URL}/dat-phong?start_date=${bufferStart.toISOString()}&end_date=${bufferEnd.toISOString()}`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } });
+      const response = await fetch(`${API_URL}/dat-phong?start_date=${bufferStart.toISOString()}&end_date=${checkDate.toISOString()}`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } });
       const data = await response.json();
       if (data.success) {
         const roomBookings = data.data.filter((b: any) => b.id_phong === formData.room && b.trang_thai !== 'da_huy');
@@ -506,22 +303,41 @@ export default function NewBooking() {
     } catch (error) { console.error(error); } finally { setFetchingBookings(false); }
   };
 
-  // --- FETCH ALL BOOKINGS FOR LOOKUP TABLE ---
-  const fetchAllBookingsForLookup = async () => {
+  // --- FETCH DATA CHO 2 BẢNG ---
+  // 1. Fetch theo ngày (cho bảng Tra Cứu Phòng)
+  const fetchAllBookingsForLookup = async (dateStr: string) => {
+      setIsLookingUp(true);
+      try {
+          const date = new Date(dateStr);
+          const start = new Date(date); start.setHours(0,0,0,0);
+          const end = new Date(date); end.setHours(23,59,59,999);
+          const response = await fetch(`${API_URL}/dat-phong?start_date=${start.toISOString()}&end_date=${end.toISOString()}`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } });
+          const data = await response.json();
+          if(data.success) setLookupBookings(data.data.filter((b:any) => b.trang_thai !== 'da_huy'));
+      } catch { } finally { setIsLookingUp(false); }
+  };
+
+  // 2. Fetch ALL (cho bảng Lịch Sử - Ẩn)
+  const fetchAllHistoryBookings = async () => {
       setIsLookingUp(true);
       try {
           const response = await fetch(`${API_URL}/dat-phong`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } });
           const data = await response.json();
-          if(data.success) {
-              setLookupBookings(data.data.filter((b:any) => b.trang_thai !== 'da_huy'));
-          }
-      } catch (e) { console.error(e) } finally { setIsLookingUp(false); }
+          if(data.success) setLookupBookings(data.data); // Dùng chung state, nhưng data nhiều hơn
+      } catch { } finally { setIsLookingUp(false); }
   };
 
-  // --- LOGIC LỌC BOOKING THEO NGÀY ---
+  // --- LOGIC LỌC & SẮP XẾP ---
+  // Dành cho bảng "Tra Cứu Phòng" (Default View)
+  const lookupRooms = useMemo(() => {
+     return rooms.filter(r => 
+        r.ma_phong.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        r.loai_phong?.ten_loai?.toLowerCase().includes(searchTerm.toLowerCase())
+     );
+  }, [rooms, searchTerm]);
+
   const getRoomDailySchedule = (roomId: string) => {
       if (!lookupDate) return [];
-
       const dayStart = new Date(lookupDate); dayStart.setHours(0, 0, 0, 0);
       const dayEnd = new Date(lookupDate); dayEnd.setHours(23, 59, 59, 999);
 
@@ -529,7 +345,7 @@ export default function NewBooking() {
         if (b.id_phong !== roomId) return false;
         const bookingStart = new Date(b.thoi_gian_nhan);
         const bookingEnd = new Date(b.thoi_gian_tra);
-        // Overlap Logic: (StartA < EndB) and (EndA > StartB)
+        // Overlap Logic
         return bookingStart < dayEnd && bookingEnd > dayStart;
       });
 
@@ -537,11 +353,23 @@ export default function NewBooking() {
       return bookings;
   };
 
-  const lookupRooms = rooms.filter(r => 
-    r.ma_phong.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    r.loai_phong?.ten_loai?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Dành cho bảng "Lịch Sử Đơn" (Hidden View)
+  const sortedHistoryBookings = useMemo(() => {
+    let filtered = [...lookupBookings];
+    if (searchTerm) {
+        const lower = searchTerm.toLowerCase();
+        filtered = filtered.filter(b => 
+            b.ma_dat?.toLowerCase().includes(lower) ||
+            b.khach_hang?.ho_ten?.toLowerCase().includes(lower) ||
+            b.khach_hang?.sdt?.includes(lower) ||
+            b.phong?.ma_phong?.toLowerCase().includes(lower)
+        );
+    }
+    // Sort mới nhất lên đầu
+    return filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [lookupBookings, searchTerm]);
 
+  // --- HANDLERS ---
   const handleSelectRoomFromLookup = (room: any) => {
       setFormData(prev => ({
           ...prev,
@@ -550,43 +378,23 @@ export default function NewBooking() {
           room: room.id
       }));
       setSelectedDate(lookupDate);
-      
-      // SHOW FORM AND SCROLL
       setShowBookingSection(true);
-      setTimeout(() => {
-          formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 100);
+      setTimeout(() => { formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 100);
   };
 
   const handleManualCreate = () => {
       setShowBookingSection(true);
-      setTimeout(() => {
-          formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 100);
+      setTimeout(() => { formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 100);
   };
 
-  // *** UPDATE: ASYNC VIEW DETAIL ***
   const handleViewBookingDetail = async (booking: any) => {
-      setViewLoadingId(booking.id); // Set loading for this specific button
+      setViewLoadingId(booking.id); 
       try {
-          const res = await fetch(`${API_URL}/dat-phong/${booking.id}`, { 
-              headers: { 'Authorization': `Bearer ${publicAnonKey}` } 
-          });
+          const res = await fetch(`${API_URL}/dat-phong/${booking.id}`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } });
           const data = await res.json();
-          if (data.success) {
-              setBookingDetail(data.data);
-          } else {
-              // Fallback to local data if fetch fails
-              setBookingDetail(booking);
-              toast.warning("Không tải được chi tiết mới nhất, hiển thị dữ liệu cũ.");
-          }
-      } catch (error) {
-          console.error(error);
-          setBookingDetail(booking);
-          toast.error("Lỗi kết nối");
-      } finally {
-          setViewLoadingId(null); // Clear loading
-      }
+          if (data.success) setBookingDetail(data.data);
+          else setBookingDetail(booking);
+      } catch { setBookingDetail(booking); } finally { setViewLoadingId(null); }
   };
 
   const handleProcessBooking = async () => {
@@ -599,19 +407,15 @@ export default function NewBooking() {
         const body: any = { trang_thai: status };
         if (noteUpdate) body.ghi_chu = noteUpdate;
         
-        const response = await fetch(`${API_URL}/dat-phong/${bookingId}`, {
+        await fetch(`${API_URL}/dat-phong/${bookingId}`, {
             method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
             body: JSON.stringify(body)
         });
-        const result = await response.json();
-        if (result.success) {
-            toast.success(type === 'approve' ? 'Đã xác nhận thanh toán!' : 'Đã từ chối đơn!');
-            setShowConfirmDialog(null);
-            setBookingDetail(null);
-            fetchAllBookingsForLookup(); 
-        } else {
-            toast.error('Lỗi: ' + result.error);
-        }
+        toast.success(type === 'approve' ? 'Đã xác nhận thanh toán!' : 'Đã từ chối đơn!');
+        setShowConfirmDialog(null);
+        setBookingDetail(null);
+        // Refresh data tùy view đang đứng
+        if (showHistoryTable) fetchAllHistoryBookings(); else fetchAllBookingsForLookup(lookupDate);
     } catch { toast.error('Lỗi kết nối'); } finally { setActionLoading(false); }
   };
 
@@ -650,8 +454,8 @@ export default function NewBooking() {
       setFormData(prev => ({ ...prev, customerName: '', customerPhone: '', customerEmail: '', notes: '', cccdFront: '', cccdBack: '' }));
       setSelectedTimeSlots([]);
       fetchBookingsForRoom();
-      fetchAllBookingsForLookup(); 
-      setShowBookingSection(false); // Hide form after success
+      if (showHistoryTable) fetchAllHistoryBookings(); else fetchAllBookingsForLookup(lookupDate);
+      setShowBookingSection(false); 
     } catch (error: any) { toast.error(error.message || 'Lỗi xử lý'); } finally { setLoading(false); }
   };
 
@@ -665,193 +469,209 @@ export default function NewBooking() {
     <div style={styles.container}>
       {/* Header */}
       <div style={styles.header}>
-        <button onClick={() => navigate(-1)} style={styles.backBtn}>
-          <ArrowLeft size={24} color="#4b5563" />
+        <div style={styles.headerLeft}>
+            <button onClick={() => navigate(-1)} style={styles.backBtn}>
+                <ArrowLeft size={24} color="#4b5563" />
+            </button>
+            <div>
+                <h1 style={styles.pageTitle}>Tạo Đơn Đặt Phòng</h1>
+
+            </div>
+        </div>
+        
+        {/* Toggle Lookup/History Button */}
+        <button onClick={() => setShowHistoryTable(!showHistoryTable)} style={styles.toggleBtn}>
+            {showHistoryTable ? <Grid size={16}/> : <List size={16}/>}
+            {showHistoryTable ? 'Xem lịch phòng (Theo ngày)' : 'Tra cứu lịch sử đơn (Chi tiết)'}
         </button>
-        <div>
-          <h1 style={styles.pageTitle}>Tạo Đơn Đặt Phòng</h1>
-          <p style={styles.pageSubtitle}>Dành cho Admin & Staff</p>
-        </div>
       </div>
 
-      {/* --- ROOM AVAILABILITY LOOKUP TOOL (TABLE VIEW) --- */}
+      {/* --- TABLE AREA: SWITCH BETWEEN "AVAILABILITY" AND "HISTORY" --- */}
       <div style={styles.lookupContainer}>
-        <div style={styles.lookupHeader}>
-             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#1f2937', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-                    <Grid size={18} /> Tra cứu nhanh trạng thái phòng
-                </h3>
-                {!showBookingSection && (
-                    <button onClick={handleManualCreate} style={styles.manualBtn}>
-                        <PenTool size={14}/> Nhập tay
-                    </button>
-                )}
-             </div>
-             <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <label style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Ngày xem:</label>
-                    <input type="date" value={lookupDate} onChange={(e) => setLookupDate(e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none' }} />
-                 </div>
-                 <div style={styles.searchBox}>
-                    <Search size={14} color="#94a3b8"/>
-                    <input type="text" placeholder="Tìm phòng..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={styles.searchInput} />
-                 </div>
-             </div>
-        </div>
-
-        {/* Legend */}
-        <div style={{ display: 'flex', gap: '16px', marginBottom: '8px', fontSize: '12px', color: '#64748b', paddingLeft: '4px' }}>
-             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#22c55e' }}></div> Trống</div>
-             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#f59e0b' }}></div> Đã đặt</div>
-             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#3b82f6' }}></div> Đang ở</div>
-             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#6b7280' }}></div> Bảo trì</div>
-        </div>
-
-        {/* ROOM TABLE */}
-        <div style={{ overflowX: 'auto', maxHeight: '500px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: 'white', position: 'relative' }}>
-            
-            {/* Loading Overlay for Table */}
-            {isLookingUp && (
-                <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20 }}>
-                    <RefreshCw size={24} className="animate-spin text-teal-600" />
+        {showHistoryTable ? (
+            // --- VIEW 2: BẢNG LỊCH SỬ ĐƠN (CHI TIẾT, TÌM KIẾM TOÀN BỘ) ---
+            <>
+                <div style={styles.lookupHeader}>
+                    <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#1f2937', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                        <List size={18} /> Danh sách tất cả đơn đặt phòng
+                    </h3>
+                    <div style={styles.searchBox}>
+                        <Search size={14} color="#94a3b8"/>
+                        <input type="text" placeholder="Tìm kiếm đơn (Mã, Tên, SĐT)..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={styles.searchInput} />
+                    </div>
                 </div>
-            )}
-
-            <table style={tableStyles.table}>
-                <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
-                    <tr>
-                        <th style={tableStyles.th}>Phòng</th>
-                        <th style={tableStyles.th}>Mã đơn</th>
-                        <th style={tableStyles.th}>Khách hàng</th>
-                        <th style={tableStyles.th}>Check-in</th>
-                        <th style={tableStyles.th}>Check-out</th>
-                        <th style={tableStyles.th}>Thời gian</th>
-                        <th style={{...tableStyles.th, textAlign: 'center'}}>Số khách</th>
-                        <th style={tableStyles.th}>Kênh</th>
-                        <th style={tableStyles.th}>Trạng thái</th>
-                        <th style={{...tableStyles.th, textAlign: 'right'}}>Tổng tiền</th>
-                        <th style={{...tableStyles.th, textAlign: 'center'}}>Thao tác</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {/* ROOMS LOOP */}
-                    {lookupRooms.map(room => {
-                        // Lấy các booking của phòng trong ngày (đã lọc theo ngày lookup)
-                        const bookings = getRoomDailySchedule(room.id);
-                        const isMaintenance = room.trang_thai === 'bao_tri';
-                        
-                        // Check if room is fully booked for the day (e.g., > 20h booked)
-                        let totalBookedHours = 0;
-                        bookings.forEach(b => {
-                            const diff = differenceInHours(new Date(b.thoi_gian_tra), new Date(b.thoi_gian_nhan));
-                            totalBookedHours += diff;
-                        });
-                        const isFullDayBooked = totalBookedHours > 20;
-
-                        // RENDER LOGIC:
-                        // 1. Render booking rows
-                        // 2. Render 1 extra "Empty" row IF room is NOT full booked AND NOT maintenance
-                        const rows = [];
-                        
-                        // Existing Bookings
-                        if (bookings.length > 0) {
-                            bookings.forEach(booking => {
-                                rows.push(
-                                    <tr 
-                                        key={booking.id} 
-                                        style={tableStyles.tr}
-                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
-                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                    >
-                                        <td style={{...tableStyles.td, textAlign: 'center', fontWeight: '700', color: '#1f2937'}}>{room.ma_phong}</td>
-                                        <td style={{...tableStyles.td, fontFamily: 'monospace', color: '#2563eb', fontWeight: 'bold'}}>{booking.ma_dat}</td>
-                                        <td style={{...tableStyles.td, fontWeight: '600'}}>
-                                            <div>{booking.khach_hang?.ho_ten || 'Khách lẻ'}</div>
-                                            <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 'normal' }}>{booking.khach_hang?.sdt}</div>
-                                        </td>
-                                        <td style={tableStyles.td}>{formatDate(booking.thoi_gian_nhan)}</td>
-                                        <td style={tableStyles.td}>{formatDate(booking.thoi_gian_tra)}</td>
-                                        <td style={tableStyles.td}>{calculateDuration(booking.thoi_gian_nhan, booking.thoi_gian_tra)}</td>
-                                        <td style={{...tableStyles.td, textAlign: 'center'}}>{booking.so_khach}</td>
-                                        <td style={tableStyles.td}>{booking.kenh_dat}</td>
-                                        <td style={tableStyles.td}>{getStatusBadge(booking.trang_thai)}</td>
-                                        <td style={{...tableStyles.td, textAlign: 'right', fontWeight: 'bold'}}>{formatCurrency(booking.tong_tien)}</td>
-                                        <td style={{...tableStyles.td, textAlign: 'center'}}>
-                                            <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                                                {booking.trang_thai === 'cho_coc' && (
-                                                    <button onClick={() => handleViewBookingDetail(booking)} style={{ padding: '4px 8px', borderRadius: '6px', border: 'none', backgroundColor: '#22c55e', color: 'white', cursor: 'pointer', fontSize: '11px', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                                        <Check size={12}/> Xác nhận
-                                                    </button>
-                                                )}
-                                                <button onClick={() => handleViewBookingDetail(booking)} style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #e2e8f0', backgroundColor: 'white', color: '#374151', cursor: 'pointer', fontSize: '11px', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                                    <Eye size={12}/> Xem
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                );
-                            });
-                        }
-
-                        // Empty Row (Available for Booking)
-                        if (!isMaintenance && !isFullDayBooked) {
-                            rows.push(
-                                <tr 
-                                    key={`empty-${room.id}`}
-                                    style={tableStyles.tr}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0fdf4'}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                >
-                                    <td style={{...tableStyles.td, textAlign: 'center', fontWeight: '700', color: '#15803d'}}>{room.ma_phong}</td>
-                                    <td style={tableStyles.td}>-</td>
-                                    <td style={{...tableStyles.td, color: '#94a3b8', fontStyle: 'italic'}}>Chưa có khách</td>
-                                    <td style={tableStyles.td}>-</td>
-                                    <td style={tableStyles.td}>-</td>
-                                    <td style={tableStyles.td}>-</td>
-                                    <td style={{...tableStyles.td, textAlign: 'center'}}>-</td>
-                                    <td style={tableStyles.td}>-</td>
-                                    <td style={tableStyles.td}>
-                                        <span style={tableStyles.availableBadge}>Trống</span>
+                <div style={{ overflowX: 'auto', maxHeight: '600px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: 'white' }}>
+                    <table style={tableStyles.table}>
+                        <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+                            <tr>
+                                <th style={tableStyles.th}>Mã đơn</th>
+                                <th style={tableStyles.th}>Khách hàng</th>
+                                <th style={{...tableStyles.th, textAlign: 'center'}}>Phòng</th>
+                                <th style={tableStyles.th}>Check-in</th>
+                                <th style={tableStyles.th}>Check-out</th>
+                                <th style={tableStyles.th}>Thời gian</th>
+                                <th style={tableStyles.th}>Kênh</th>
+                                <th style={tableStyles.th}>Trạng thái</th>
+                                <th style={{...tableStyles.th, textAlign: 'right'}}>Tổng tiền</th>
+                                <th style={{...tableStyles.th, textAlign: 'center'}}>Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {sortedHistoryBookings.map((booking: any) => (
+                                <tr key={booking.id} style={tableStyles.tr} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                    <td style={{...tableStyles.td, fontFamily: 'monospace', color: '#2563eb', fontWeight: 'bold'}}>{booking.ma_dat}</td>
+                                    <td style={{...tableStyles.td, fontWeight: '600'}}>
+                                        <div>{booking.khach_hang?.ho_ten || 'Khách lẻ'}</div>
+                                        <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 'normal' }}>{booking.khach_hang?.sdt}</div>
                                     </td>
-                                    <td style={{...tableStyles.td, textAlign: 'right'}}>-</td>
+                                    <td style={{...tableStyles.td, textAlign: 'center', fontWeight: '700'}}>{booking.phong?.ma_phong}</td>
+                                    <td style={tableStyles.td}>{formatDate(booking.thoi_gian_nhan)}</td>
+                                    <td style={tableStyles.td}>{formatDate(booking.thoi_gian_tra)}</td>
+                                    <td style={tableStyles.td}><span style={{ fontSize: '12px', color: '#6b7280' }}>{calculateDuration(booking.thoi_gian_nhan, booking.thoi_gian_tra)}</span></td>
+                                    <td style={tableStyles.td}>{booking.kenh_dat}</td>
+                                    <td style={tableStyles.td}>{getStatusBadge(booking.trang_thai)}</td>
+                                    <td style={{...tableStyles.td, textAlign: 'right', fontWeight: 'bold'}}>{formatCurrency(booking.tong_tien)}</td>
                                     <td style={{...tableStyles.td, textAlign: 'center'}}>
-                                        <button onClick={() => handleSelectRoomFromLookup(room)} style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', backgroundColor: '#22c55e', color: 'white', cursor: 'pointer', fontSize: '11px', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                            <Plus size={12}/> Chọn
-                                        </button>
+                                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                                            {booking.trang_thai === 'cho_coc' && (
+                                                <button onClick={() => handleViewBookingDetail(booking)} style={{ padding: '4px 8px', borderRadius: '6px', border: 'none', backgroundColor: '#22c55e', color: 'white', cursor: 'pointer', fontSize: '11px', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Check size={12}/> Xác nhận</button>
+                                            )}
+                                            <button onClick={() => handleViewBookingDetail(booking)} style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #e2e8f0', backgroundColor: 'white', color: '#374151', cursor: 'pointer', fontSize: '11px', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Eye size={12}/> Xem</button>
+                                        </div>
                                     </td>
                                 </tr>
-                            );
-                        }
+                            ))}
+                            {sortedHistoryBookings.length === 0 && <tr><td colSpan={10} style={{ padding: '24px', textAlign: 'center', color: '#94a3b8' }}>{isLookingUp ? 'Đang tải...' : 'Không có đơn nào.'}</td></tr>}
+                        </tbody>
+                    </table>
+                </div>
+            </>
+        ) : (
+            // --- VIEW 1: BẢNG TRA CỨU PHÒNG THEO NGÀY (NHƯ CŨ) ---
+            <>
+                <div style={styles.lookupHeader}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#1f2937', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                            <Grid size={18} /> Tình trạng phòng theo ngày
+                        </h3>
+                        {!showBookingSection && <button onClick={handleManualCreate} style={styles.manualBtn}><PenTool size={14}/> Nhập tay</button>}
+                    </div>
+                    <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <label style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Ngày xem:</label>
+                            <input type="date" value={lookupDate} onChange={(e) => setLookupDate(e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none' }} />
+                        </div>
+                        <div style={styles.searchBox}>
+                            <Search size={14} color="#94a3b8"/>
+                            <input type="text" placeholder="Tìm phòng..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={styles.searchInput} />
+                        </div>
+                    </div>
+                </div>
 
-                        // Maintenance Row
-                        if (isMaintenance) {
-                             rows.push(
-                                <tr key={`maint-${room.id}`} style={tableStyles.tr}>
-                                    <td style={{...tableStyles.td, textAlign: 'center', fontWeight: '700', color: '#64748b'}}>{room.ma_phong}</td>
-                                    <td style={tableStyles.td}>-</td>
-                                    <td style={tableStyles.td}>-</td>
-                                    <td style={tableStyles.td} colSpan={7} style={{...tableStyles.td, textAlign: 'center', fontStyle: 'italic', color: '#64748b'}}>Phòng đang bảo trì</td>
-                                    <td style={tableStyles.td}></td>
-                                </tr>
-                             )
-                        }
+                <div style={{ display: 'flex', gap: '16px', marginBottom: '8px', fontSize: '12px', color: '#64748b', paddingLeft: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#22c55e' }}></div> Trống</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#f59e0b' }}></div> Đã đặt / Đang ở</div>
+                </div>
 
-                        return rows;
-                    })}
-                    
-                    {lookupRooms.length === 0 && (
-                        <tr>
-                            <td colSpan={11} style={{ padding: '24px', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>
-                                Không tìm thấy phòng nào phù hợp.
-                            </td>
-                        </tr>
-                    )}
-                </tbody>
-            </table>
-        </div>
+                <div style={{ overflowX: 'auto', maxHeight: '500px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: 'white', position: 'relative' }}>
+                    {isLookingUp && <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20 }}><RefreshCw size={24} className="animate-spin text-teal-600" /></div>}
+                    <table style={tableStyles.table}>
+                        <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+                            <tr>
+                                <th style={tableStyles.th}>Phòng</th>
+                                <th style={tableStyles.th}>Mã đơn</th>
+                                <th style={tableStyles.th}>Khách hàng</th>
+                                <th style={tableStyles.th}>Check-in</th>
+                                <th style={tableStyles.th}>Check-out</th>
+                                <th style={tableStyles.th}>Thời gian</th>
+                                <th style={tableStyles.th}>Kênh</th>
+                                <th style={tableStyles.th}>Trạng thái</th>
+                                <th style={{...tableStyles.th, textAlign: 'right'}}>Tổng tiền</th>
+                                <th style={{...tableStyles.th, textAlign: 'center'}}>Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {lookupRooms.map(room => {
+                                const bookings = getRoomDailySchedule(room.id);
+                                const isMaintenance = room.trang_thai === 'bao_tri';
+                                
+                                let totalBookedHours = 0;
+                                bookings.forEach(b => {
+                                    const diff = differenceInHours(new Date(b.thoi_gian_tra), new Date(b.thoi_gian_nhan));
+                                    totalBookedHours += diff;
+                                });
+                                const isFullDayBooked = totalBookedHours > 20;
+
+                                const rows = [];
+                                
+                                if (bookings.length > 0) {
+                                    bookings.forEach(booking => {
+                                        rows.push(
+                                            <tr key={booking.id} style={tableStyles.tr} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                                <td style={{...tableStyles.td, textAlign: 'center', fontWeight: '700', color: '#1f2937'}}>{room.ma_phong}</td>
+                                                <td style={{...tableStyles.td, fontFamily: 'monospace', color: '#2563eb', fontWeight: 'bold'}}>{booking.ma_dat}</td>
+                                                <td style={{...tableStyles.td, fontWeight: '600'}}>
+                                                    <div>{booking.khach_hang?.ho_ten || 'Khách lẻ'}</div>
+                                                    <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 'normal' }}>{booking.khach_hang?.sdt}</div>
+                                                </td>
+                                                <td style={tableStyles.td}>{formatDate(booking.thoi_gian_nhan)}</td>
+                                                <td style={tableStyles.td}>{formatDate(booking.thoi_gian_tra)}</td>
+                                                <td style={tableStyles.td}>{calculateDuration(booking.thoi_gian_nhan, booking.thoi_gian_tra)}</td>
+                                                <td style={tableStyles.td}>{booking.kenh_dat}</td>
+                                                <td style={tableStyles.td}>{getStatusBadge(booking.trang_thai)}</td>
+                                                <td style={{...tableStyles.td, textAlign: 'right', fontWeight: 'bold'}}>{formatCurrency(booking.tong_tien)}</td>
+                                                <td style={{...tableStyles.td, textAlign: 'center'}}>
+                                                    <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                                                        {booking.trang_thai === 'cho_coc' && <button onClick={() => handleViewBookingDetail(booking)} style={{ padding: '4px 8px', borderRadius: '6px', border: 'none', backgroundColor: '#22c55e', color: 'white', cursor: 'pointer', fontSize: '11px', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Check size={12}/> Xác nhận</button>}
+                                                        <button onClick={() => handleViewBookingDetail(booking)} style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #e2e8f0', backgroundColor: 'white', color: '#374151', cursor: 'pointer', fontSize: '11px', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Eye size={12}/> Xem</button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    });
+                                }
+
+                                if (!isMaintenance && !isFullDayBooked) {
+                                    rows.push(
+                                        <tr key={`empty-${room.id}`} style={tableStyles.tr} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0fdf4'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                            <td style={{...tableStyles.td, textAlign: 'center', fontWeight: '700', color: '#15803d'}}>{room.ma_phong}</td>
+                                            <td style={tableStyles.td}>-</td>
+                                            <td style={{...tableStyles.td, color: '#94a3b8', fontStyle: 'italic'}}>Chưa có khách</td>
+                                            <td style={tableStyles.td}>-</td>
+                                            <td style={tableStyles.td}>-</td>
+                                            <td style={tableStyles.td}>-</td>
+                                            <td style={tableStyles.td}>-</td>
+                                            <td style={tableStyles.td}>
+                                                <span style={{display: 'inline-block', padding: '4px 10px', borderRadius: '99px', fontSize: '11px', fontWeight: '600', backgroundColor: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0'}}>Trống</span>
+                                            </td>
+                                            <td style={{...tableStyles.td, textAlign: 'right'}}>-</td>
+                                            <td style={{...tableStyles.td, textAlign: 'center'}}>
+                                                <button onClick={() => handleSelectRoomFromLookup(room)} style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', backgroundColor: '#22c55e', color: 'white', cursor: 'pointer', fontSize: '11px', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Plus size={12}/> Chọn</button>
+                                            </td>
+                                        </tr>
+                                    );
+                                }
+                                if (isMaintenance) {
+                                     rows.push(
+                                        <tr key={`maint-${room.id}`} style={tableStyles.tr}>
+                                            <td style={{...tableStyles.td, textAlign: 'center', fontWeight: '700', color: '#64748b'}}>{room.ma_phong}</td>
+                                            <td style={tableStyles.td} colSpan={8} style={{...tableStyles.td, textAlign: 'center', fontStyle: 'italic', color: '#64748b'}}>Phòng đang bảo trì</td>
+                                            <td style={tableStyles.td}></td>
+                                        </tr>
+                                     )
+                                }
+                                return rows;
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </>
+        )}
       </div>
 
-      {/* DETAIL MODAL WITH CONFIRM PAYMENT (FOR TABLE) */}
+      {/* DETAIL MODAL & FORM (GIỮ NGUYÊN) */}
+      {/* ... (Phần dưới giữ nguyên như các modal và form đã làm) ... */}
+      {/* ... (Copy lại phần Modal Detail, Confirm Dialog và Form từ bản trước) ... */}
       {bookingDetail && (
         <div style={styles.modalOverlay}>
           <div style={styles.modalContent}>
