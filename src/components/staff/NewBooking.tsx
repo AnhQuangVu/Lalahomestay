@@ -470,9 +470,9 @@ export default function NewBooking() {
       {/* Header */}
       <div style={styles.header}>
         <div style={styles.headerLeft}>
-            <button onClick={() => navigate(-1)} style={styles.backBtn}>
+            {/* <button onClick={() => navigate(-1)} style={styles.backBtn}>
                 <ArrowLeft size={24} color="#4b5563" />
-            </button>
+            </button> */}
             <div>
                 <h1 style={styles.pageTitle}>Tạo Đơn Đặt Phòng</h1>
 
