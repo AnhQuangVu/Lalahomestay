@@ -422,6 +422,7 @@ export default function BookingPage() {
   const [uploadingCccd, setUploadingCccd] = useState(false);
   const [bookingData, setBookingData] = useState<any>(null);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [existingBookings, setExistingBookings] = useState<any[]>([]);
 
   useEffect(() => {
     if (step === 2 && bookingType === 'gio' && !selectedDate) {
@@ -442,6 +443,40 @@ export default function BookingPage() {
   }, []);
 
   useEffect(() => { filterRooms(); }, [allRooms, selectedLocation, selectedConcept, priceRange]);
+
+  // Fetch existing bookings for overlap check
+  useEffect(() => {
+    if (selectedRoom?.id && selectedDate) {
+      fetchBookingsForRoom();
+    } else {
+      setExistingBookings([]);
+    }
+  }, [selectedRoom?.id, selectedDate, numberOfNights]);
+
+  const fetchBookingsForRoom = async () => {
+    if (!selectedRoom || !selectedDate) return;
+    try {
+      const checkDate = new Date(selectedDate);
+      const bufferStart = new Date(checkDate);
+      bufferStart.setDate(bufferStart.getDate() - 1);
+      const bufferEnd = new Date(checkDate);
+      bufferEnd.setDate(bufferEnd.getDate() + numberOfNights + 1);
+
+      const response = await fetch(
+        `${API_URL}/dat-phong?start_date=${bufferStart.toISOString()}&end_date=${bufferEnd.toISOString()}`,
+        { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
+      );
+      const data = await response.json();
+      if (data.success) {
+        const roomBookings = data.data.filter((b: any) =>
+          b.id_phong === selectedRoom.id && b.trang_thai !== 'da_huy'
+        );
+        setExistingBookings(roomBookings);
+      }
+    } catch (error) {
+      console.error('Error fetching bookings:', error);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -500,11 +535,14 @@ export default function BookingPage() {
   };
 
   const handleNextStep = async () => {
+    // Ngăn double-click
+    if (loading) return;
+    
     if (step === 1) {
       if (!selectedRoom) { toast.error('Bạn phải chọn phòng trước.'); return; }
       setStep(2);
     } else if (step === 2) {
-      let checkInDateTime, checkOutDateTime;
+      let checkInDateTime: Date | undefined, checkOutDateTime: Date | undefined;
 
       if (bookingType === 'ngay') {
         if (!selectedDate) { toast.error('Chọn ngày nhận phòng.'); return; }
@@ -517,6 +555,23 @@ export default function BookingPage() {
         checkOutDateTime.setHours(12, 0, 0, 0);
         
         if (new Date() > checkInDateTime) { toast.error('Không thể đặt ngày trong quá khứ.'); return; }
+
+        // Kiểm tra trùng lịch với các booking hiện có
+        const hasOverlap = existingBookings.some((booking: any) => {
+          const bStart = new Date(booking.thoi_gian_nhan);
+          const bEnd = new Date(booking.thoi_gian_tra);
+          // Overlap: (StartA < EndB) AND (EndA > StartB)
+          return checkInDateTime! < bEnd && checkOutDateTime! > bStart;
+        });
+
+        if (hasOverlap) {
+          toast.error('Phòng đã có booking trong khoảng thời gian này. Vui lòng chọn ngày khác.');
+          return;
+        }
+
+        // Set checkIn và checkOut state
+        setCheckIn(toLocalISOString(checkInDateTime!));
+        setCheckOut(toLocalISOString(checkOutDateTime!));
       } else {
         if (selectedTimeSlots.length === 0) { toast.error('Chọn ít nhất 1 khung giờ.'); return; }
         // Với nhiều slot, ta chỉ cần kiểm tra slot sớm nhất
@@ -525,7 +580,8 @@ export default function BookingPage() {
 
       setStep(3);
     } else if (step === 3) {
-      handleSubmitBooking();
+      setLoading(true); // Set loading trước để ngăn double-click
+      await handleSubmitBooking();
     }
   };
 
@@ -549,10 +605,13 @@ export default function BookingPage() {
   const handleSubmitBooking = async () => {
     if (!fullName || !phone) return toast.error('Nhập đầy đủ họ tên và SĐT.');
     if (!/^0[0-9]{9,10}$/.test(phone)) return toast.error('SĐT không hợp lệ.');
+    if (!cccdFront && !cccdFrontPreview) return toast.error('Vui lòng tải ảnh CCCD mặt trước.');
+    if (!cccdBack && !cccdBackPreview) return toast.error('Vui lòng tải ảnh CCCD mặt sau.');
     
     setLoading(true);
     try {
-      let cccdFrontUrl = null; let cccdBackUrl = null;
+      let cccdFrontUrl = cccdFrontPreview || null; 
+      let cccdBackUrl = cccdBackPreview || null;
       if (cccdFront || cccdBack) {
         setUploadingCccd(true); toast.info('Đang upload CCCD...');
         try {
