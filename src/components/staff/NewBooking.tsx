@@ -578,7 +578,9 @@ export default function NewBooking() {
                     <table style={tableStyles.table}>
                         <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
                             <tr>
-                                <th style={tableStyles.th}>Phòng</th>
+                                <th style={tableStyles.th}>Cơ sở</th>
+                                <th style={tableStyles.th}>Loại phòng</th>
+                                <th style={tableStyles.th}>Mã phòng</th>
                                 <th style={tableStyles.th}>Mã đơn</th>
                                 <th style={tableStyles.th}>Khách hàng</th>
                                 <th style={tableStyles.th}>Check-in</th>
@@ -608,6 +610,8 @@ export default function NewBooking() {
                                     bookings.forEach(booking => {
                                         rows.push(
                                             <tr key={booking.id} style={tableStyles.tr} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                                <td style={{...tableStyles.td, fontSize: '11px', color: '#6b7280'}}>{room.loai_phong?.co_so?.ten_co_so || '-'}</td>
+                                                <td style={{...tableStyles.td, fontSize: '12px', fontWeight: '500'}}>{room.loai_phong?.ten_loai || '-'}</td>
                                                 <td style={{...tableStyles.td, textAlign: 'center', fontWeight: '700', color: '#1f2937'}}>{room.ma_phong}</td>
                                                 <td style={{...tableStyles.td, fontFamily: 'monospace', color: '#2563eb', fontWeight: 'bold'}}>{booking.ma_dat}</td>
                                                 <td style={{...tableStyles.td, fontWeight: '600'}}>
@@ -634,6 +638,8 @@ export default function NewBooking() {
                                 if (!isMaintenance && !isFullDayBooked) {
                                     rows.push(
                                         <tr key={`empty-${room.id}`} style={tableStyles.tr} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0fdf4'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                            <td style={{...tableStyles.td, fontSize: '11px', color: '#6b7280'}}>{room.loai_phong?.co_so?.ten_co_so || '-'}</td>
+                                            <td style={{...tableStyles.td, fontSize: '12px', fontWeight: '500'}}>{room.loai_phong?.ten_loai || '-'}</td>
                                             <td style={{...tableStyles.td, textAlign: 'center', fontWeight: '700', color: '#15803d'}}>{room.ma_phong}</td>
                                             <td style={tableStyles.td}>-</td>
                                             <td style={{...tableStyles.td, color: '#94a3b8', fontStyle: 'italic'}}>Chưa có khách</td>
@@ -654,6 +660,8 @@ export default function NewBooking() {
                                 if (isMaintenance) {
                                      rows.push(
                                         <tr key={`maint-${room.id}`} style={tableStyles.tr}>
+                                            <td style={{...tableStyles.td, fontSize: '11px', color: '#6b7280'}}>{room.loai_phong?.co_so?.ten_co_so || '-'}</td>
+                                            <td style={{...tableStyles.td, fontSize: '12px', fontWeight: '500'}}>{room.loai_phong?.ten_loai || '-'}</td>
                                             <td style={{...tableStyles.td, textAlign: 'center', fontWeight: '700', color: '#64748b'}}>{room.ma_phong}</td>
                                             <td colSpan={8} style={{...tableStyles.td, textAlign: 'center', fontStyle: 'italic', color: '#64748b'}}>Phòng đang bảo trì</td>
                                             <td style={tableStyles.td}></td>
