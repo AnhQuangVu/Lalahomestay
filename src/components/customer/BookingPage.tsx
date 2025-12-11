@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { format, eachDayOfInterval, startOfDay } from 'date-fns';
 import { DayPicker } from 'react-day-picker';
 import 'react-day-picker/dist/style.css';
@@ -18,6 +18,9 @@ import RoomImageCarousel from './RoomImageCarousel';
 import { cn } from '../ui/utils';
 
 const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-faeb1932`;
+
+// Ref để ngăn double-submit (state update không đủ nhanh)
+let isSubmittingGlobal = false;
 
 function toLocalISOString(date: Date) {
   const pad = (n: number) => n.toString().padStart(2, '0');
@@ -535,8 +538,8 @@ export default function BookingPage() {
   };
 
   const handleNextStep = async () => {
-    // Ngăn double-click
-    if (loading) return;
+    // Ngăn double-click bằng cả ref (sync) và state
+    if (loading || isSubmittingGlobal) return;
     
     if (step === 1) {
       if (!selectedRoom) { toast.error('Bạn phải chọn phòng trước.'); return; }
@@ -580,8 +583,10 @@ export default function BookingPage() {
 
       setStep(3);
     } else if (step === 3) {
+      isSubmittingGlobal = true; // Set ngay lập tức (sync)
       setLoading(true); // Set loading trước để ngăn double-click
       await handleSubmitBooking();
+      isSubmittingGlobal = false; // Reset sau khi xong
     }
   };
 
