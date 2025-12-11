@@ -1,269 +1,363 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Toaster, toast } from 'sonner';
-import {
-  UserCheck, LogOut, Sparkles,
-  FileText, User, Plus, X,
-  CreditCard, MapPin, Phone, StickyNote, AlertCircle,
-  Clock, Ban, Check, Image as ImageIcon,
-  Home, CheckCircle, XCircle, TrendingUp
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { uploadToCloudinary } from '../../utils/cloudinary';
+import { 
+  Calendar, Users, Clock, RefreshCw, Check, AlertCircle, UploadCloud, 
+  ChevronRight, ArrowLeft, Info, FileText, Search, Grid, List, Plus, Eye, Ban, Phone, MapPin, Image as ImageIcon, PenTool, X, Loader2
 } from 'lucide-react';
-import { differenceInMinutes, format, isValid, isFuture, isPast } from 'date-fns';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
+import { format, differenceInMinutes, differenceInHours } from 'date-fns';
+import RoomImageCarousel from './RoomImageCarousel'; 
 
-// --- CONFIG ---
 const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-faeb1932`;
 
 // --- HELPER FUNCTIONS ---
 const formatCurrency = (amount: number) => 
   new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(amount || 0);
 
-// --- INTERFACES ---
-interface Room {
-  id: string; number: string; concept: string; location: string;
-  status: 'available' | 'occupied' | 'checkout-soon' | 'checkin-soon' | 'overdue' | 'maintenance' | 'pending';
-  cleanStatus: 'clean' | 'dirty' | 'cleaning';
-  price2h: number; priceNight: number;
-  currentBooking?: {
-    id: string;
-    code: string; customerName: string; checkIn: string; checkOut: string;
-    source: string; note: string; totalPrice: number; deposit: number;
-    status: string;
-    cccdTruoc?: string; cccdSau?: string;
-  };
-}
+const formatDate = (dateStr: string) => {
+    if (!dateStr) return '-';
+    try {
+        const d = new Date(dateStr);
+        return (
+            <div>
+                <div style={{fontWeight: 'bold', fontSize: '13px'}}>{format(d, 'dd/MM/yy')}</div>
+                <div style={{fontSize: '11px', color: '#6b7280'}}>{format(d, 'HH:mm')}</div>
+            </div>
+        );
+    } catch { return '-'; }
+};
 
-// --- STYLES OBJECT ---
+const calculateDuration = (start: string, end: string) => {
+    if (!start || !end) return '-';
+    try {
+        const diffMins = differenceInMinutes(new Date(end), new Date(start));
+        const hours = Math.floor(diffMins / 60);
+        const days = Math.floor(hours / 24);
+        
+        return (
+            <div>
+                <div style={{fontWeight: 'bold', fontSize: '13px'}}>{hours}h</div>
+                {days >= 1 && <div style={{fontSize: '11px', color: '#6b7280'}}>({days} đêm)</div>}
+            </div>
+        );
+    } catch { return '-'; }
+};
+
+const toLocalISOString = (date: Date) => {
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+};
+
+const getStatusBadge = (status: string) => {
+    const styleBase: React.CSSProperties = { padding: '4px 10px', borderRadius: '99px', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap', border: '1px solid', display: 'inline-block' };
+    
+    switch (status) {
+        case 'cho_coc': return <span style={{...styleBase, backgroundColor: '#fff7ed', color: '#c2410c', borderColor: '#fdba74'}}>Chưa thanh toán</span>;
+        case 'da_coc': return <span style={{...styleBase, backgroundColor: '#f0fdf4', color: '#15803d', borderColor: '#86efac'}}>Đã cọc</span>;
+        case 'da_nhan_phong': return <span style={{...styleBase, backgroundColor: '#eff6ff', color: '#1d4ed8', borderColor: '#93c5fd'}}>Đang ở</span>;
+        case 'da_tra_phong': return <span style={{...styleBase, backgroundColor: '#f3f4f6', color: '#4b5563', borderColor: '#d1d5db'}}>Đã trả</span>;
+        case 'da_huy': return <span style={{...styleBase, backgroundColor: '#fef2f2', color: '#b91c1c', borderColor: '#fca5a5'}}>Đã hủy</span>;
+        default: return <span style={{...styleBase, backgroundColor: '#f3f4f6', color: '#4b5563', borderColor: '#d1d5db'}}>{status}</span>;
+    }
+};
+
+const getRoomImages = (room: any) => {
+    let images: string[] = [];
+    if (room.anh_chinh) images.push(room.anh_chinh);
+    if (room.anh_phu && Array.isArray(room.anh_phu)) {
+        images = [...images, ...room.anh_phu];
+    }
+    if (images.length === 0) {
+        images = [`https://source.unsplash.com/random/800x600?room,hotel,${room.id}`];
+    }
+    return images;
+};
+
+// --- STYLES OBJECT (INLINE CSS) ---
 const styles: { [key: string]: React.CSSProperties } = {
-  container: { maxWidth: '1400px', margin: '0 auto', padding: '24px 16px', fontFamily: '"Segoe UI", Roboto, Helvetica, Arial, sans-serif', color: '#1f2937', paddingBottom: '80px' },
-  
-  // Header
-  pageHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' },
+  container: { maxWidth: '1400px', margin: '0 auto', padding: '20px 16px', paddingBottom: '100px', fontFamily: '"Segoe UI", Roboto, Helvetica, Arial, sans-serif', color: '#1f2937' },
+  header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' },
+  headerLeft: { display: 'flex', alignItems: 'center', gap: '16px' },
+  backBtn: { padding: '10px', borderRadius: '50%', border: 'none', backgroundColor: 'white', cursor: 'pointer', transition: 'background-color 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
   pageTitle: { fontSize: '24px', fontWeight: '700', color: '#111827', margin: 0 },
-  pageSubtitle: { fontSize: '14px', color: '#6b7280', marginTop: '4px' },
+  pageSubtitle: { fontSize: '14px', color: '#6b7280', marginTop: '4px', margin: 0 },
   
-  // Filter
-  filterContainer: { display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '24px' },
-  filterBtn: { padding: '8px 16px', borderRadius: '8px', fontSize: '14px', fontWeight: '500', border: '1px solid transparent', cursor: 'pointer', transition: 'all 0.2s' },
-  
-  // Grid Rooms - Giảm kích thước min vì không có ảnh
-  gridRooms: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '20px' },
-  
-  // Room Card Design (Text Only)
-  roomCard: {
-    borderRadius: '16px',
-    overflow: 'hidden',
-    cursor: 'pointer',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-    transition: 'all 0.2s ease-in-out',
-    display: 'flex',
-    flexDirection: 'column',
-    minHeight: '140px', // Giảm chiều cao tối thiểu
-    position: 'relative',
-    backgroundColor: 'white',
-    border: '1px solid #f3f4f6',
-  },
-  
-  roomTop: {
-    padding: '16px 16px 8px 16px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'start',
-  },
-  
-  roomNumberLarge: { fontSize: '28px', fontWeight: '800', color: '#111827', lineHeight: 1 },
-  roomConceptSmall: { fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '4px' },
+  // Layout
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '32px' },
+  col: { display: 'flex', flexDirection: 'column', gap: '24px' },
+  card: { backgroundColor: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)', border: '1px solid #f3f4f6' },
+  cardHeader: { fontSize: '16px', fontWeight: '700', color: '#1f2937', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' },
+  stepBadge: { width: '24px', height: '24px', borderRadius: '50%', backgroundColor: '#ccfbf1', color: '#0f766e', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold' },
 
-  roomContent: { padding: '0 16px 16px 16px', flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'flex-end' },
-  
-  infoRow: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#4b5563' },
-  priceTag: { backgroundColor: '#f3f4f6', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: '600', color: '#374151' },
-  
-  statusBar: { padding: '8px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', fontWeight: '600', borderTop: '1px solid #f3f4f6' },
-  statusDot: { width: '8px', height: '8px', borderRadius: '50%', display: 'inline-block', marginRight: '6px' },
+  // Form Elements
+  formGroup: { display: 'flex', flexDirection: 'column', gap: '16px' },
+  inputWrapper: { width: '100%' },
+  label: { display: 'block', fontSize: '12px', fontWeight: '600', color: '#6b7280', marginBottom: '6px', textTransform: 'uppercase' },
+  input: { width: '100%', padding: '12px 16px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', outline: 'none', transition: 'border-color 0.2s', boxSizing: 'border-box' },
+  select: { width: '100%', padding: '12px 16px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', outline: 'none', backgroundColor: 'white', boxSizing: 'border-box' },
+  textarea: { width: '100%', padding: '12px 16px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', outline: 'none', minHeight: '80px', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' },
 
-  // Modal Styles (Giữ nguyên)
+  tabContainer: { display: 'flex', gap: '12px', marginBottom: '24px' },
+  tabBtn: { flex: 1, padding: '12px', borderRadius: '12px', fontWeight: '600', fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.2s' },
+
+  uploadGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' },
+  uploadBox: { height: '180px', border: '2px dashed #e5e7eb', borderRadius: '12px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backgroundColor: '#f9fafb', transition: 'all 0.2s', position: 'relative', overflow: 'hidden' },
+  uploadedImg: { width: '100%', height: '100%', objectFit: 'cover' },
+  removeBtn: { position: 'absolute', top: '8px', right: '8px', width: '28px', height: '28px', borderRadius: '50%', backgroundColor: '#ef4444', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' },
+
+  statusBox: { padding: '16px', borderRadius: '12px', border: '1px solid', display: 'flex', alignItems: 'start', gap: '12px' },
+  footer: { marginTop: '24px', display: 'flex', justifyContent: 'flex-end', gap: '16px', marginBottom: '40px' },
+  btn: { padding: '12px 32px', borderRadius: '99px', fontSize: '15px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', border: 'none', transition: 'all 0.2s', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' },
+  
+  bookingListCard: { backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '12px', padding: '16px', marginTop: '16px' },
+  bookingListItem: { backgroundColor: 'white', padding: '10px 12px', borderRadius: '8px', border: '1px solid #fde68a', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' },
+
+  // LOOKUP STYLES
+  lookupContainer: { backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '20px', marginBottom: '32px', position: 'relative' },
+  lookupHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '16px' },
+  searchBox: { display: 'flex', alignItems: 'center', backgroundColor: 'white', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0 12px', flex: 1, minWidth: '200px' },
+  searchInput: { border: 'none', outline: 'none', padding: '10px 0', fontSize: '14px', width: '100%', marginLeft: '8px' },
+  
   modalOverlay: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: '16px' },
   modalContent: { backgroundColor: 'white', borderRadius: '20px', width: '100%', maxWidth: '480px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', overflow: 'hidden', maxHeight: '90vh', overflowY: 'auto' },
   modalHeader: { padding: '20px 24px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ffffff' },
   modalBody: { padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' },
-  
-  input: { width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '14px', outline: 'none', transition: 'border-color 0.2s' },
-  label: { display: 'block', fontSize: '13px', color: '#4b5563', marginBottom: '6px', fontWeight: '500' },
-  btnAction: { width: '100%', padding: '12px', borderRadius: '12px', fontWeight: '600', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.2s' },
-  
   cccdContainer: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '8px' },
-  cccdBox: { height: '120px', width: '100%', border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', cursor: 'pointer', position: 'relative' },
-  cccdImg: { width: '100%', height: '100%', objectFit: 'cover' },
-  cccdLabel: { position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.6)', color: 'white', fontSize: '10px', textAlign: 'center', padding: '2px' },
-  noCccd: { height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontSize: '12px', backgroundColor: '#f9fafb', border: '2px dashed #e5e7eb', borderRadius: '8px' },
-  
+  cccdImage: { width: '100%', height: '120px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #e5e7eb', cursor: 'pointer', backgroundColor: '#f9fafb' },
+  cccdPlaceholder: { width: '100%', height: '120px', borderRadius: '8px', border: '2px dashed #d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontSize: '12px', backgroundColor: '#f9fafb', flexDirection: 'column', gap: '4px' },
   paymentSection: { padding: '16px', backgroundColor: '#fffbeb', borderRadius: '12px', border: '1px solid #fcd34d' },
   confirmBtn: { flex: 1, padding: '10px', borderRadius: '8px', fontWeight: 'bold', backgroundColor: '#16a34a', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' },
   rejectBtn: { flex: 1, padding: '10px', borderRadius: '8px', fontWeight: 'bold', backgroundColor: '#ef4444', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' },
+  btnAction: { width: '100%', padding: '12px', borderRadius: '12px', fontWeight: '600', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.2s' },
   
-  pendingBanner: { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: '#ca8a04', color: 'white', fontSize: '10px', fontWeight: '800', textAlign: 'center', padding: '4px', zIndex: 10, letterSpacing: '0.5px' },
+  manualBtn: { padding: '8px 16px', borderRadius: '8px', backgroundColor: '#fff', border: '1px solid #d1d5db', fontSize: '13px', fontWeight: '600', color: '#374151', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' },
+  toggleBtn: { padding: '8px 16px', borderRadius: '8px', backgroundColor: '#3b82f6', color: 'white', border: 'none', fontSize: '13px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 5px rgba(59, 130, 246, 0.3)' }
 };
 
+// --- STYLES BỔ SUNG CHO BẢNG TRA CỨU ---
+const tableStyles: { [key: string]: React.CSSProperties } = {
+  table: { width: '100%', borderCollapse: 'collapse', fontSize: '12px', marginTop: '16px' },
+  th: { textAlign: 'left', padding: '10px', borderBottom: '1px solid #e2e8f0', color: '#64748b', fontWeight: '700', backgroundColor: '#f8fafc', whiteSpace: 'nowrap' },
+  td: { padding: '10px', borderBottom: '1px solid #f1f5f9', color: '#334155', verticalAlign: 'middle' },
+  tr: { cursor: 'pointer', transition: 'background-color 0.15s' },
+  availableBadge: { display: 'inline-block', padding: '4px 10px', borderRadius: '99px', fontSize: '11px', fontWeight: '600', backgroundColor: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0' },
+};
+
+// --- SUB-COMPONENT: TimeSlotSelector ---
+function TimeSlotSelector({ roomId, selectedDate, selectedSlots, onSlotsChange, existingBookings }: any) {
+  const FIXED_SLOTS = [
+    { label: '07:30 - 08:45', startH: 7, startM: 30, endH: 8, endM: 45 },
+    { label: '09:00 - 10:15', startH: 9, startM: 0, endH: 10, endM: 15 },
+    { label: '10:30 - 11:45', startH: 10, startM: 30, endH: 11, endM: 45 },
+    { label: '12:00 - 13:15', startH: 12, startM: 0, endH: 13, endM: 15 },
+    { label: '13:30 - 14:45', startH: 13, startM: 30, endH: 14, endM: 45 },
+    { label: '15:00 - 16:15', startH: 15, startM: 0, endH: 16, endM: 15 },
+    { label: '16:30 - 17:45', startH: 16, startM: 30, endH: 17, endM: 45 },
+    { label: '18:00 - 19:15', startH: 18, startM: 0, endH: 19, endM: 15 },
+    { label: '19:30 - 20:45', startH: 19, startM: 30, endH: 20, endM: 45 },
+    { label: '21:00 - 22:15', startH: 21, startM: 0, endH: 22, endM: 15 },
+    { label: '22:30 - 07:00 (Hôm sau)', startH: 22, startM: 30, endH: 7, endM: 0, nextDay: true }
+  ];
+
+  const timeSlots = useMemo(() => {
+    if (!selectedDate) return [];
+    return FIXED_SLOTS.map(config => {
+      const start = new Date(selectedDate);
+      start.setHours(config.startH, config.startM, 0, 0);
+      const end = new Date(selectedDate);
+      if (config.nextDay) end.setDate(end.getDate() + 1);
+      end.setHours(config.endH, config.endM, 0, 0);
+      return { label: config.label, start, end, config };
+    });
+  }, [selectedDate]);
+
+  const getSlotStatus = (slot: any) => {
+    const now = new Date();
+    if (slot.start < now) return { available: false, reason: 'past' };
+    for (const booking of existingBookings) {
+      const bStart = new Date(booking.thoi_gian_nhan);
+      const bEnd = new Date(booking.thoi_gian_tra);
+      if (slot.start < bEnd && slot.end > bStart) return { available: false, reason: 'booked' };
+    }
+    return { available: true, reason: 'ok' };
+  };
+
+  const handleSlotClick = (slot: any) => {
+    const status = getSlotStatus(slot);
+    if (!status.available) return status.reason === 'booked' && toast.error('Khung giờ này đã có đơn đặt.');
+    const slotStartStr = slot.start.toISOString();
+    const exists = selectedSlots.find((s: any) => s.start === slotStartStr);
+    if (exists) onSlotsChange(selectedSlots.filter((s: any) => s.start !== slotStartStr));
+    else onSlotsChange([...selectedSlots, { start: slot.start.toISOString(), end: slot.end.toISOString(), label: slot.label }]);
+  };
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10, padding: 16, background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb' }}>
+        {timeSlots.map((slot, idx) => {
+          const status = getSlotStatus(slot);
+          const isSelected = selectedSlots.some((s: any) => s.start === slot.start.toISOString());
+          let bg = isSelected ? '#0f7072' : !status.available ? '#f1f5f9' : '#fff';
+          let color = isSelected ? '#fff' : !status.available ? '#94a3b8' : '#334155';
+          let border = isSelected ? '1px solid #0f7072' : !status.available ? '1px solid #f1f5f9' : '1px solid #e2e8f0';
+          let cursor = !status.available ? 'not-allowed' : 'pointer';
+
+          return (
+            <button
+              type="button" key={idx} onClick={() => handleSlotClick(slot)} disabled={!status.available}
+              style={{ padding: '10px 6px', borderRadius: '8px', backgroundColor: bg, color: color, border: border, cursor: cursor, fontSize: 13, fontWeight: isSelected ? '700' : '500', transition: 'all 0.15s', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', position: 'relative' }}
+            >
+              {isSelected && <div style={{position: 'absolute', top: -6, right: -6, background: '#f59e0b', borderRadius: '50%', color: 'white', padding: 2}}><CheckCircle2 size={14} fill="#f59e0b" color="white"/></div>}
+              <span>{slot.label.split(' - ')[0]} - {slot.label.split(' - ')[1].split(' ')[0]}</span>
+              {slot.config.nextDay && <span style={{ fontSize: '10px', fontStyle: 'italic', opacity: 0.8 }}>(Qua đêm)</span>}
+              {!status.available && status.reason === 'booked' && <span style={{ fontSize: '10px', color: '#ef4444', fontWeight: 'bold' }}>Đã đặt</span>}
+            </button>
+          );
+        })}
+      </div>
+      {selectedSlots.length > 0 && (
+        <div style={{ marginTop: '20px', padding: '12px 16px', backgroundColor: '#f0fdf4', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #bbf7d0' }}>
+          <span style={{ fontSize: '14px', fontWeight: '600', color: '#15803d' }}>Đã chọn {selectedSlots.length} khung giờ</span>
+          <button style={{ fontSize: '12px', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontWeight: '600' }} onClick={() => onSlotsChange([])}>Xóa tất cả</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // --- MAIN COMPONENT ---
-export default function StaffDashboard() {
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [filter, setFilter] = useState<string>('all');
-  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
-  const [loading, setLoading] = useState(true);
+export default function NewBooking() {
+  const navigate = useNavigate();
+  // State Form
+  const [formData, setFormData] = useState({ customerName: '', customerPhone: '', customerEmail: '', location: '', concept: '', room: '', numberOfGuests: 2, notes: '', bookingSource: 'facebook', paymentMethod: 'transfer', cccdFront: '', cccdBack: '', cccdFrontUploading: false, cccdBackUploading: false });
+  const [bookingType, setBookingType] = useState<'ngay' | 'gio'>('ngay');
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [selectedTimeSlots, setSelectedTimeSlots] = useState<any[]>([]);
+  const [existingBookings, setExistingBookings] = useState<any[]>([]);
   
-  // Modal & Form States
-  const [isEditingInfo, setIsEditingInfo] = useState(false);
-  const [infoForm, setInfoForm] = useState({ number: '', concept: '', price2h: 0, priceNight: 0 });
-  const [actionLoading, setActionLoading] = useState(false);
+  // State Data
+  const [fetchingBookings, setFetchingBookings] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [locations, setLocations] = useState<any[]>([]);
+  const [concepts, setConcepts] = useState<any[]>([]);
+  const [rooms, setRooms] = useState<any[]>([]);
   
+  // Lookup
+  const [lookupDate, setLookupDate] = useState<string>('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [lookupBookings, setLookupBookings] = useState<any[]>([]);
+  const [isLookingUp, setIsLookingUp] = useState(false);
+  const [showLookupTable, setShowLookupTable] = useState(false);
+
+  // Modal
   const [bookingDetail, setBookingDetail] = useState<any | null>(null);
-  const [showBookingForm, setShowBookingForm] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState<{ type: 'approve' | 'reject', bookingId: string } | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [showBookingSection, setShowBookingSection] = useState(false);
+  const formRef = useRef<HTMLDivElement>(null);
+  const [viewLoadingId, setViewLoadingId] = useState<string | null>(null);
 
-  // --- DATA FETCHING LOGIC ---
-  const loadRooms = useCallback(async () => {
-    try {
-      if (abortControllerRef.current) abortControllerRef.current.abort();
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
+  const [filteredConcepts, setFilteredConcepts] = useState<any[]>([]);
+  const [filteredRooms, setFilteredRooms] = useState<any[]>([]);
 
-      const [roomsRes, bookingsRes] = await Promise.all([
-        fetch(`${API_URL}/phong`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` }, signal: controller.signal }),
-        fetch(`${API_URL}/dat-phong`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` }, signal: controller.signal })
-      ]);
-
-      if (!roomsRes.ok || !bookingsRes.ok) throw new Error('API Error');
-      const [roomsData, bookingsData] = await Promise.all([roomsRes.json(), bookingsRes.json()]);
-
-      if (!roomsData.success) { setRooms([]); return; }
-
-      const roomsFromApi = roomsData.data || [];
-      const bookingsFromApi = bookingsData.success ? (bookingsData.data || []) : [];
-      const activeRooms = roomsFromApi.filter((r: any) => r.trang_thai !== 'dinh_chi');
-
-      const mapped: Room[] = activeRooms.map((r: any) => {
-        const now = new Date();
-        const relevantBookings = bookingsFromApi.filter((b: any) => b.id_phong === r.id && !['da_huy', 'da_tra', 'checkout'].includes(b.trang_thai));
-        
-        let activeBooking = relevantBookings.find((b: any) => {
-            if (!b.thoi_gian_nhan || !b.thoi_gian_tra) return false;
-            const start = new Date(b.thoi_gian_nhan);
-            const end = new Date(b.thoi_gian_tra);
-            return isValid(start) && isValid(end) && now >= start && now <= end;
-        });
-
-        const futureBookings = relevantBookings.filter((b: any) => {
-             if (!b.thoi_gian_nhan) return false;
-             return new Date(b.thoi_gian_nhan) > now;
-        }).sort((a: any, b: any) => new Date(a.thoi_gian_nhan).getTime() - new Date(b.thoi_gian_nhan).getTime());
-        const nextBooking = futureBookings[0];
-
-        let derivedStatus = 'available';
-        let displayBooking = null;
-
-        if (r.trang_thai === 'bao_tri') {
-            derivedStatus = 'maintenance';
-        } else if (activeBooking) {
-            displayBooking = activeBooking;
-            derivedStatus = 'occupied';
-            const end = new Date(activeBooking.thoi_gian_tra);
-            if (differenceInMinutes(end, now) <= 120 && differenceInMinutes(end, now) > -60) {
-                derivedStatus = 'checkout-soon';
-            }
-        } else if (nextBooking) {
-             const start = new Date(nextBooking.thoi_gian_nhan);
-             const minutesUntilCheckin = differenceInMinutes(start, now);
-             if (minutesUntilCheckin <= 1440 && minutesUntilCheckin >= 0) {
-                 derivedStatus = 'checkin-soon';
-                 displayBooking = nextBooking;
-             }
-             if (nextBooking.trang_thai === 'cho_coc' && derivedStatus === 'available') {
-                 derivedStatus = 'pending';
-                 displayBooking = nextBooking;
-             }
-        }
-
-        if (derivedStatus === 'available' && !displayBooking) {
-             const pendingBooking = relevantBookings.find((b: any) => b.trang_thai === 'cho_coc');
-             if (pendingBooking) {
-                 derivedStatus = 'pending';
-                 displayBooking = pendingBooking;
-             }
-        }
-
-        const cleanMap: any = { 'sach': 'clean', 'dang_don': 'cleaning', 'chua_don': 'dirty' };
-
-        return {
-          id: r.id, number: r.ma_phong, concept: r.loai_phong?.ten_loai || '', location: r.loai_phong?.co_so?.ten_co_so || '',
-          status: derivedStatus as any, cleanStatus: cleanMap[r.tinh_trang_vesinh] || 'clean',
-          price2h: r.loai_phong?.gia_gio || 0, priceNight: r.loai_phong?.gia_dem || 0,
-          currentBooking: displayBooking ? {
-            id: displayBooking.id,
-            code: displayBooking.ma_dat, customerName: displayBooking.khach_hang?.ho_ten || 'Khách lẻ',
-            checkIn: displayBooking.thoi_gian_nhan, checkOut: displayBooking.thoi_gian_tra,
-            source: displayBooking.kenh_dat || 'Khác', note: displayBooking.ghi_chu || '',
-            totalPrice: displayBooking.tong_tien || 0, deposit: displayBooking.tien_coc || 0,
-            status: displayBooking.trang_thai,
-            cccdTruoc: displayBooking.khach_hang?.cccd_mat_truoc,
-            cccdSau: displayBooking.khach_hang?.cccd_mat_sau
-          } : undefined
-        };
-      });
-      setRooms(mapped);
-    } catch (error: any) { 
-        if (error.name !== 'AbortError') console.error("Load rooms error", error); 
-    } finally { setLoading(false); }
+  // Init
+  useEffect(() => { 
+      fetchData(); 
+      const today = new Date().toISOString().split('T')[0]; 
+      setSelectedDate(today); 
+      setLookupDate(today);
   }, []);
 
-  useEffect(() => {
-    loadRooms();
-    const interval = setInterval(loadRooms, 15000);
-    return () => { clearInterval(interval); if (abortControllerRef.current) abortControllerRef.current.abort(); };
-  }, [loadRooms]);
+  useEffect(() => { if (showLookupTable) fetchAllBookingsForLookup(lookupDate); }, [lookupDate, showLookupTable]);
+  useEffect(() => { if (formData.location) { setFilteredConcepts(concepts.filter((c: any) => c.id_co_so === formData.location)); } else setFilteredConcepts([]); }, [formData.location, concepts]);
+  useEffect(() => { if (formData.concept) { setFilteredRooms(rooms.filter((r: any) => r.id_loai_phong === formData.concept && r.trang_thai === 'trong')); } else setFilteredRooms([]); }, [formData.concept, rooms]);
+  useEffect(() => { if (formData.room && selectedDate) { fetchBookingsForRoom(); } else { setExistingBookings([]); } setSelectedTimeSlots([]); }, [formData.room, selectedDate]);
 
-  useEffect(() => {
-    if (selectedRoom) {
-      setInfoForm({ number: selectedRoom.number, concept: selectedRoom.concept, price2h: selectedRoom.price2h, priceNight: selectedRoom.priceNight });
-      setIsEditingInfo(false);
-      if (selectedRoom.currentBooking) handleShowDetail(selectedRoom.currentBooking.code);
-      else setBookingDetail(null);
-    }
-  }, [selectedRoom]);
-
-  const updateRoomStatusApi = async (roomId: string, status: string, cleanStatus: string) => {
-    const statusMap: any = { 'available': 'trong', 'occupied': 'dang_dung', 'checkout-soon': 'sap_tra', 'checkin-soon': 'sap_nhan', 'maintenance': 'bao_tri' };
-    const cleanMap: any = { 'clean': 'sach', 'cleaning': 'dang_don', 'dirty': 'chua_don' };
-    await fetch(`${API_URL}/phong/${roomId}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
-      body: JSON.stringify({ trang_thai: statusMap[status] || 'trong', tinh_trang_vesinh: cleanMap[cleanStatus] || 'sach' })
-    });
-  };
-
-  const handleUpdateRoomInfo = async () => { /* ... */ };
-
-  const handleCheckout = async () => {
-    if (!selectedRoom?.currentBooking) return;
-    if (!window.confirm(`Xác nhận trả phòng cho khách ${selectedRoom.currentBooking.customerName}?`)) return;
-    const toastId = toast.loading('Đang xử lý...');
+  const fetchData = async () => {
     try {
-      setActionLoading(true);
-      const bookingRes = await fetch(`${API_URL}/dat-phong/ma/${selectedRoom.currentBooking.code}`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } });
-      const bookingData = await bookingRes.json();
-      if (bookingData.success) {
-        await Promise.all([
-          fetch(`${API_URL}/dat-phong/${bookingData.data.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` }, body: JSON.stringify({ trang_thai: 'da_tra', thoi_gian_tra_thuc_te: new Date().toISOString() }) }),
-          updateRoomStatusApi(selectedRoom.id, 'available', 'dirty')
-        ]);
-        toast.success('Trả phòng thành công!', { id: toastId }); setSelectedRoom(null); loadRooms();
-      } else { toast.error('Lỗi tìm đơn', { id: toastId }); }
-    } catch (e) { toast.error('Lỗi hệ thống', { id: toastId }); } finally { setActionLoading(false); }
+      const [locRes, conceptRes, roomRes] = await Promise.all([ 
+          fetch(`${API_URL}/co-so`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }), 
+          fetch(`${API_URL}/loai-phong`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }), 
+          fetch(`${API_URL}/phong`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }),
+      ]);
+      const [locData, conceptData, roomData] = await Promise.all([ locRes.json(), conceptRes.json(), roomRes.json() ]);
+      if (locData.success) setLocations(locData.data || []);
+      if (conceptData.success) setConcepts(conceptData.data || []);
+      if (roomData.success) setRooms((roomData.data || []).filter((r: any) => r.trang_thai !== 'dinh_chi'));
+    } catch (error) { toast.error('Lỗi tải dữ liệu ban đầu'); }
   };
 
-  const handleCleanRoom = async () => { if (!selectedRoom) return; try { setActionLoading(true); await updateRoomStatusApi(selectedRoom.id, 'available', 'clean'); toast.success('Đã dọn xong!'); setSelectedRoom(null); loadRooms(); } catch { toast.error('Lỗi'); } finally { setActionLoading(false); } };
-  const handleCheckIn = async () => { if (!selectedRoom) return; try { setActionLoading(true); await updateRoomStatusApi(selectedRoom.id, 'occupied', selectedRoom.cleanStatus); toast.success('Đã nhận phòng!'); setSelectedRoom(null); loadRooms(); } catch { toast.error('Lỗi'); } finally { setActionLoading(false); } };
-  
-  const handleShowDetail = async (bookingCode: string) => { try { const res = await fetch(`${API_URL}/dat-phong/ma/${bookingCode}`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }); const data = await res.json(); if (data.success) setBookingDetail(data.data); } catch { } };
+  const fetchBookingsForRoom = async () => {
+    if (!formData.room || !selectedDate) return;
+    setFetchingBookings(true);
+    try {
+      const checkDate = new Date(selectedDate);
+      const bufferStart = new Date(checkDate); bufferStart.setDate(bufferStart.getDate() - 1);
+      const bufferEnd = new Date(checkDate); bufferEnd.setDate(bufferEnd.getDate() + 2);
+      const response = await fetch(`${API_URL}/dat-phong?start_date=${bufferStart.toISOString()}&end_date=${bufferEnd.toISOString()}`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } });
+      const data = await response.json();
+      if (data.success) {
+        const roomBookings = data.data.filter((b: any) => b.id_phong === formData.room && b.trang_thai !== 'da_huy');
+        setExistingBookings(roomBookings);
+      }
+    } catch (error) { console.error(error); } finally { setFetchingBookings(false); }
+  };
+
+  const fetchAllBookingsForLookup = async (dateStr?: string) => {
+      setIsLookingUp(true);
+      try {
+          const targetDate = dateStr || lookupDate;
+          const date = new Date(targetDate);
+          const start = new Date(date); start.setHours(0,0,0,0);
+          const end = new Date(date); end.setHours(23,59,59,999);
+          const response = await fetch(`${API_URL}/dat-phong?start_date=${start.toISOString()}&end_date=${end.toISOString()}`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } });
+          const data = await response.json();
+          if(data.success) setLookupBookings(data.data.filter((b:any) => b.trang_thai !== 'da_huy'));
+      } catch (e) { console.error(e) } finally { setIsLookingUp(false); }
+  };
+
+  const getRoomDailySchedule = (roomId: string) => {
+      if (!lookupDate) return [];
+      const dayStart = new Date(lookupDate); dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(lookupDate); dayEnd.setHours(23, 59, 59, 999);
+      const bookings = lookupBookings.filter(b => {
+        if (b.id_phong !== roomId) return false;
+        const bookingStart = new Date(b.thoi_gian_nhan);
+        const bookingEnd = new Date(b.thoi_gian_tra);
+        return bookingStart < dayEnd && bookingEnd > dayStart;
+      });
+      bookings.sort((a, b) => new Date(a.thoi_gian_nhan).getTime() - new Date(b.thoi_gian_nhan).getTime());
+      return bookings;
+  };
+
+  const lookupRooms = rooms.filter(r => 
+    r.ma_phong.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    r.loai_phong?.ten_loai?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const handleSelectRoomFromLookup = (room: any) => {
+      setFormData(prev => ({ ...prev, location: room.loai_phong?.id_co_so || '', concept: room.id_loai_phong || '', room: room.id }));
+      setSelectedDate(lookupDate);
+      setShowBookingSection(true);
+      setTimeout(() => { formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 100);
+      setShowLookupTable(false);
+  };
+
+  const handleManualCreate = () => {
+      setShowBookingSection(true);
+      setTimeout(() => { formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 100);
+  };
+
+  const handleViewBookingDetail = async (booking: any) => {
+      setViewLoadingId(booking.id); 
+      try {
+          const res = await fetch(`${API_URL}/dat-phong/${booking.id}`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } });
+          const data = await res.json();
+          if (data.success) setBookingDetail(data.data); else setBookingDetail(booking);
+      } catch { setBookingDetail(booking); } finally { setViewLoadingId(null); }
+  };
 
   const handleProcessBooking = async () => {
     if (!showConfirmDialog) return;
@@ -274,260 +368,231 @@ export default function StaffDashboard() {
         const noteUpdate = type === 'reject' ? (bookingDetail?.ghi_chu ? `${bookingDetail.ghi_chu} [Đã từ chối]` : '[Đã từ chối]') : undefined;
         const body: any = { trang_thai: status };
         if (noteUpdate) body.ghi_chu = noteUpdate;
-        const response = await fetch(`${API_URL}/dat-phong/${bookingId}`, {
+        
+        await fetch(`${API_URL}/dat-phong/${bookingId}`, {
             method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
             body: JSON.stringify(body)
         });
-        const result = await response.json();
-        if (result.success) {
-            toast.success(type === 'approve' ? 'Đã xác nhận thanh toán!' : 'Đã từ chối đơn!');
-            setShowConfirmDialog(null); setSelectedRoom(null); loadRooms(); 
-        } else { toast.error('Lỗi: ' + result.error); }
+        toast.success(type === 'approve' ? 'Đã xác nhận thanh toán!' : 'Đã từ chối đơn!');
+        setShowConfirmDialog(null);
+        setBookingDetail(null);
+        fetchAllBookingsForLookup(lookupDate);
     } catch { toast.error('Lỗi kết nối'); } finally { setActionLoading(false); }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'occupied': return { bg: '#eff6ff', border: '#bfdbfe', text: '#1d4ed8', label: 'Đang ở' };
-      case 'available': return { bg: '#ffffff', border: '#e5e7eb', text: '#374151', label: 'Trống' };
-      case 'checkin-soon': return { bg: '#fff7ed', border: '#fed7aa', text: '#c2410c', label: 'Sắp nhận' };
-      case 'checkout-soon': return { bg: '#fefce8', border: '#fef08a', text: '#a16207', label: 'Sắp trả' };
-      case 'pending': return { bg: '#fffbeb', border: '#fcd34d', text: '#b45309', label: 'Chưa thanh toán' };
-      case 'maintenance': return { bg: '#f3f4f6', border: '#d1d5db', text: '#6b7280', label: 'Bảo trì' };
-      default: return { bg: '#fff', border: '#e5e7eb', text: '#000', label: 'Unknown' };
-    }
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.customerName || !formData.customerPhone || !formData.room) return toast.error("Thiếu thông tin bắt buộc.");
+    setLoading(true);
+    try {
+      const basePayload: any = { ho_ten: formData.customerName, sdt: formData.customerPhone, email: formData.customerEmail || null, id_phong: formData.room, so_khach: formData.numberOfGuests || 1, ghi_chu: formData.notes || null, ghi_chu_khach: formData.notes || null, kenh_dat: formData.bookingSource, trang_thai: 'da_coc', cccd_mat_truoc: formData.cccdFront || null, cccd_mat_sau: formData.cccdBack || null };
+      if (bookingType === 'ngay') {
+        const checkIn = `${selectedDate}T14:00:00`; const nextDay = new Date(selectedDate); nextDay.setDate(nextDay.getDate() + 1); const checkOut = `${nextDay.toISOString().split('T')[0]}T12:00:00`;
+        const response = await fetch(`${API_URL}/dat-phong`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` }, body: JSON.stringify({ ...basePayload, thoi_gian_nhan: toLocalISOString(new Date(checkIn)), thoi_gian_tra: toLocalISOString(new Date(checkOut)), tong_tien: 0, coc_csvc: 0 }) });
+        const data = await response.json();
+        if (!data.success) throw new Error(data.error);
+        toast.success(`Tạo đơn ngày thành công! Mã: ${data.data?.ma_dat}`);
+      } else {
+        if (selectedTimeSlots.length === 0) throw new Error('Vui lòng chọn ít nhất 1 khung giờ');
+        const promises = selectedTimeSlots.map(slot => fetch(`${API_URL}/dat-phong`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` }, body: JSON.stringify({ ...basePayload, thoi_gian_nhan: toLocalISOString(new Date(slot.start)), thoi_gian_tra: toLocalISOString(new Date(slot.end)), tong_tien: 0, coc_csvc: 0, ghi_chu: (formData.notes || '') + ` (Slot: ${slot.label})` }) }).then(r => r.json()));
+        const results = await Promise.all(promises);
+        const errors = results.filter(r => !r.success);
+        if (errors.length > 0) toast.warning(`Có ${errors.length} khung giờ thất bại.`); else toast.success(`Đã tạo thành công ${results.length} đơn đặt phòng theo giờ!`);
+      }
+      setFormData(prev => ({ ...prev, customerName: '', customerPhone: '', customerEmail: '', notes: '', cccdFront: '', cccdBack: '' }));
+      setSelectedTimeSlots([]);
+      fetchBookingsForRoom();
+      fetchAllBookingsForLookup(lookupDate);
+      setShowBookingSection(false); 
+    } catch (error: any) { toast.error(error.message || 'Lỗi xử lý'); } finally { setLoading(false); }
   };
-  
-  if (loading) return <div style={{display: 'flex', justifyContent: 'center', padding: '80px'}}><div style={{width: '40px', height: '40px', border: '4px solid #e5e7eb', borderTop: '4px solid #3b82f6', borderRadius: '50%', animation: 'spin 1s linear infinite'}}></div></div>;
+
+  const handleUploadCCCD = async (file: File, type: 'front' | 'back') => {
+    if (!file) return;
+    setFormData(prev => ({ ...prev, [type === 'front' ? 'cccdFrontUploading' : 'cccdBackUploading']: true }));
+    try { const url = await uploadToCloudinary(file, 'cccd'); setFormData(prev => ({ ...prev, [type === 'front' ? 'cccdFront' : 'cccdBack']: url, [type === 'front' ? 'cccdFrontUploading' : 'cccdBackUploading']: false })); toast.success('Đã tải ảnh lên'); } catch (err) { setFormData(prev => ({ ...prev, [type === 'front' ? 'cccdFrontUploading' : 'cccdBackUploading']: false })); toast.error('Lỗi tải ảnh'); }
+  };
 
   return (
     <div style={styles.container}>
-      <Toaster position="top-right" richColors closeButton />
-
-      {/* HEADER */}
-      <div style={styles.pageHeader}>
-        <div>
-            <h1 style={styles.pageTitle}>Lịch đặt phòng</h1>
-            <p style={styles.pageSubtitle}>Quản lý tình trạng phòng và đơn đặt</p>
-        </div>
-      </div>
-
-      {/* FILTER BUTTONS */}
-      <div style={styles.filterContainer}>
-          {[ 
-            { val: 'all', label: 'Tất cả', bg: '#1f2937' }, 
-            { val: 'available', label: 'Trống', bg: '#ffffff' }, 
-            { val: 'occupied', label: 'Đang ở', bg: '#2563eb' }, 
-            { val: 'pending', label: 'Chưa thanh toán', bg: '#d97706' }, 
-            { val: 'checkin-soon', label: 'Sắp nhận', bg: '#f97316' }, 
-            { val: 'checkout-soon', label: 'Sắp trả', bg: '#eab308' }, 
-            { val: 'maintenance', label: 'Bảo trì', bg: '#6b7280' } 
-          ].map(btn => (
-              <button 
-                key={btn.val} 
-                onClick={() => setFilter(btn.val)} 
-                style={{
-                    ...styles.filterBtn,
-                    backgroundColor: filter === btn.val ? btn.bg : 'white',
-                    color: filter === btn.val ? 'white' : '#4b5563',
-                    borderColor: filter === btn.val ? 'transparent' : '#e5e7eb',
-                    boxShadow: filter !== btn.val ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
-                    border: btn.val === 'available' && filter !== 'available' ? '1px solid #e5e7eb' : undefined
-                }}
-              >
-                {btn.label}
-              </button>
-          ))}
-      </div>
-
-      {/* GRID ROOMS (TEXT ONLY) */}
-      <div style={styles.gridRooms}>
-          {rooms.map(room => {
-          const conf = getStatusColor(room.status);
-          const isOccupied = ['occupied', 'checkout-soon', 'pending', 'checkin-soon'].includes(room.status); 
-          const isDimmed = filter !== 'all' && room.status !== filter; 
-
-          return (
-              <div 
-                key={room.id} 
-                onClick={() => { setSelectedRoom(room); setIsEditingInfo(false); }} 
-                style={{ 
-                    ...styles.roomCard, 
-                    borderColor: room.status === 'pending' ? '#fcd34d' : '#f3f4f6',
-                    opacity: isDimmed ? 0.3 : 1,
-                    filter: isDimmed ? 'grayscale(0.8)' : 'none'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.transform = isDimmed ? 'none' : 'translateY(-4px)'}
-                onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-              >
-              
-              {room.status === 'pending' && <div style={styles.pendingBanner}>⚠ CHƯA THANH TOÁN</div>}
-
-              {/* Header Card: Số phòng + Status */}
-              <div style={styles.roomTop}>
-                  <div>
-                      <div style={styles.roomNumberLarge}>{room.number}</div>
-                      <div style={styles.roomConceptSmall}>{room.concept}</div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                       <span style={{ fontSize: '11px', fontWeight: 'bold', padding: '4px 8px', borderRadius: '20px', backgroundColor: conf.bg, color: conf.text, border: `1px solid ${conf.border}` }}>
-                          {conf.label}
-                       </span>
-                       {room.cleanStatus === 'dirty' && <div style={{marginTop: 6, fontSize: 11, color: '#ef4444', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent:'flex-end', gap: 4}}>
-                           <Sparkles size={12}/> Dơ
-                       </div>}
-                  </div>
-              </div>
-
-              {/* Body Card: Thông tin khách hoặc Giá */}
-              <div style={styles.roomContent}>
-                  {(isOccupied && room.currentBooking) ? (
-                    <div style={{ backgroundColor: '#f9fafb', padding: '12px', borderRadius: '10px', border: '1px solid #f3f4f6' }}>
-                        <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <User size={14} color="#6b7280"/>
-                            <span style={{ fontSize: '14px', fontWeight: '700', color: '#1f2937', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px' }}>
-                                {room.currentBooking.customerName}
-                            </span>
-                        </div>
-                        <div style={{ display: 'flex', gap: '6px', fontSize: 11, color:'#6b7280', marginBottom: '8px' }}>
-                            <span style={{backgroundColor:'#e5e7eb', padding:'2px 6px', borderRadius: 4}}>{room.currentBooking.source}</span>
-                            {room.currentBooking.deposit > 0 && <span style={{backgroundColor:'#dcfce7', color:'#166534', padding:'2px 6px', borderRadius: 4}}>Đã cọc</span>}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: 12, color: '#4b5563', borderTop: '1px solid #e5e7eb', paddingTop: '8px' }}>
-                            <Clock size={12} /> 
-                            <span>{format(new Date(room.currentBooking.checkIn), 'HH:mm')} - {format(new Date(room.currentBooking.checkOut), 'HH:mm dd/MM')}</span>
-                        </div>
-                    </div>
-                  ) : (
-                    <div style={{ display:'flex', flexDirection:'column', gap: 6, marginTop: 'auto' }}>
-                        <div style={{ display:'flex', justifyContent:'space-between', fontSize: 13, color: '#64748b' }}>
-                            <span>2 giờ đầu</span>
-                            <span style={{ fontWeight: '700', color: '#374151' }}>{formatCurrency(room.price2h)}</span>
-                        </div>
-                        <div style={{ display:'flex', justifyContent:'space-between', fontSize: 13, color: '#64748b' }}>
-                            <span>Qua đêm</span>
-                            <span style={{ fontWeight: '700', color: '#374151' }}>{formatCurrency(room.priceNight)}</span>
-                        </div>
-                    </div>
-                  )}
-                  
-                  {/* Location Info */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>
-                       <MapPin size={10} /> {room.location}
-                  </div>
-              </div>
+      {/* Header */}
+      <div style={styles.header}>
+        <div style={styles.headerLeft}>
+            <button onClick={() => navigate(-1)} style={styles.backBtn}>
+                <ArrowLeft size={24} color="#4b5563" />
+            </button>
+            <div>
+                <h1 style={styles.pageTitle}>Tạo Đơn Đặt Phòng</h1>
+                <p style={styles.pageSubtitle}>Dành cho Admin & Staff</p>
             </div>
-          );
-          })}
+        </div>
+        <button onClick={() => setShowLookupTable(!showLookupTable)} style={styles.toggleBtn}>
+            {showLookupTable ? <X size={16}/> : <Grid size={16}/>}
+            {showLookupTable ? 'Ẩn tra cứu' : 'Tra cứu lịch phòng'}
+        </button>
       </div>
 
-      {/* MODAL ROOM DETAIL */}
-      {selectedRoom && (
+      {/* --- ROOM AVAILABILITY LOOKUP TOOL --- */}
+      {showLookupTable && (
+        <div style={styles.lookupContainer}>
+            <div style={styles.lookupHeader}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#1f2937', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                        <Grid size={18} /> Tra cứu nhanh
+                    </h3>
+                    {!showBookingSection && <button onClick={handleManualCreate} style={styles.manualBtn}><PenTool size={14}/> Nhập tay</button>}
+                </div>
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <label style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Ngày xem:</label>
+                        <input type="date" value={lookupDate} onChange={(e) => setLookupDate(e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', outline: 'none' }} />
+                    </div>
+                    <div style={styles.searchBox}>
+                        <Search size={14} color="#94a3b8"/>
+                        <input type="text" placeholder="Tìm phòng..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={styles.searchInput} />
+                    </div>
+                </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '16px', marginBottom: '8px', fontSize: '12px', color: '#64748b', paddingLeft: '4px' }}>
+                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#22c55e' }}></div> Trống</div>
+                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#f59e0b' }}></div> Đã đặt</div>
+                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#3b82f6' }}></div> Đang ở</div>
+                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#6b7280' }}></div> Bảo trì</div>
+            </div>
+
+            <div style={{ overflowX: 'auto', maxHeight: '500px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: 'white', position: 'relative' }}>
+                {isLookingUp && <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20 }}><RefreshCw size={24} className="animate-spin text-teal-600" /></div>}
+                <table style={tableStyles.table}>
+                    <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+                        <tr>
+                            <th style={tableStyles.th}>Phòng</th>
+                            <th style={tableStyles.th}>Mã đơn</th>
+                            <th style={tableStyles.th}>Khách hàng</th>
+                            <th style={tableStyles.th}>Check-in</th>
+                            <th style={tableStyles.th}>Check-out</th>
+                            <th style={tableStyles.th}>Thời gian</th>
+                            <th style={{...tableStyles.th, textAlign: 'center'}}>Số khách</th>
+                            <th style={tableStyles.th}>Kênh</th>
+                            <th style={tableStyles.th}>Trạng thái</th>
+                            <th style={{...tableStyles.th, textAlign: 'right'}}>Tổng tiền</th>
+                            <th style={{...tableStyles.th, textAlign: 'center'}}>Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {lookupRooms.map(room => {
+                            const bookings = getRoomDailySchedule(room.id);
+                            const isMaintenance = room.trang_thai === 'bao_tri';
+                            let totalBookedHours = 0;
+                            bookings.forEach(b => {
+                                const diff = differenceInHours(new Date(b.thoi_gian_tra), new Date(b.thoi_gian_nhan));
+                                totalBookedHours += diff;
+                            });
+                            const isFullDayBooked = totalBookedHours > 20;
+
+                            const rows = [];
+                            if (bookings.length > 0) {
+                                bookings.forEach(booking => {
+                                    rows.push(
+                                        <tr key={booking.id} style={tableStyles.tr} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                            <td style={{...tableStyles.td, textAlign: 'center', fontWeight: '700', color: '#1f2937'}}>{room.ma_phong}</td>
+                                            <td style={{...tableStyles.td, fontFamily: 'monospace', color: '#2563eb', fontWeight: 'bold'}}>{booking.ma_dat}</td>
+                                            <td style={{...tableStyles.td, fontWeight: '600'}}>
+                                                <div>{booking.khach_hang?.ho_ten || 'Khách lẻ'}</div>
+                                                <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 'normal' }}>{booking.khach_hang?.sdt}</div>
+                                            </td>
+                                            <td style={tableStyles.td}>{formatDate(booking.thoi_gian_nhan)}</td>
+                                            <td style={tableStyles.td}>{formatDate(booking.thoi_gian_tra)}</td>
+                                            <td style={tableStyles.td}>{calculateDuration(booking.thoi_gian_nhan, booking.thoi_gian_tra)}</td>
+                                            <td style={{...tableStyles.td, textAlign: 'center'}}>{booking.so_khach}</td>
+                                            <td style={tableStyles.td}>{booking.kenh_dat}</td>
+                                            <td style={tableStyles.td}>{getStatusBadge(booking.trang_thai)}</td>
+                                            <td style={{...tableStyles.td, textAlign: 'right', fontWeight: 'bold'}}>{formatCurrency(booking.tong_tien)}</td>
+                                            <td style={{...tableStyles.td, textAlign: 'center'}}>
+                                                <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                                                    {booking.trang_thai === 'cho_coc' && <button onClick={() => handleViewBookingDetail(booking)} style={{ padding: '4px 8px', borderRadius: '6px', border: 'none', backgroundColor: '#22c55e', color: 'white', cursor: 'pointer', fontSize: '11px', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Check size={12}/> Xác nhận</button>}
+                                                    <button onClick={() => handleViewBookingDetail(booking)} style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #e2e8f0', backgroundColor: 'white', color: '#374151', cursor: 'pointer', fontSize: '11px', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Eye size={12}/> Xem</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                });
+                            }
+
+                            if (!isMaintenance && !isFullDayBooked) {
+                                rows.push(
+                                    <tr key={`empty-${room.id}`} style={tableStyles.tr} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f0fdf4'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                        <td style={{...tableStyles.td, textAlign: 'center', fontWeight: '700', color: '#15803d'}}>{room.ma_phong}</td>
+                                        <td style={tableStyles.td}>-</td>
+                                        <td style={{...tableStyles.td, color: '#94a3b8', fontStyle: 'italic'}}>Chưa có khách</td>
+                                        <td style={tableStyles.td}>-</td>
+                                        <td style={tableStyles.td}>-</td>
+                                        <td style={tableStyles.td}>-</td>
+                                        <td style={{...tableStyles.td, textAlign: 'center'}}>-</td>
+                                        <td style={tableStyles.td}>-</td>
+                                        <td style={tableStyles.td}><span style={{display: 'inline-block', padding: '4px 10px', borderRadius: '99px', fontSize: '11px', fontWeight: '600', backgroundColor: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0'}}>Trống</span></td>
+                                        <td style={{...tableStyles.td, textAlign: 'right'}}>-</td>
+                                        <td style={{...tableStyles.td, textAlign: 'center'}}>
+                                            <button onClick={() => handleSelectRoomFromLookup(room)} style={{ padding: '6px 12px', borderRadius: '6px', border: 'none', backgroundColor: '#22c55e', color: 'white', cursor: 'pointer', fontSize: '11px', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Plus size={12}/> Chọn</button>
+                                        </td>
+                                    </tr>
+                                );
+                            }
+
+                            if (isMaintenance) {
+                                 rows.push(<tr key={`maint-${room.id}`} style={tableStyles.tr}><td style={{...tableStyles.td, textAlign: 'center', fontWeight: '700', color: '#64748b'}}>{room.ma_phong}</td><td style={tableStyles.td} colSpan={9} style={{...tableStyles.td, textAlign: 'center', fontStyle: 'italic', color: '#64748b'}}>Phòng đang bảo trì</td><td style={tableStyles.td}></td></tr>);
+                            }
+                            return rows;
+                        })}
+                        {lookupRooms.length === 0 && <tr><td colSpan={11} style={{ padding: '24px', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>Không tìm thấy phòng nào phù hợp.</td></tr>}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+      )}
+
+      {/* DETAIL MODAL & FORM */}
+      {bookingDetail && (
         <div style={styles.modalOverlay}>
           <div style={styles.modalContent}>
-            <div style={styles.modalHeader}>
-                <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#1f2937', margin: 0 }}>Phòng {selectedRoom.number}</h2>
-                <button onClick={() => setSelectedRoom(null)} style={{ padding: '8px', borderRadius: '50%', border: 'none', backgroundColor: 'transparent', cursor: 'pointer', color: '#6b7280' }}><X size={20} /></button>
-            </div>
-
+            <div style={styles.modalHeader}><h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1f2937', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}><FileText size={18}/> Chi tiết đơn</h2><button onClick={() => setBookingDetail(null)} style={{ padding: '6px', borderRadius: '50%', border: 'none', backgroundColor: 'transparent', cursor: 'pointer', color: '#6b7280' }}><X size={20} /></button></div>
             <div style={styles.modalBody}>
-                {/* Booking Info & CCCD */}
-                {selectedRoom.currentBooking && (
-                    <div style={{ backgroundColor: '#f9fafb', borderRadius: '12px', padding: '16px', border: '1px solid #e5e7eb' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                            <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4b5563', border: '1px solid #e5e7eb' }}><User size={20}/></div>
-                            <div><p style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold', color: '#6b7280', margin: 0 }}>Khách hàng</p><p style={{ fontWeight: 'bold', color: '#111827', fontSize: '16px', margin: 0 }}>{selectedRoom.currentBooking.customerName}</p></div>
-                        </div>
-
-                        {/* Hiển thị CCCD */}
-                        <div style={{ marginBottom: '16px' }}>
-                            <p style={{ fontSize: '11px', fontWeight: '600', color: '#6b7280', marginBottom: '6px' }}>GIẤY TỜ TÙY THÂN</p>
-                            <div style={styles.cccdContainer}>
-                                {selectedRoom.currentBooking.cccdTruoc ? (
-                                    <div style={styles.cccdBox} onClick={() => window.open(selectedRoom.currentBooking!.cccdTruoc, '_blank')}>
-                                        <img src={selectedRoom.currentBooking.cccdTruoc} style={styles.cccdImg} alt="Trước"/>
-                                        <div style={styles.cccdLabel}>Mặt trước</div>
-                                    </div>
-                                ) : <div style={styles.cccdBox}><div style={styles.noCccd}><ImageIcon size={20}/>Mặt trước</div></div>}
-                                {selectedRoom.currentBooking.cccdSau ? (
-                                    <div style={styles.cccdBox} onClick={() => window.open(selectedRoom.currentBooking!.cccdSau, '_blank')}>
-                                        <img src={selectedRoom.currentBooking.cccdSau} style={styles.cccdImg} alt="Sau"/>
-                                        <div style={styles.cccdLabel}>Mặt sau</div>
-                                    </div>
-                                ) : <div style={styles.cccdBox}><div style={styles.noCccd}><ImageIcon size={20}/>Mặt sau</div></div>}
-                            </div>
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '13px' }}>
-                             <div style={{ backgroundColor: 'white', padding: '8px', borderRadius: '6px', border: '1px solid #e5e7eb' }}>
-                                <span style={{ color: '#6b7280', fontSize: '11px' }}>Tổng tiền</span>
-                                <div style={{ fontWeight: 'bold', color: '#111827' }}>{formatCurrency(selectedRoom.currentBooking.totalPrice)}</div>
-                             </div>
-                             <div style={{ backgroundColor: 'white', padding: '8px', borderRadius: '6px', border: '1px solid #e5e7eb' }}>
-                                <span style={{ color: '#6b7280', fontSize: '11px' }}>Thanh toán</span>
-                                <div style={{ fontWeight: 'bold', color: '#16a34a' }}>{formatCurrency(selectedRoom.currentBooking.deposit)}</div>
-                             </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Actions */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {selectedRoom.status === 'pending' && selectedRoom.currentBooking && (
-                        <div style={styles.paymentSection}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: '#b45309', fontSize: '13px', fontWeight: '600' }}>
-                                <AlertCircle size={16}/> Khách chưa thanh toán?
-                            </div>
-                            <div style={{ display: 'flex', gap: '10px' }}>
-                                <button onClick={() => setShowConfirmDialog({ type: 'reject', bookingId: selectedRoom.currentBooking!.id })} style={styles.rejectBtn}><Ban size={16}/> Từ chối</button>
-                                <button onClick={() => setShowConfirmDialog({ type: 'approve', bookingId: selectedRoom.currentBooking!.id })} style={styles.confirmBtn}><Check size={16}/> Xác nhận thanh toán</button>
-                            </div>
-                        </div>
-                    )}
-
-                    {['occupied', 'checkout-soon', 'overdue'].includes(selectedRoom.status) && (
-                        <button onClick={handleCheckout} style={{ ...styles.btnAction, backgroundColor: '#ea580c', color: 'white' }}><LogOut size={18}/> Trả phòng</button>
-                    )}
-                    
-                    {selectedRoom.status === 'checkin-soon' && <button onClick={handleCheckIn} style={{ ...styles.btnAction, backgroundColor: '#0d9488', color: 'white' }}><UserCheck size={18}/> Khách nhận phòng</button>}
-                    {selectedRoom.cleanStatus === 'dirty' && selectedRoom.status === 'available' && <button onClick={handleCleanRoom} style={{ ...styles.btnAction, backgroundColor: '#16a34a', color: 'white' }}><Sparkles size={18}/> Xác nhận dọn xong</button>}
-                    {selectedRoom.status === 'available' && selectedRoom.cleanStatus === 'clean' && <button onClick={() => setShowBookingForm(true)} style={{ ...styles.btnAction, backgroundColor: '#2563eb', color: 'white' }}><Plus size={18}/> Tạo đơn mới</button>}
-                </div>
+                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}><div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4b5563' }}><User size={20}/></div><div><p style={{ fontWeight: 'bold', color: '#111827', margin: 0 }}>{bookingDetail.khach_hang?.ho_ten || bookingDetail.ho_ten}</p><p style={{ fontSize: '14px', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px', margin: 0 }}><Phone size={12}/> {bookingDetail.khach_hang?.sdt || bookingDetail.sdt}</p></div></div>
+                 <div style={{ marginBottom: '16px' }}><p style={{ fontSize: '11px', fontWeight: '600', color: '#6b7280', marginBottom: '6px' }}>GIẤY TỜ TÙY THÂN</p><div style={styles.cccdContainer}>{bookingDetail.khach_hang?.cccd_mat_truoc ? (<div style={{...styles.uploadBox, border: '1px solid #e5e7eb'}} onClick={() => window.open(bookingDetail.khach_hang.cccd_mat_truoc, '_blank')}><img src={bookingDetail.khach_hang.cccd_mat_truoc} style={styles.uploadedImg} alt="Trước"/></div>) : <div style={styles.uploadBox}><div style={{ color: '#9ca3af', fontSize: '12px' }}>Không có ảnh trước</div></div>}{bookingDetail.khach_hang?.cccd_mat_sau ? (<div style={{...styles.uploadBox, border: '1px solid #e5e7eb'}} onClick={() => window.open(bookingDetail.khach_hang.cccd_mat_sau, '_blank')}><img src={bookingDetail.khach_hang.cccd_mat_sau} style={styles.uploadedImg} alt="Sau"/></div>) : <div style={styles.uploadBox}><div style={{ color: '#9ca3af', fontSize: '12px' }}>Không có ảnh sau</div></div>}</div></div>
+                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', fontSize: '13px', backgroundColor: '#f9fafb', padding: '16px', borderRadius: '12px', border: '1px solid #e5e7eb' }}><div><span style={{ color: '#6b7280', fontSize: '11px' }}>Phòng</span><div style={{ fontWeight: 'bold', color: '#111827' }}><MapPin size={12} style={{display:'inline', marginRight:4}}/> {bookingDetail.phong?.ma_phong}</div></div><div><span style={{ color: '#6b7280', fontSize: '11px' }}>Tổng tiền</span><div style={{ fontWeight: 'bold', color: '#111827' }}>{formatCurrency(bookingDetail.tong_tien)}</div></div><div><span style={{ color: '#6b7280', fontSize: '11px' }}>Check-in</span><div style={{ fontWeight: '600' }}>{formatDate(bookingDetail.thoi_gian_nhan)}</div></div><div><span style={{ color: '#6b7280', fontSize: '11px' }}>Check-out</span><div style={{ fontWeight: '600' }}>{formatDate(bookingDetail.thoi_gian_tra)}</div></div></div>
+                 {bookingDetail.trang_thai === 'cho_coc' && (<div style={styles.paymentSection}><div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: '#b45309', fontSize: '13px', fontWeight: '600' }}><AlertCircle size={16}/> Khách chưa thanh toán cọc</div><div style={{ display: 'flex', gap: '10px' }}><button onClick={() => setShowConfirmDialog({ type: 'reject', bookingId: bookingDetail.id })} style={styles.rejectBtn}><Ban size={16}/> Từ chối</button><button onClick={() => setShowConfirmDialog({ type: 'approve', bookingId: bookingDetail.id })} style={styles.confirmBtn}><Check size={16}/> Xác nhận</button></div></div>)}
             </div>
           </div>
         </div>
       )}
 
       {showConfirmDialog && (
-        <div style={{ ...styles.modalOverlay, zIndex: 70 }}>
-            <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '24px', width: '100%', maxWidth: '320px', textAlign: 'center', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
-                <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: showConfirmDialog.type === 'approve' ? '#dcfce7' : '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px auto' }}>
-                    {showConfirmDialog.type === 'approve' ? <Check size={24} color="#16a34a"/> : <X size={24} color="#dc2626"/>}
-                </div>
-                <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#111827', marginBottom: '8px' }}>
-                    {showConfirmDialog.type === 'approve' ? 'Xác nhận thanh toán?' : 'Từ chối đơn này?'}
-                </h3>
-                <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '24px', lineHeight: '1.5' }}>
-                    {showConfirmDialog.type === 'approve' ? 'Đơn sẽ chuyển sang trạng thái "Đã thanh toán".' : 'Đơn đặt phòng sẽ bị HỦY và phòng sẽ trống trở lại.'}
-                </p>
-                <div style={{ display: 'flex', gap: '12px' }}>
-                    <button onClick={() => setShowConfirmDialog(null)} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', backgroundColor: 'white', color: '#374151', fontWeight: '600', cursor: 'pointer' }}>Hủy</button>
-                    <button onClick={handleProcessBooking} disabled={actionLoading} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: showConfirmDialog.type === 'approve' ? '#16a34a' : '#dc2626', color: 'white', fontWeight: '600', cursor: 'pointer' }}>{actionLoading ? 'Đang xử lý...' : 'Đồng ý'}</button>
-                </div>
+        <div style={styles.modalOverlay}><div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '24px', width: '100%', maxWidth: '320px', textAlign: 'center', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}><h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#111827', marginBottom: '8px' }}>{showConfirmDialog.type === 'approve' ? 'Xác nhận thanh toán?' : 'Từ chối đơn này?'}</h3><p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '24px', lineHeight: '1.5' }}>{showConfirmDialog.type === 'approve' ? 'Đơn sẽ chuyển sang trạng thái "Đã cọc".' : 'Đơn sẽ bị hủy và phòng sẽ trống.'}</p><div style={{ display: 'flex', gap: '12px' }}><button onClick={() => setShowConfirmDialog(null)} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', backgroundColor: 'white', color: '#374151', fontWeight: '600', cursor: 'pointer' }}>Hủy</button><button onClick={handleProcessBooking} disabled={actionLoading} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: showConfirmDialog.type === 'approve' ? '#16a34a' : '#dc2626', color: 'white', fontWeight: '600', cursor: 'pointer' }}>{actionLoading ? 'Đang xử lý...' : 'Đồng ý'}</button></div></div></div>
+      )}
+
+      {showBookingSection && (
+        <div ref={formRef} className="animate-in fade-in slide-in-from-bottom-10 duration-500" style={{ marginTop: '40px', borderTop: '2px dashed #e2e8f0', paddingTop: '32px' }}>
+          <div style={{ marginBottom: '24px' }}><h2 style={{ fontSize: '20px', fontWeight: '700', color: '#1f2937' }}>Thông tin đặt phòng</h2><p style={{ fontSize: '14px', color: '#6b7280' }}>Điền đầy đủ thông tin khách và lịch đặt</p></div>
+          <form onSubmit={handleSubmit}>
+            <div style={styles.grid}>
+              <div style={styles.col}>
+                <div style={styles.card}><div style={styles.cardHeader}><Users size={20} color="#0d9488"/> Thông tin khách</div><div style={styles.formGroup}><div style={styles.inputWrapper}><input type="text" placeholder="Họ tên khách *" style={styles.input} value={formData.customerName} onChange={e => setFormData({ ...formData, customerName: e.target.value })} required /></div><div style={{ display: 'flex', gap: '16px' }}><input type="tel" placeholder="Số điện thoại *" style={styles.input} value={formData.customerPhone} onChange={e => setFormData({ ...formData, customerPhone: e.target.value })} required /><div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#f9fafb', padding: '0 12px', borderRadius: '10px', border: '1px solid #e5e7eb' }}><span style={{ fontSize: '12px', fontWeight: '600', color: '#6b7280', whiteSpace: 'nowrap' }}>Số khách</span><input type="number" min="1" style={{ width: '40px', border: 'none', background: 'transparent', fontWeight: 'bold', textAlign: 'center', outline: 'none' }} value={formData.numberOfGuests} onChange={e => setFormData({ ...formData, numberOfGuests: parseInt(e.target.value) || 1 })} /></div></div><input type="email" placeholder="Email" style={styles.input} value={formData.customerEmail} onChange={e => setFormData({ ...formData, customerEmail: e.target.value })} /></div></div>
+                <div style={styles.card}><div style={styles.cardHeader}><FileText size={20} color="#374151"/> Chi tiết đơn</div><div style={styles.formGroup}><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}><div><label style={styles.label}>Nguồn khách</label><select style={styles.select} value={formData.bookingSource} onChange={e => setFormData({ ...formData, bookingSource: e.target.value })}><option value="facebook">Facebook</option><option value="zalo">Zalo</option><option value="phone">Điện thoại</option><option value="walkin">Vãng lai</option><option value="tiktok">TikTok</option><option value="other">Khác</option></select></div><div><label style={styles.label}>Thanh toán</label><select style={styles.select} value={formData.paymentMethod} onChange={e => setFormData({ ...formData, paymentMethod: e.target.value })}><option value="transfer">Chuyển khoản</option><option value="cash">Tiền mặt</option><option value="card">Quẹt thẻ</option><option value="vnpay">VNPAY</option><option value="momo">Momo</option></select></div></div><textarea placeholder="Ghi chú..." style={styles.textarea} value={formData.notes} onChange={e => setFormData({ ...formData, notes: e.target.value })}></textarea></div></div>
+                <div style={styles.card}><div style={styles.cardHeader}><UploadCloud size={20} color="#374151"/> Ảnh CCCD</div><div style={styles.uploadGrid}>{['front', 'back'].map((side) => (<div key={side}>{formData[side === 'front' ? 'cccdFront' : 'cccdBack'] ? (<div style={{ ...styles.uploadBox, border: '1px solid #14b8a6' }}><img src={formData[side === 'front' ? 'cccdFront' : 'cccdBack']} alt={side} style={styles.uploadedImg} /><button type="button" onClick={() => setFormData({ ...formData, [side === 'front' ? 'cccdFront' : 'cccdBack']: '' })} style={styles.removeBtn}>×</button></div>) : (<label style={styles.uploadBox}>{formData[side === 'front' ? 'cccdFrontUploading' : 'cccdBackUploading'] ? <RefreshCw size={20} className="animate-spin text-teal-500"/> : <><UploadCloud size={24} color="#9ca3af"/><span style={{fontSize: '12px', color: '#6b7280', marginTop: '8px', textTransform: 'uppercase'}}>{side === 'front' ? 'Mặt trước' : 'Mặt sau'}</span></>}<input type="file" accept="image/*" hidden onChange={e => e.target.files?.[0] && handleUploadCCCD(e.target.files[0], side as 'front' | 'back')} disabled={formData.cccdFrontUploading || formData.cccdBackUploading} /></label>)}</div>))}</div></div>
+              </div>
+              <div style={styles.col}>
+                <div style={styles.card}><div style={styles.cardHeader}><span style={styles.stepBadge}>1</span> Chọn Phòng</div><div style={styles.formGroup}><div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}><div style={{ flex: 1 }}><label style={styles.label}>Cơ sở</label><select style={styles.select} value={formData.location} onChange={e => setFormData({ ...formData, location: e.target.value })}><option value="">-- Chọn cơ sở --</option>{locations.map(l => <option key={l.id} value={l.id}>{l.ten_co_so}</option>)}</select></div><div style={{ flex: 1 }}><label style={styles.label}>Loại phòng</label><select style={styles.select} value={formData.concept} onChange={e => setFormData({ ...formData, concept: e.target.value })} disabled={!formData.location}><option value="">-- Chọn loại --</option>{filteredConcepts.map(c => <option key={c.id} value={c.id}>{c.ten_loai}</option>)}</select></div></div><div><label style={styles.label}>Phòng số</label><select style={styles.select} value={formData.room} onChange={e => setFormData({ ...formData, room: e.target.value })} disabled={!formData.concept}><option value="">-- Chọn phòng --</option>{filteredRooms.map(r => <option key={r.id} value={r.id}>{r.ma_phong} ({r.trang_thai === 'trong' ? 'Trống' : 'Đang dùng'})</option>)}</select></div></div></div>
+                {formData.room && (<div style={{ ...styles.card, animation: 'fadeIn 0.5s' }}><div style={{ ...styles.cardHeader, justifyContent: 'space-between' }}><div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><span style={styles.stepBadge}>2</span> Thời gian đặt</div>{fetchingBookings && <span style={{ fontSize: '12px', color: '#0f766e', display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#ccfbf1', padding: '4px 8px', borderRadius: '99px' }}><RefreshCw size={12} className="animate-spin"/> Đang tải lịch...</span>}</div><div style={styles.tabContainer}><div onClick={() => setBookingType('ngay')} style={{ ...styles.tabBtn, backgroundColor: bookingType === 'ngay' ? '#f0fdfa' : 'white', border: bookingType === 'ngay' ? '1px solid #99f6e4' : '1px solid #e5e7eb', color: bookingType === 'ngay' ? '#0f766e' : '#6b7280' }}><Calendar size={16}/> Theo Ngày</div><div onClick={() => setBookingType('gio')} style={{ ...styles.tabBtn, backgroundColor: bookingType === 'gio' ? '#f0fdfa' : 'white', border: bookingType === 'gio' ? '1px solid #99f6e4' : '1px solid #e5e7eb', color: bookingType === 'gio' ? '#0f766e' : '#6b7280' }}><Clock size={16}/> Theo Giờ</div></div><div style={{ marginBottom: '20px' }}><label style={styles.label}>Ngày {bookingType === 'ngay' ? 'nhận phòng' : 'xem lịch'}</label><input type="date" style={styles.input} value={selectedDate} onChange={e => setSelectedDate(e.target.value)} min={new Date().toISOString().split('T')[0]} /></div>{existingBookings.length > 0 && (<div style={styles.bookingListCard}><div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '700', color: '#92400e', marginBottom: '12px' }}><Info size={16}/> Lịch đặt hiện tại ({new Date(selectedDate).toLocaleDateString('vi-VN')}):</div>{existingBookings.map((b: any, idx) => { const start = new Date(b.thoi_gian_nhan); const end = new Date(b.thoi_gian_tra); return (<div key={idx} style={styles.bookingListItem}><div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Users size={14} color="#9ca3af"/><span style={{ fontWeight: '600', color: '#374151' }}>{b.khach_hang?.ho_ten || b.ho_ten || 'Khách'}</span></div><div style={{ fontFamily: 'monospace', fontWeight: '500', color: '#4b5563' }}>{format(start, 'HH:mm')} - {format(end, 'HH:mm')}</div></div>) })}</div>)}{bookingType === 'ngay' ? (selectedDate ? (<div style={{ ...styles.statusBox, backgroundColor: isDayBookingAvailable ? '#f0fdf4' : '#fef2f2', borderColor: isDayBookingAvailable ? '#bbf7d0' : '#fecaca', color: isDayBookingAvailable ? '#166534' : '#991b1b' }}>{isDayBookingAvailable ? <Check size={20}/> : <AlertCircle size={20}/>}<div><div style={{ fontWeight: '700' }}>{isDayBookingAvailable ? 'Có thể đặt' : 'Không thể đặt'}</div><div style={{ fontSize: '13px', opacity: 0.9 }}>{isDayBookingAvailable ? 'Phòng trống.' : 'Đã vướng lịch.'}</div></div></div>) : <div style={{ textAlign: 'center', padding: '20px', color: '#9ca3b8' }}>Vui lòng chọn ngày</div>) : (selectedDate ? (<><label style={styles.label}>Chọn khung giờ</label><TimeSlotSelector roomId={formData.room} selectedDate={selectedDate} selectedSlots={selectedTimeSlots} onSlotsChange={setSelectedTimeSlots} existingBookings={existingBookings} /></>) : <div style={{ textAlign: 'center', padding: '20px', color: '#9ca3b8' }}>Vui lòng chọn ngày</div>)}</div>)}
+              </div>
             </div>
+            <div style={styles.footer}>
+                <button type="button" onClick={() => setShowBookingSection(false)} style={{ ...styles.btn, backgroundColor: 'white', border: '1px solid #d1d5db', color: '#4b5563' }}><RefreshCw size={16}/> Đóng</button>
+                <button type="submit" disabled={loading || formData.cccdFrontUploading || formData.cccdBackUploading} style={{ ...styles.btn, backgroundColor: '#0d9488', color: 'white', opacity: loading ? 0.7 : 1, cursor: loading ? 'not-allowed' : 'pointer' }}><Check size={16}/> {loading ? 'Đang xử lý...' : 'Xác Nhận Tạo Đơn'}</button>
+            </div>
+          </form>
         </div>
       )}
 
-      {showBookingForm && (
-        <div style={{ ...styles.modalOverlay, zIndex: 60 }}>
-            <div style={{ ...styles.modalContent, padding: '24px', textAlign: 'center' }}>
-                <AlertCircle size={48} color="#3b82f6" style={{ margin: '0 auto 16px auto' }}/>
-                <h3 style={{ fontWeight: 'bold', fontSize: '18px', marginBottom: '8px', margin: 0 }}>Tạo đơn mới</h3>
-                <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '24px' }}>Vui lòng chuyển sang trang "Tạo Booking" trên thanh menu để thực hiện thao tác này.</p>
-                <button onClick={() => setShowBookingForm(false)} style={{ ...styles.btnAction, backgroundColor: '#f3f4f6', color: '#374151' }}>Đóng</button>
-            </div>
-        </div>
-      )}
     </div>
   );
 }
