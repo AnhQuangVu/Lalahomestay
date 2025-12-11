@@ -176,6 +176,9 @@ export default function StaffDashboard() {
              const start = new Date(currentBooking.thoi_gian_nhan);
              const end = new Date(currentBooking.thoi_gian_tra);
              
+             // Kiểm tra chưa thanh toán trước - ưu tiên hiển thị pending
+             const isPending = currentBooking.trang_thai === 'cho_coc' || (currentBooking.tien_coc || 0) === 0;
+             
              if (isValid(start) && isValid(end)) {
                  // Đang trong thời gian ở (đã check-in)
                  if (now >= start && now <= end) {
@@ -183,14 +186,17 @@ export default function StaffDashboard() {
                      // Sắp trả: còn dưới 2 tiếng
                      if (differenceInHours(end, now) <= 2) derivedStatus = 'checkout-soon';
                  } 
-                 // Sắp nhận: còn dưới 24 tiếng tới check-in
-                 else if (now < start && differenceInHours(start, now) <= 24) {
-                     derivedStatus = 'checkin-soon';
+                 // Chưa tới giờ check-in
+                 else if (now < start) {
+                     // Nếu chưa thanh toán -> pending, ngược lại -> checkin-soon (nếu trong 24h)
+                     if (isPending) {
+                         derivedStatus = 'pending';
+                     } else if (differenceInHours(start, now) <= 24) {
+                         derivedStatus = 'checkin-soon';
+                     }
                  }
-             }
-             
-             // Nếu chỉ là pending (chờ cọc) và chưa có derivedStatus cụ thể
-             if (currentBooking.trang_thai === 'cho_coc' && derivedStatus === 'available') {
+             } else if (isPending) {
+                 // Không có thời gian hợp lệ nhưng chưa thanh toán
                  derivedStatus = 'pending';
              }
         }
@@ -325,7 +331,23 @@ export default function StaffDashboard() {
     }
   };
   
-  const filteredRooms = filter === 'all' ? rooms : rooms.filter(r => r.status === filter);
+  const filteredRooms = filter === 'all' ? rooms : rooms.filter(r => {
+    // Nếu filter là 'pending' hoặc 'checkin-soon', cần check thêm điều kiện đặc biệt
+    if (filter === 'pending') {
+      // Hiện cả những phòng pending VÀ những phòng checkin-soon nhưng chưa thanh toán
+      return r.status === 'pending' || (r.status === 'checkin-soon' && r.currentBooking && r.currentBooking.deposit === 0);
+    }
+    if (filter === 'checkin-soon') {
+      // Hiện cả những phòng checkin-soon VÀ những phòng pending sắp tới (trong 24h)
+      if (r.status === 'checkin-soon') return true;
+      if (r.status === 'pending' && r.currentBooking) {
+        const start = new Date(r.currentBooking.checkIn);
+        if (isValid(start) && differenceInHours(start, new Date()) <= 24) return true;
+      }
+      return false;
+    }
+    return r.status === filter;
+  });
 
   if (loading) return <div style={{display: 'flex', justifyContent: 'center', padding: '80px'}}><div style={{width: '40px', height: '40px', border: '4px solid #e5e7eb', borderTop: '4px solid #3b82f6', borderRadius: '50%', animation: 'spin 1s linear infinite'}}></div></div>;
 
