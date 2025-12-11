@@ -79,8 +79,8 @@ export default function AdminDashboard() {
       const statsResult = await statsResponse.json();
       setRawStats(statsResult);
 
-      // Gọi API danh sách booking
-      const bookingsResponse = await fetch(`${serverUrl}/dat-phong?start_date=${start_date}&end_date=${end_date}`, {
+      // Gọi API danh sách booking - KHÔNG filter ngày để lấy tất cả đơn gần đây
+      const bookingsResponse = await fetch(`${serverUrl}/dat-phong`, {
         headers: {
           'Authorization': `Bearer ${publicAnonKey}`
         }
