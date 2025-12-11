@@ -583,10 +583,14 @@ export default function BookingPage() {
 
       setStep(3);
     } else if (step === 3) {
+      if (isSubmittingGlobal) return; // Double check
       isSubmittingGlobal = true; // Set ngay lập tức (sync)
       setLoading(true); // Set loading trước để ngăn double-click
-      await handleSubmitBooking();
-      isSubmittingGlobal = false; // Reset sau khi xong
+      try {
+        await handleSubmitBooking();
+      } finally {
+        isSubmittingGlobal = false; // Luôn reset dù success hay error
+      }
     }
   };
 
