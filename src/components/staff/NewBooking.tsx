@@ -655,7 +655,7 @@ export default function NewBooking() {
                                      rows.push(
                                         <tr key={`maint-${room.id}`} style={tableStyles.tr}>
                                             <td style={{...tableStyles.td, textAlign: 'center', fontWeight: '700', color: '#64748b'}}>{room.ma_phong}</td>
-                                            <td style={tableStyles.td} colSpan={8} style={{...tableStyles.td, textAlign: 'center', fontStyle: 'italic', color: '#64748b'}}>Phòng đang bảo trì</td>
+                                            <td colSpan={8} style={{...tableStyles.td, textAlign: 'center', fontStyle: 'italic', color: '#64748b'}}>Phòng đang bảo trì</td>
                                             <td style={tableStyles.td}></td>
                                         </tr>
                                      )
