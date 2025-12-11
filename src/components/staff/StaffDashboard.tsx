@@ -533,6 +533,11 @@ export default function StaffDashboard() {
                     {['occupied', 'checkout-soon', 'overdue'].includes(selectedRoom.status) && (
                         <button onClick={handleCheckout} style={{ ...styles.btnAction, backgroundColor: '#ea580c', color: 'white' }}><LogOut size={18}/> Trả phòng</button>
                     )}
+
+                    {/* MAINTENANCE - Bảo trì: Dọn dẹp để đưa về trống */}
+                    {selectedRoom.status === 'maintenance' && (
+                        <button onClick={handleCleanRoom} style={{ ...styles.btnAction, backgroundColor: '#16a34a', color: 'white' }}><Sparkles size={18}/> Dọn dẹp</button>
+                    )}
                     
                     {selectedRoom.cleanStatus === 'dirty' && selectedRoom.status === 'available' && <button onClick={handleCleanRoom} style={{ ...styles.btnAction, backgroundColor: '#16a34a', color: 'white' }}><Sparkles size={18}/> Xác nhận dọn xong</button>}
                     {selectedRoom.status === 'available' && selectedRoom.cleanStatus === 'clean' && <button onClick={() => setShowBookingForm(true)} style={{ ...styles.btnAction, backgroundColor: '#2563eb', color: 'white' }}><Plus size={18}/> Tạo đơn mới</button>}
