@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { format, eachDayOfInterval, startOfDay } from 'date-fns';
+import { format, eachDayOfInterval, startOfDay, parseISO } from 'date-fns';
 import { DayPicker } from 'react-day-picker';
 import 'react-day-picker/dist/style.css';
 import { useNavigate } from 'react-router-dom';
@@ -341,20 +341,47 @@ function TimeSlotSelector({
 }
 
 // --- COMPONENT 3: HOURLY CALENDAR WRAPPER ---
-const HourlyCalendar = ({ selectedDate, setSelectedDate, selectedTimeSlots, onSlotsChange, roomId }: {
+const HourlyCalendar = ({ selectedDate, setSelectedDate, selectedTimeSlots, onSlotsChange, roomId, bookings }: {
   selectedDate: string;
   setSelectedDate: (date: string) => void;
   selectedTimeSlots: any[];
   onSlotsChange: (slots: any[]) => void;
   roomId: string;
+  bookings: any[];
 }) => {
+  // Tính các ngày ĐÃ CÓ booking theo ngày (loại đặt theo ngày sẽ block cả ngày)
+  const bookedFullDayDates = useMemo(() => {
+    const dates = new Set<string>();
+    bookings.forEach(b => {
+      // Chỉ block nếu là booking theo ngày (loai_dat = 'ngay')
+      if (b.loai_dat === 'ngay') {
+        const start = parseISO(b.ngay_nhan);
+        const end = parseISO(b.ngay_tra);
+        eachDayOfInterval({ start, end: new Date(end.getTime() - 1) }).forEach(d => {
+          dates.add(format(d, 'yyyy-MM-dd'));
+        });
+      }
+    });
+    return dates;
+  }, [bookings]);
+
+  // Chuyển thành Date[] để DayPicker hiển thị màu đỏ
+  const bookedDateObjects = useMemo(() => {
+    return Array.from(bookedFullDayDates).map(s => parseISO(s));
+  }, [bookedFullDayDates]);
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const disabledDates = Array.from({ length: 365 * 2 }, (_, i) => {
-    const d = new Date(today);
-    d.setDate(d.getDate() - (i + 1));
-    return d;
-  });
+  
+  // Disable: ngày quá khứ + ngày đã có booking theo ngày
+  const disabledDates = [
+    ...bookedDateObjects,
+    ...Array.from({ length: 365 * 2 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (i + 1));
+      return d;
+    })
+  ];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -367,6 +394,12 @@ const HourlyCalendar = ({ selectedDate, setSelectedDate, selectedTimeSlots, onSl
               setSelectedDate(format(d, 'yyyy-MM-dd'));
               onSlotsChange([]); // Reset khi đổi ngày
             }
+          }}
+          modifiers={{
+            booked: bookedDateObjects
+          }}
+          modifiersStyles={{
+            booked: { backgroundColor: '#fee2e2', color: '#dc2626', border: '2px solid #dc2626', borderRadius: '8px', opacity: 0.7, cursor: 'not-allowed' }
           }}
           disabled={disabledDates}
           weekStartsOn={1}
@@ -893,6 +926,7 @@ export default function BookingPage() {
                       selectedTimeSlots={selectedTimeSlots}
                       onSlotsChange={setSelectedTimeSlots}
                       roomId={selectedRoom.id}
+                      bookings={existingBookings}
                     />
                   )}
                 </div>
