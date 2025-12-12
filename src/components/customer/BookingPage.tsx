@@ -34,47 +34,69 @@ const DailyCalendar = ({ selectedDate, setSelectedDate, numberOfNights, bookings
   numberOfNights: number;
   bookings: any[];
 }) => {
-  const bookedDates = useMemo(() => {
-    let dates: string[] = [];
-    let checkInDates: Date[] = [];
-    let checkOutDates: Date[] = [];
+  // Tính toán tất cả các ngày đã bị book
+  const bookedDateStrings = useMemo(() => {
+    const dates = new Set<string>();
     bookings.forEach(b => {
-      const start = startOfDay(new Date(new Date(b.thoi_gian_nhan).getTime() - 30 * 60 * 1000));
-      const end = startOfDay(new Date(new Date(b.thoi_gian_tra).getTime() + 30 * 60 * 1000));
+      if (!b.thoi_gian_nhan || !b.thoi_gian_tra) return;
+      const start = startOfDay(new Date(b.thoi_gian_nhan));
+      const end = startOfDay(new Date(b.thoi_gian_tra));
+      // Thêm tất cả các ngày từ check-in đến check-out (không bao gồm ngày checkout vì 12h trả phòng)
       eachDayOfInterval({ start, end }).forEach(d => {
-        dates.push(format(d, 'yyyy-MM-dd'));
+        dates.add(format(d, 'yyyy-MM-dd'));
       });
-      checkInDates.push(start);
-      checkOutDates.push(end);
     });
-    return { dates, checkInDates, checkOutDates };
+    return dates;
   }, [bookings]);
 
-  const bookedDateObjects: Date[] = [];
-  for (let d = new Date(); d < new Date(new Date().getFullYear() + 2, 0, 1); d.setDate(d.getDate() + 1)) {
-    for (let i = 0; i < numberOfNights; i++) {
-      const checkDate = new Date(d);
-      checkDate.setDate(checkDate.getDate() + i);
-      if (bookedDates.dates.includes(format(checkDate, 'yyyy-MM-dd'))) {
-        bookedDateObjects.push(new Date(d));
-        break;
+  // Chuyển thành Date objects để hiển thị style đỏ
+  const bookedDateObjects = useMemo(() => {
+    return Array.from(bookedDateStrings).map(dateStr => new Date(dateStr));
+  }, [bookedDateStrings]);
+
+  // Tính các ngày cần disable: 
+  // - Nếu chọn ngày đó làm check-in + numberOfNights đêm thì có overlap với ngày đã book
+  const disabledBookedDates = useMemo(() => {
+    const disabled: Date[] = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Duyệt 2 năm tới
+    for (let i = 0; i < 365 * 2; i++) {
+      const checkInDate = new Date(today);
+      checkInDate.setDate(checkInDate.getDate() + i);
+      
+      // Kiểm tra nếu đặt từ ngày này + numberOfNights đêm có overlap không
+      let hasOverlap = false;
+      for (let n = 0; n < numberOfNights; n++) {
+        const stayDate = new Date(checkInDate);
+        stayDate.setDate(stayDate.getDate() + n);
+        if (bookedDateStrings.has(format(stayDate, 'yyyy-MM-dd'))) {
+          hasOverlap = true;
+          break;
+        }
+      }
+      if (hasOverlap) {
+        disabled.push(new Date(checkInDate));
       }
     }
-  }
+    return disabled;
+  }, [bookedDateStrings, numberOfNights]);
 
-  const checkInObjects = bookedDates.checkInDates;
-  const checkOutObjects = bookedDates.checkOutDates;
-  let currentCheckout: Date | null = null;
+  // Ngày checkout dự kiến của user
+  let userCheckoutDate: Date | null = null;
   if (selectedDate && numberOfNights > 0) {
     const d = new Date(selectedDate);
     d.setDate(d.getDate() + numberOfNights);
-    currentCheckout = d;
+    userCheckoutDate = d;
   }
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  
+  // Disable: ngày quá khứ + ngày có overlap booking
   const disabledDates = [
-    ...bookedDateObjects,
+    ...disabledBookedDates,
     ...Array.from({ length: 365 * 2 }, (_, i) => {
       const d = new Date(today);
       d.setDate(d.getDate() - (i + 1));
@@ -90,10 +112,12 @@ const DailyCalendar = ({ selectedDate, setSelectedDate, numberOfNights, bookings
         onSelect={d => d && setSelectedDate(format(d, 'yyyy-MM-dd'))}
         modifiers={{
           booked: bookedDateObjects,
-          checkin: checkInObjects,
-          checkout: currentCheckout ? [...checkOutObjects, currentCheckout] : checkOutObjects
+          userCheckout: userCheckoutDate ? [userCheckoutDate] : []
         }}
-        modifiersClassNames={{ booked: 'calendar-day--booked', checkin: 'calendar-day--checkin', checkout: 'calendar-day--checkout' }}
+        modifiersStyles={{
+          booked: { backgroundColor: '#fee2e2', color: '#dc2626', border: '2px solid #dc2626', borderRadius: '8px', opacity: 0.7, cursor: 'not-allowed' },
+          userCheckout: { backgroundColor: '#dbeafe', color: '#2563eb', border: '2px dashed #2563eb', borderRadius: '8px' }
+        }}
         disabled={disabledDates}
         weekStartsOn={1}
         styles={{ day: { borderRadius: '8px' } }}
@@ -447,33 +471,34 @@ export default function BookingPage() {
 
   useEffect(() => { filterRooms(); }, [allRooms, selectedLocation, selectedConcept, priceRange]);
 
-  // Fetch existing bookings for overlap check
+  // Fetch existing bookings for overlap check - fetch khi chọn phòng
   useEffect(() => {
-    if (selectedRoom?.id && selectedDate) {
+    if (selectedRoom?.id) {
       fetchBookingsForRoom();
     } else {
       setExistingBookings([]);
     }
-  }, [selectedRoom?.id, selectedDate, numberOfNights]);
+  }, [selectedRoom?.id]);
 
   const fetchBookingsForRoom = async () => {
-    if (!selectedRoom || !selectedDate) return;
+    if (!selectedRoom) return;
     try {
-      const checkDate = new Date(selectedDate);
-      const bufferStart = new Date(checkDate);
-      bufferStart.setDate(bufferStart.getDate() - 1);
-      const bufferEnd = new Date(checkDate);
-      bufferEnd.setDate(bufferEnd.getDate() + numberOfNights + 1);
-
+      // Fetch TẤT CẢ bookings của phòng này (không dùng date filter vì API filter không đúng logic overlap)
       const response = await fetch(
-        `${API_URL}/dat-phong?start_date=${bufferStart.toISOString()}&end_date=${bufferEnd.toISOString()}`,
+        `${API_URL}/dat-phong`,
         { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
       );
       const data = await response.json();
       if (data.success) {
+        // Filter ở client: lấy bookings của phòng này, chưa hủy, và kết thúc >= hôm nay
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
         const roomBookings = data.data.filter((b: any) =>
-          b.id_phong === selectedRoom.id && b.trang_thai !== 'da_huy'
+          b.id_phong === selectedRoom.id && 
+          b.trang_thai !== 'da_huy' &&
+          new Date(b.thoi_gian_tra) >= today
         );
+        console.log('Fetched bookings for room:', roomBookings);
         setExistingBookings(roomBookings);
       }
     } catch (error) {
@@ -859,7 +884,7 @@ export default function BookingPage() {
                       selectedDate={selectedDate}
                       setSelectedDate={setSelectedDate}
                       numberOfNights={numberOfNights}
-                      bookings={allRooms.filter(room => room.id === selectedRoom.id)}
+                      bookings={existingBookings}
                     />
                   ) : (
                     <HourlyCalendar
