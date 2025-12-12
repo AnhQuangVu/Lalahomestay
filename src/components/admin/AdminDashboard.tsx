@@ -79,8 +79,8 @@ export default function AdminDashboard() {
       const statsResult = await statsResponse.json();
       setRawStats(statsResult);
 
-      // Gọi API danh sách booking - KHÔNG filter ngày để lấy tất cả đơn gần đây
-      const bookingsResponse = await fetch(`${serverUrl}/dat-phong`, {
+      // Gọi API danh sách booking - CÓ filter ngày theo timeFilter
+      const bookingsResponse = await fetch(`${serverUrl}/dat-phong?start_date=${start_date}&end_date=${end_date}`, {
         headers: {
           'Authorization': `Bearer ${publicAnonKey}`
         }
@@ -88,8 +88,12 @@ export default function AdminDashboard() {
       const bookingsResult = await bookingsResponse.json();
 
       if (statsResult.success) { // Chấp nhận hiển thị thống kê dù booking có thể lỗi nhẹ
-        const recentBookings = (bookingsResult.success && Array.isArray(bookingsResult.data)) 
-          ? bookingsResult.data.slice(0, 10).map((b: any) => ({
+        // Lọc và sắp xếp đơn theo ngày tạo mới nhất
+        const filteredBookings = (bookingsResult.success && Array.isArray(bookingsResult.data)) 
+          ? bookingsResult.data
+              .sort((a: any, b: any) => new Date(b.ngay_tao || b.created_at).getTime() - new Date(a.ngay_tao || a.created_at).getTime())
+              .slice(0, 20)
+              .map((b: any) => ({
               createdAt: b.ngay_tao ? new Date(b.ngay_tao).toLocaleString('vi-VN') : '',
               code: b.ma_dat,
               customerName: b.khach_hang?.ho_ten || 'N/A',
@@ -131,7 +135,7 @@ export default function AdminDashboard() {
             }
           },
           charts,
-          recentBookings
+          recentBookings: filteredBookings
         });
       } else {
         setError(statsResult.error || 'Không thể tải dữ liệu thống kê');

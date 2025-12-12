@@ -687,7 +687,11 @@ export default function Reports() {
         <div className="flex space-x-3">
           <button
             onClick={() => exportExcelClient()}
-            className="flex items-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow transition-colors"
+            className={`flex items-center space-x-2 px-4 py-2 rounded-lg shadow transition-colors ${
+              reportType === 'overview' 
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                : 'bg-green-600 hover:bg-green-700 text-white'
+            }`}
             disabled={reportType === 'overview'}
           >
             <Download className="w-5 h-5" />
@@ -695,7 +699,11 @@ export default function Reports() {
           </button>
           <button
             onClick={() => reportData && exportReportPDF({ reportData: sanitizeReportData(reportData), reportType, startDate, endDate })}
-            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow transition-colors"
+            className={`flex items-center space-x-2 px-4 py-2 rounded-lg shadow transition-colors ${
+              (!reportData || reportType === 'overview') 
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                : 'bg-blue-600 hover:bg-blue-700 text-white'
+            }`}
             disabled={!reportData || reportType === 'overview'}
           >
             <Download className="w-5 h-5" />

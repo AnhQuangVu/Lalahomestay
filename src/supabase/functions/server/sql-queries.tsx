@@ -600,24 +600,44 @@ export async function getStatistics(filters?: { startDate?: string, endDate?: st
   if (error) throw error;
 
   const totalBookings = bookings.length;
+  
+  // Fix: Thêm các trạng thái đã xác nhận đúng
   const confirmedBookings = bookings.filter(b =>
     b.trang_thai === 'da_coc' || b.trang_thai === 'da_tt' ||
+    b.trang_thai === 'da_nhan_phong' || b.trang_thai === 'da_tra_phong' ||
     b.trang_thai === 'checkin' || b.trang_thai === 'checkout'
   ).length;
   const cancelledBookings = bookings.filter(b => b.trang_thai === 'da_huy').length;
 
+  // Doanh thu: Chỉ tính đơn không hủy
   const totalRevenue = bookings
     .filter(b => b.trang_thai !== 'da_huy')
     .reduce((sum, b) => sum + (b.tong_tien || 0), 0);
 
   const rooms = await getAllPhong();
   const totalRooms = rooms.length;
-  const occupiedRooms = rooms.filter(r =>
-    r.trang_thai === 'dang_dung' || r.trang_thai === 'sap_nhan'
-  ).length;
+  
+  // Fix: occupiedRooms - Đếm số phòng ĐANG CÓ KHÁCH tại thời điểm hiện tại
+  // Dựa trên booking đang active (now >= thoi_gian_nhan && now <= thoi_gian_tra && không hủy)
+  const now = new Date();
+  const { data: activeBookings } = await supabase
+    .from('dat_phong')
+    .select('id_phong')
+    .neq('trang_thai', 'da_huy')
+    .lte('thoi_gian_nhan', now.toISOString())
+    .gte('thoi_gian_tra', now.toISOString());
+  
+  const occupiedRoomIds = new Set((activeBookings || []).map(b => b.id_phong).filter(id => id));
+  const occupiedRooms = occupiedRoomIds.size;
 
-  const customers = await getAllKhachHang();
-  const totalCustomers = customers.length;
+  // Fix: Đếm khách hàng TRONG KỲ (có booking trong khoảng thời gian filter)
+  const customerIdsInRange = new Set(
+    bookings
+      .filter(b => b.trang_thai !== 'da_huy')
+      .map(b => b.id_khach_hang)
+      .filter(id => id) // Loại bỏ null/undefined
+  );
+  const totalCustomers = customerIdsInRange.size;
 
   return {
     totalBookings,
