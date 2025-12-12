@@ -105,41 +105,51 @@ const DailyCalendar = ({ selectedDate, setSelectedDate, numberOfNights, bookings
   ];
 
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '32px', flexWrap: 'wrap' }}>
-      <DayPicker
-        mode="single"
-        selected={selectedDate ? new Date(selectedDate) : undefined}
-        onSelect={d => d && setSelectedDate(format(d, 'yyyy-MM-dd'))}
-        modifiers={{
-          booked: bookedDateObjects,
-          userCheckout: userCheckoutDate ? [userCheckoutDate] : []
-        }}
-        modifiersStyles={{
-          booked: { backgroundColor: '#fee2e2', color: '#dc2626', border: '2px solid #dc2626', borderRadius: '8px', opacity: 0.7, cursor: 'not-allowed' },
-          userCheckout: { backgroundColor: '#dbeafe', color: '#2563eb', border: '2px dashed #2563eb', borderRadius: '8px' }
-        }}
-        disabled={disabledDates}
-        weekStartsOn={1}
-        styles={{ day: { borderRadius: '8px' } }}
-      />
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '24px', flexWrap: 'nowrap' }}>
+      <div style={{ flexShrink: 0 }}>
+        <DayPicker
+          mode="single"
+          selected={selectedDate ? new Date(selectedDate) : undefined}
+          onSelect={d => d && setSelectedDate(format(d, 'yyyy-MM-dd'))}
+          modifiers={{
+            booked: bookedDateObjects,
+            userCheckout: userCheckoutDate ? [userCheckoutDate] : []
+          }}
+          modifiersStyles={{
+            booked: { backgroundColor: '#fee2e2', color: '#dc2626', border: '2px solid #dc2626', borderRadius: '8px', opacity: 0.7, cursor: 'not-allowed' },
+            userCheckout: { backgroundColor: '#dbeafe', color: '#2563eb', border: '2px dashed #2563eb', borderRadius: '8px' }
+          }}
+          disabled={disabledDates}
+          weekStartsOn={1}
+          styles={{ day: { borderRadius: '8px' } }}
+        />
+      </div>
       {selectedDate && numberOfNights > 0 && (
-        <div style={{ minWidth: '220px', padding: '16px 20px', background: '#fff7ed', borderRadius: '12px', border: '1px solid #fdba74', color: '#d97706', fontWeight: 600, fontSize: '15px', boxShadow: '0 2px 8px #fbbf2433' }}>
+        <div style={{ flexShrink: 0, minWidth: '240px', padding: '16px 20px', background: '#fff7ed', borderRadius: '12px', border: '1px solid #fdba74', color: '#d97706', fontWeight: 600, fontSize: '15px', boxShadow: '0 2px 8px #fbbf2433' }}>
           <div>Thông tin lưu trú:</div>
-          <div style={{ marginTop: '8px', fontSize: '16px' }}>
+          <div style={{ marginTop: '8px', fontSize: '15px' }}>
             <span>Nhận phòng: </span>
             <b>{(() => {
               const d = new Date(selectedDate);
               d.setHours(14, 0, 0, 0);
-              return d.toLocaleString('vi-VN', { weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+              const weekdays = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy'];
+              const day = d.getDate().toString().padStart(2, '0');
+              const month = (d.getMonth() + 1).toString().padStart(2, '0');
+              const year = d.getFullYear();
+              return `${weekdays[d.getDay()]}, ${day}/${month}/${year} - 14:00`;
             })()}</b>
           </div>
-          <div style={{ marginTop: '8px', fontSize: '16px' }}>
+          <div style={{ marginTop: '8px', fontSize: '15px' }}>
             <span>Trả phòng: </span>
             <b>{(() => {
               const d = new Date(selectedDate);
               d.setDate(d.getDate() + numberOfNights);
               d.setHours(12, 0, 0, 0);
-              return d.toLocaleString('vi-VN', { weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+              const weekdays = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy'];
+              const day = d.getDate().toString().padStart(2, '0');
+              const month = (d.getMonth() + 1).toString().padStart(2, '0');
+              const year = d.getFullYear();
+              return `${weekdays[d.getDay()]}, ${day}/${month}/${year} - 12:00`;
             })()}</b>
           </div>
         </div>
@@ -1015,13 +1025,38 @@ export default function BookingPage() {
                 <div>Số khách: <b>{numberOfGuests}</b></div>
                 {bookingType === 'ngay' ? (
                   <>
-                    <div>Nhận phòng: <b>{(() => { const d = new Date(selectedDate); d.setHours(14, 0, 0, 0); return d.toLocaleString('vi-VN', { weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }); })()}</b></div>
-                    <div>Trả phòng: <b>{(() => { const d = new Date(selectedDate); d.setDate(d.getDate() + numberOfNights); d.setHours(12, 0, 0, 0); return d.toLocaleString('vi-VN', { weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }); })()}</b></div>
+                    <div>Nhận phòng: <b>{(() => { 
+                      const d = new Date(selectedDate); 
+                      d.setHours(14, 0, 0, 0); 
+                      const weekdays = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy'];
+                      const day = d.getDate().toString().padStart(2, '0');
+                      const month = (d.getMonth() + 1).toString().padStart(2, '0');
+                      const year = d.getFullYear();
+                      return `${weekdays[d.getDay()]}, ${day}/${month}/${year} - 14:00`; 
+                    })()}</b></div>
+                    <div>Trả phòng: <b>{(() => { 
+                      const d = new Date(selectedDate); 
+                      d.setDate(d.getDate() + numberOfNights); 
+                      d.setHours(12, 0, 0, 0); 
+                      const weekdays = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy'];
+                      const day = d.getDate().toString().padStart(2, '0');
+                      const month = (d.getMonth() + 1).toString().padStart(2, '0');
+                      const year = d.getFullYear();
+                      return `${weekdays[d.getDay()]}, ${day}/${month}/${year} - 12:00`; 
+                    })()}</b></div>
                     <div>Số đêm: <b>{numberOfNights}</b></div>
                   </>
                 ) : (
                   <>
-                    <div>Ngày sử dụng: <b>{selectedDate ? new Date(selectedDate).toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit' }) : ''}</b></div>
+                    <div>Ngày sử dụng: <b>{(() => {
+                      if (!selectedDate) return '';
+                      const d = new Date(selectedDate);
+                      const weekdays = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy'];
+                      const day = d.getDate().toString().padStart(2, '0');
+                      const month = (d.getMonth() + 1).toString().padStart(2, '0');
+                      const year = d.getFullYear();
+                      return `${weekdays[d.getDay()]}, ${day}/${month}/${year}`;
+                    })()}</b></div>
                     <div>Các khung giờ đã chọn:</div>
                     <ul style={{marginTop: 4, paddingLeft: 20}}>
                         {selectedTimeSlots.map((s, idx) => (
