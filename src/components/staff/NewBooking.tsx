@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { uploadToCloudinary } from '../../utils/cloudinary';
 import { 
   Calendar, Users, Clock, RefreshCw, Check, AlertCircle, UploadCloud, 
-  ChevronRight, ArrowLeft, CheckCircle2, Info, FileText, Search, Grid, List, Plus, Eye, Ban, Phone, MapPin, StickyNote, Image as ImageIcon, PenTool, X, User
+  ChevronRight, ArrowLeft, CheckCircle2, Info, FileText, Search, Grid, List, Plus, Eye, Ban, Phone, MapPin, StickyNote, Image as ImageIcon, PenTool, X, User, Copy, PartyPopper
 } from 'lucide-react';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { toast } from 'sonner';
@@ -247,6 +247,9 @@ export default function NewBooking() {
   const [showBookingSection, setShowBookingSection] = useState(false);
   const formRef = useRef<HTMLDivElement>(null);
   const [viewLoadingId, setViewLoadingId] = useState<string | null>(null);
+  
+  // Success Dialog State
+  const [successDialog, setSuccessDialog] = useState<{ show: boolean; maDat: string; tenPhong: string; tenKhach: string; checkIn: string; checkOut: string; soLuong: number } | null>(null);
 
   const [filteredConcepts, setFilteredConcepts] = useState<any[]>([]);
   const [filteredRooms, setFilteredRooms] = useState<any[]>([]);
@@ -448,13 +451,20 @@ export default function NewBooking() {
         const response = await fetch(`${API_URL}/dat-phong`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` }, body: JSON.stringify({ ...basePayload, thoi_gian_nhan: checkIn, thoi_gian_tra: checkOut }) });
         const data = await response.json();
         if (!data.success) throw new Error(data.error);
-        toast.success(`Tạo đơn ngày thành công! Mã: ${data.data?.ma_dat}`);
+        const selectedRoom = rooms.find((r: any) => r.id === formData.room);
+        setSuccessDialog({ show: true, maDat: data.data?.ma_dat || '', tenPhong: selectedRoom?.ten_phong || 'Phòng', tenKhach: formData.customerName, checkIn, checkOut, soLuong: 1 });
       } else {
         if (selectedTimeSlots.length === 0) throw new Error('Vui lòng chọn ít nhất 1 khung giờ');
         const promises = selectedTimeSlots.map(slot => fetch(`${API_URL}/dat-phong`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` }, body: JSON.stringify({ ...basePayload, thoi_gian_nhan: slot.start, thoi_gian_tra: slot.end, ghi_chu: (formData.notes || '') + ` (Slot: ${slot.label})` }) }).then(r => r.json()));
         const results = await Promise.all(promises);
         const errors = results.filter(r => !r.success);
-        if (errors.length > 0) toast.warning(`Có ${errors.length} khung giờ thất bại.`); else toast.success(`Đã tạo thành công ${results.length} đơn đặt phòng theo giờ!`);
+        const successResults = results.filter(r => r.success);
+        if (errors.length > 0) toast.warning(`Có ${errors.length} khung giờ thất bại.`);
+        if (successResults.length > 0) {
+          const selectedRoom = rooms.find((r: any) => r.id === formData.room);
+          const maDatList = successResults.map(r => r.data?.ma_dat).filter(Boolean).join(', ');
+          setSuccessDialog({ show: true, maDat: maDatList, tenPhong: selectedRoom?.ten_phong || 'Phòng', tenKhach: formData.customerName, checkIn: selectedTimeSlots[0].start, checkOut: selectedTimeSlots[selectedTimeSlots.length - 1].end, soLuong: successResults.length });
+        }
       }
       setFormData(prev => ({ ...prev, customerName: '', customerPhone: '', customerEmail: '', notes: '', cccdFront: '', cccdBack: '' }));
       setSelectedTimeSlots([]);
@@ -950,6 +960,77 @@ export default function NewBooking() {
                 </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* SUCCESS DIALOG */}
+      {successDialog?.show && (
+        <div style={styles.modalOverlay} onClick={() => setSuccessDialog(null)}>
+          <div style={{ ...styles.modalContent, maxWidth: '420px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: '32px 24px' }}>
+              {/* Success Icon */}
+              <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', boxShadow: '0 8px 24px rgba(16, 185, 129, 0.35)' }}>
+                <PartyPopper size={40} color="white" />
+              </div>
+              
+              <h2 style={{ fontSize: '22px', fontWeight: '700', color: '#111827', margin: '0 0 8px' }}>Đặt phòng thành công!</h2>
+              <p style={{ fontSize: '14px', color: '#6b7280', margin: '0 0 24px' }}>Đơn đặt phòng đã được tạo thành công</p>
+              
+              {/* Booking Info */}
+              <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '16px', marginBottom: '20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '12px' }}>
+                  <span style={{ fontSize: '13px', color: '#6b7280' }}>Mã đơn:</span>
+                  <span style={{ fontSize: '18px', fontWeight: '700', color: '#059669', fontFamily: 'monospace', letterSpacing: '1px' }}>{successDialog.maDat}</span>
+                  <button 
+                    onClick={() => { navigator.clipboard.writeText(successDialog.maDat); toast.success('Đã sao chép mã đơn!'); }}
+                    style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #bbf7d0', backgroundColor: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#059669' }}
+                  >
+                    <Copy size={12} /> Copy
+                  </button>
+                </div>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '13px', textAlign: 'left' }}>
+                  <div>
+                    <div style={{ color: '#6b7280', marginBottom: '2px' }}>Khách hàng</div>
+                    <div style={{ fontWeight: '600', color: '#111827' }}>{successDialog.tenKhach}</div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#6b7280', marginBottom: '2px' }}>Phòng</div>
+                    <div style={{ fontWeight: '600', color: '#111827' }}>{successDialog.tenPhong}</div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#6b7280', marginBottom: '2px' }}>Check-in</div>
+                    <div style={{ fontWeight: '600', color: '#111827' }}>{format(new Date(successDialog.checkIn), 'dd/MM/yyyy HH:mm')}</div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#6b7280', marginBottom: '2px' }}>Check-out</div>
+                    <div style={{ fontWeight: '600', color: '#111827' }}>{format(new Date(successDialog.checkOut), 'dd/MM/yyyy HH:mm')}</div>
+                  </div>
+                </div>
+                {successDialog.soLuong > 1 && (
+                  <div style={{ marginTop: '12px', padding: '8px', backgroundColor: '#dcfce7', borderRadius: '8px', fontSize: '12px', color: '#166534' }}>
+                    ✨ Đã tạo thành công {successDialog.soLuong} đơn đặt phòng theo giờ
+                  </div>
+                )}
+              </div>
+              
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button 
+                  onClick={() => setSuccessDialog(null)}
+                  style={{ flex: 1, padding: '12px', borderRadius: '10px', border: '1px solid #d1d5db', backgroundColor: 'white', fontWeight: '600', fontSize: '14px', cursor: 'pointer', color: '#374151' }}
+                >
+                  Đóng
+                </button>
+                <button 
+                  onClick={() => { setSuccessDialog(null); setShowBookingSection(true); }}
+                  style={{ flex: 1, padding: '12px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', fontWeight: '600', fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                >
+                  <Plus size={16} /> Tạo đơn mới
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
