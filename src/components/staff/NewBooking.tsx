@@ -488,23 +488,25 @@ export default function NewBooking() {
         setSuccessDialog({ show: true, maDat: data.data?.ma_dat || '', tenPhong: selectedRoom?.ma_phong || 'Phòng', tenKhach: formData.customerName, checkIn, checkOut, soLuong: 1 });
       } else {
         if (selectedTimeSlots.length === 0) throw new Error('Vui lòng chọn ít nhất 1 khung giờ');
-        // Tính giá theo giờ cho mỗi slot
+        // Gộp các slot thành 1 đơn: lấy thời gian sớm nhất → muộn nhất
+        const sortedSlots = [...selectedTimeSlots].sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+        const checkIn = sortedSlots[0].start;
+        const checkOut = sortedSlots[sortedSlots.length - 1].end;
+        
+        // Tính tổng giờ và giá
         const hourlyPrice = selectedRoom?.loai_phong?.gia_gio ? Number(selectedRoom.loai_phong.gia_gio) : 0;
-        const promises = selectedTimeSlots.map(slot => {
-          const slotStart = new Date(slot.start);
-          const slotEnd = new Date(slot.end);
-          const hoursBooked = (slotEnd.getTime() - slotStart.getTime()) / (1000 * 60 * 60);
-          const slotPrice = Math.round(hourlyPrice * hoursBooked);
-          return fetch(`${API_URL}/dat-phong`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` }, body: JSON.stringify({ ...basePayload, thoi_gian_nhan: slot.start, thoi_gian_tra: slot.end, tong_tien: slotPrice, coc_csvc: 0, ghi_chu: (formData.notes || '') + ` (Slot: ${slot.label})` }) }).then(r => r.json());
+        const totalHours = (new Date(checkOut).getTime() - new Date(checkIn).getTime()) / (1000 * 60 * 60);
+        const totalPrice = Math.round(hourlyPrice * totalHours);
+        
+        const slotLabels = sortedSlots.map(s => s.label).join(', ');
+        const response = await fetch(`${API_URL}/dat-phong`, { 
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` }, 
+          body: JSON.stringify({ ...basePayload, thoi_gian_nhan: checkIn, thoi_gian_tra: checkOut, tong_tien: totalPrice, coc_csvc: 0, ghi_chu: (formData.notes || '') + (sortedSlots.length > 1 ? ` (${slotLabels})` : '') }) 
         });
-        const results = await Promise.all(promises);
-        const errors = results.filter(r => !r.success);
-        const successResults = results.filter(r => r.success);
-        if (errors.length > 0) toast.warning(`Có ${errors.length} khung giờ thất bại.`);
-        if (successResults.length > 0) {
-          const maDatList = successResults.map(r => r.data?.ma_dat).filter(Boolean).join(', ');
-          setSuccessDialog({ show: true, maDat: maDatList, tenPhong: selectedRoom?.ma_phong || 'Phòng', tenKhach: formData.customerName, checkIn: selectedTimeSlots[0].start, checkOut: selectedTimeSlots[selectedTimeSlots.length - 1].end, soLuong: successResults.length });
-        }
+        const data = await response.json();
+        if (!data.success) throw new Error(data.error);
+        setSuccessDialog({ show: true, maDat: data.data?.ma_dat || '', tenPhong: selectedRoom?.ma_phong || 'Phòng', tenKhach: formData.customerName, checkIn, checkOut, soLuong: 1 });
       }
       setFormData(prev => ({ ...prev, customerName: '', customerPhone: '', customerEmail: '', notes: '', cccdFront: '', cccdBack: '' }));
       setSelectedTimeSlots([]);
