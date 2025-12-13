@@ -41,10 +41,15 @@ const DailyCalendar = ({ selectedDate, setSelectedDate, numberOfNights, bookings
       if (!b.thoi_gian_nhan || !b.thoi_gian_tra) return;
       const start = startOfDay(new Date(b.thoi_gian_nhan));
       const end = startOfDay(new Date(b.thoi_gian_tra));
-      // Thêm tất cả các ngày từ check-in đến check-out (không bao gồm ngày checkout vì 12h trả phòng)
-      eachDayOfInterval({ start, end }).forEach(d => {
-        dates.add(format(d, 'yyyy-MM-dd'));
-      });
+      // Thêm tất cả các ngày từ check-in đến trước ngày check-out
+      // (không bao gồm ngày checkout vì 12h trả phòng, có thể nhận khách mới lúc 14h)
+      const endExclusive = new Date(end);
+      endExclusive.setDate(endExclusive.getDate() - 1);
+      if (endExclusive >= start) {
+        eachDayOfInterval({ start, end: endExclusive }).forEach(d => {
+          dates.add(format(d, 'yyyy-MM-dd'));
+        });
+      }
     });
     return dates;
   }, [bookings]);
@@ -363,13 +368,24 @@ const HourlyCalendar = ({ selectedDate, setSelectedDate, selectedTimeSlots, onSl
   const bookedFullDayDates = useMemo(() => {
     const dates = new Set<string>();
     bookings.forEach(b => {
-      // Chỉ block nếu là booking theo ngày (loai_dat = 'ngay')
-      if (b.loai_dat === 'ngay') {
-        const start = parseISO(b.ngay_nhan);
-        const end = parseISO(b.ngay_tra);
-        eachDayOfInterval({ start, end: new Date(end.getTime() - 1) }).forEach(d => {
-          dates.add(format(d, 'yyyy-MM-dd'));
-        });
+      if (!b.thoi_gian_nhan || !b.thoi_gian_tra) return;
+      // Kiểm tra nếu booking theo ngày (khoảng thời gian > 12 tiếng = đặt theo ngày)
+      const start = new Date(b.thoi_gian_nhan);
+      const end = new Date(b.thoi_gian_tra);
+      const durationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+      
+      // Nếu duration > 12 giờ, coi như booking theo ngày, block cả ngày
+      if (durationHours > 12) {
+        const startDay = startOfDay(start);
+        const endDay = startOfDay(end);
+        // Không bao gồm ngày checkout
+        const endExclusive = new Date(endDay);
+        endExclusive.setDate(endExclusive.getDate() - 1);
+        if (endExclusive >= startDay) {
+          eachDayOfInterval({ start: startDay, end: endExclusive }).forEach(d => {
+            dates.add(format(d, 'yyyy-MM-dd'));
+          });
+        }
       }
     });
     return dates;
@@ -514,6 +530,11 @@ export default function BookingPage() {
 
   useEffect(() => { filterRooms(); }, [allRooms, selectedLocation, selectedConcept, priceRange]);
 
+  // Reset selectedTimeSlots khi đổi phòng để tránh giữ slots cũ
+  useEffect(() => {
+    setSelectedTimeSlots([]);
+  }, [selectedRoom?.id]);
+
   // Fetch existing bookings for overlap check - fetch khi chọn phòng
   useEffect(() => {
     if (selectedRoom?.id) {
@@ -567,13 +588,14 @@ export default function BookingPage() {
     } catch (error) { toast.error('Không thể tải dữ liệu.'); } finally { setLoading(false); }
   };
 
-  const filterRooms = async () => {
+  const filterRooms = () => {
     let filtered = allRooms.filter(r => r.trang_thai !== 'dinh_chi');
     if (selectedLocation !== 'all') filtered = filtered.filter(r => r.loai_phong?.id_co_so === selectedLocation);
     if (selectedConcept !== 'all') filtered = filtered.filter(r => r.id_loai_phong === selectedConcept);
     if (priceRange !== 'all') {
       filtered = filtered.filter(r => {
-        const price = bookingType === 'gio' ? r.loai_phong?.gia_gio : r.loai_phong?.gia_dem;
+        // Ở bước 1 (chọn phòng), dùng giá đêm làm mặc định để filter
+        const price = r.loai_phong?.gia_dem || r.loai_phong?.gia_gio || 0;
         if (priceRange === 'low') return price < 200000;
         if (priceRange === 'mid') return price >= 200000 && price < 500000;
         if (priceRange === 'high') return price >= 500000;
@@ -749,7 +771,7 @@ export default function BookingPage() {
                  thoi_gian_tra: toLocalISOString(end),
                  tong_tien: slotPrice,
                  coc_csvc: 0,
-                 ghi_chu: (notes || '') + ` (Slot: ${slot.label})` // Note thêm tên slot vào
+                 ghi_chu: notes ? `${notes} (Slot: ${slot.label})` : `Slot: ${slot.label}` // Note thêm tên slot vào
              };
 
              return fetch(`${API_URL}/dat-phong`, {
