@@ -512,8 +512,11 @@ export default function NewBooking() {
       setSelectedTimeSlots([]);
       fetchBookingsForRoom();
       if (showHistoryTable) fetchAllHistoryBookings(); else fetchAllBookingsForLookup(lookupDate);
-      setShowBookingSection(false); 
-    } catch (error: any) { toast.error(error.message || 'Lỗi xử lý'); } finally { setLoading(false); }
+      // Không đóng form ngay, để user thấy dialog thành công
+    } catch (error: any) { 
+      console.error('Booking error:', error);
+      toast.error(error.message || 'Lỗi xử lý'); 
+    } finally { setLoading(false); }
   };
 
   const handleUploadCCCD = async (file: File, type: 'front' | 'back') => {
