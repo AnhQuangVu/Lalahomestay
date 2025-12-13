@@ -651,13 +651,16 @@ export default function BookingPage() {
 
       setStep(3);
     } else if (step === 3) {
-      if (isSubmittingGlobal) return; // Double check
+      if (isSubmittingGlobal || loading) return; // Double check
       isSubmittingGlobal = true; // Set ngay lập tức (sync)
       setLoading(true); // Set loading trước để ngăn double-click
       try {
         await handleSubmitBooking();
+      } catch (e: any) {
+        toast.error(e.message || 'Lỗi đặt phòng');
       } finally {
         isSubmittingGlobal = false; // Luôn reset dù success hay error
+        setLoading(false); // Luôn reset loading
       }
     }
   };
@@ -680,42 +683,43 @@ export default function BookingPage() {
 
   // *** XỬ LÝ SUBMIT NHIỀU BOOKING ***
   const handleSubmitBooking = async () => {
-    if (!fullName || !phone) return toast.error('Nhập đầy đủ họ tên và SĐT.');
-    if (!/^0[0-9]{9,10}$/.test(phone)) return toast.error('SĐT không hợp lệ.');
-    if (!cccdFront && !cccdFrontPreview) return toast.error('Vui lòng tải ảnh CCCD mặt trước.');
-    if (!cccdBack && !cccdBackPreview) return toast.error('Vui lòng tải ảnh CCCD mặt sau.');
+    if (!fullName || !phone) { throw new Error('Nhập đầy đủ họ tên và SĐT.'); }
+    if (!/^0[0-9]{9,10}$/.test(phone)) { throw new Error('SĐT không hợp lệ (phải bắt đầu bằng 0, 10-11 số).'); }
+    if (!cccdFront && !cccdFrontPreview) { throw new Error('Vui lòng tải ảnh CCCD mặt trước.'); }
+    if (!cccdBack && !cccdBackPreview) { throw new Error('Vui lòng tải ảnh CCCD mặt sau.'); }
     
-    setLoading(true);
-    try {
-      let cccdFrontUrl = cccdFrontPreview || null; 
-      let cccdBackUrl = cccdBackPreview || null;
-      if (cccdFront || cccdBack) {
-        setUploadingCccd(true); toast.info('Đang upload CCCD...');
-        try {
-          if (cccdFront) cccdFrontUrl = await uploadToCloudinary(cccdFront, 'cccd');
-          if (cccdBack) cccdBackUrl = await uploadToCloudinary(cccdBack, 'cccd');
-          toast.success('Upload ảnh xong!');
-        } catch { setUploadingCccd(false); setLoading(false); return toast.error('Lỗi upload ảnh.'); }
-        setUploadingCccd(false);
+    let cccdFrontUrl = cccdFrontPreview || null; 
+    let cccdBackUrl = cccdBackPreview || null;
+    if (cccdFront || cccdBack) {
+      setUploadingCccd(true); toast.info('Đang upload CCCD...');
+      try {
+        if (cccdFront) cccdFrontUrl = await uploadToCloudinary(cccdFront, 'cccd');
+        if (cccdBack) cccdBackUrl = await uploadToCloudinary(cccdBack, 'cccd');
+        toast.success('Upload ảnh xong!');
+      } catch { 
+        setUploadingCccd(false); 
+        throw new Error('Lỗi upload ảnh.'); 
       }
+      setUploadingCccd(false);
+    }
 
-      // Payload cơ bản
-      const basePayload = {
-        ho_ten: fullName, sdt: phone, email: email || null,
-        cccd_mat_truoc: cccdFrontUrl, cccd_mat_sau: cccdBackUrl,
-        id_phong: selectedRoom.id,
-        so_khach: numberOfGuests, 
-        kenh_dat: 'website', ghi_chu: notes || null, ghi_chu_khach: notes || null
-      };
+    // Payload cơ bản
+    const basePayload = {
+      ho_ten: fullName, sdt: phone, email: email || null,
+      cccd_mat_truoc: cccdFrontUrl, cccd_mat_sau: cccdBackUrl,
+      id_phong: selectedRoom.id,
+      so_khach: numberOfGuests, 
+      kenh_dat: 'website', ghi_chu: notes || null, ghi_chu_khach: notes || null
+    };
 
-      if (bookingType === 'ngay') {
-          const payload = {
-              ...basePayload,
-              thoi_gian_nhan: checkIn,
-              thoi_gian_tra: checkOut,
-              tong_tien: calculateTotal(),
-              coc_csvc: 0
-          };
+    if (bookingType === 'ngay') {
+        const payload = {
+            ...basePayload,
+            thoi_gian_nhan: checkIn,
+            thoi_gian_tra: checkOut,
+            tong_tien: calculateTotal(),
+            coc_csvc: 0
+        };
           const res = await fetch(`${API_URL}/dat-phong`, {
               method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
               body: JSON.stringify(payload)
@@ -778,12 +782,10 @@ export default function BookingPage() {
           } else {
              throw new Error('Không thể đặt phòng.');
           }
-      }
+    }
 
-      setShowPaymentDialog(true); 
-      toast.success('Đặt thành công!');
-
-    } catch (e: any) { toast.error(e.message || 'Lỗi đặt phòng'); } finally { setLoading(false); }
+    setShowPaymentDialog(true); 
+    toast.success('Đặt thành công!');
   };
 
   return (

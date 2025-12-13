@@ -261,7 +261,12 @@ export default function NewBooking() {
   }, []);
 
   useEffect(() => { if (formData.location) { setFilteredConcepts(concepts.filter((c: any) => c.id_co_so === formData.location)); } else setFilteredConcepts([]); }, [formData.location, concepts]);
-  useEffect(() => { if (formData.concept) { setFilteredRooms(rooms.filter((r: any) => r.id_loai_phong === formData.concept && r.trang_thai === 'trong')); } else setFilteredRooms([]); }, [formData.concept, rooms]);
+  useEffect(() => { 
+    if (formData.concept) { 
+      // Hiển thị tất cả phòng thuộc loại này (trừ bảo trì), staff sẽ check lịch để đặt
+      setFilteredRooms(rooms.filter((r: any) => r.id_loai_phong === formData.concept && r.trang_thai !== 'bao_tri')); 
+    } else setFilteredRooms([]); 
+  }, [formData.concept, rooms]);
   useEffect(() => { if (formData.room && selectedDate) { fetchBookingsForRoom(); } else { setExistingBookings([]); } setSelectedTimeSlots([]); }, [formData.room, selectedDate]);
   
   // Khi đổi ngày trong "Tra cứu nhanh", load lại dữ liệu
@@ -807,7 +812,7 @@ export default function NewBooking() {
                           <div>
                               <label style={styles.label}>Thanh toán</label>
                               <select style={styles.select} value={formData.paymentMethod} onChange={e => setFormData({ ...formData, paymentMethod: e.target.value })}>
-                                  <option value="transfer">Chuyển khoản</option><option value="cash">Tiền mặt</option><option value="card">Quẹt thẻ</option><option value="vnpay">VNPAY</option><option value="momo">Momo</option>
+                                  <option value="transfer">Chuyển khoản</option><option value="vnpay">VNPAY</option><option value="momo">Momo</option>
                               </select>
                           </div>
                       </div>
@@ -863,7 +868,7 @@ export default function NewBooking() {
                         <div>
                             <label style={styles.label}>Phòng số</label>
                             <select style={styles.select} value={formData.room} onChange={e => setFormData({ ...formData, room: e.target.value })} disabled={!formData.concept}>
-                                <option value="">-- Chọn phòng --</option>{filteredRooms.map(r => <option key={r.id} value={r.id}>{r.ma_phong} ({r.trang_thai === 'trong' ? 'Trống' : 'Đang dùng'})</option>)}
+                                <option value="">-- Chọn phòng --</option>{filteredRooms.map(r => <option key={r.id} value={r.id}>{r.ma_phong}</option>)}
                             </select>
                         </div>
                     </div>
