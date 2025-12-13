@@ -369,14 +369,22 @@ export default function BookingManagement() {
                           const start = new Date(booking.thoi_gian_nhan);
                           const end = new Date(booking.thoi_gian_tra);
                           const hours = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60));
+                          
+                          // Tính số đêm đúng: check-in ngày khác check-out = qua đêm
                           const startDate = new Date(start.getFullYear(), start.getMonth(), start.getDate());
                           const endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate());
-                          const nights = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
-
+                          const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+                          
+                          // Nếu cùng ngày (daysDiff = 0) → chỉ hiển thị giờ
+                          // Nếu khác ngày → hiển thị số đêm
                           return (
                             <div className="text-xs">
                               <div className="font-medium">{hours}h</div>
-                              <div className="text-gray-500">({nights} {nights === 1 ? 'đêm' : 'ngày'})</div>
+                              {daysDiff > 0 ? (
+                                <div className="text-gray-500">({daysDiff} đêm)</div>
+                              ) : (
+                                <div className="text-gray-500">(theo giờ)</div>
+                              )}
                             </div>
                           );
                         })()}
