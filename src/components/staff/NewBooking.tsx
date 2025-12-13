@@ -254,6 +254,37 @@ export default function NewBooking() {
   const [filteredConcepts, setFilteredConcepts] = useState<any[]>([]);
   const [filteredRooms, setFilteredRooms] = useState<any[]>([]);
 
+  // Hàm tính giá hiển thị (dùng rooms state để lấy giá nếu tong_tien = 0)
+  const calculateDisplayPrice = useCallback((booking: any) => {
+    // Nếu đã có giá, dùng luôn
+    if (booking.tong_tien && Number(booking.tong_tien) > 0) {
+      return Number(booking.tong_tien);
+    }
+    
+    // Tìm phòng trong state rooms để lấy giá
+    const roomData = rooms.find(r => r.id === booking.id_phong);
+    if (!roomData?.loai_phong) return 0;
+    
+    try {
+      const checkIn = new Date(booking.thoi_gian_nhan);
+      const checkOut = new Date(booking.thoi_gian_tra);
+      const hours = differenceInHours(checkOut, checkIn);
+      
+      const giaDem = roomData.loai_phong.gia_dem || 0;
+      const giaGio = roomData.loai_phong.gia_gio || 0;
+      
+      // Nếu >= 18h thì tính theo đêm, còn lại theo giờ
+      if (hours >= 18) {
+        const nights = Math.ceil(hours / 24);
+        return giaDem * nights;
+      } else {
+        return giaGio * hours;
+      }
+    } catch {
+      return 0;
+    }
+  }, [rooms]);
+
   // Init
   useEffect(() => { 
       fetchData(); 
@@ -445,25 +476,34 @@ export default function NewBooking() {
     if (!formData.customerName || !formData.customerPhone || !formData.room) return toast.error("Thiếu thông tin bắt buộc.");
     setLoading(true);
     try {
+      const selectedRoom = rooms.find((r: any) => r.id === formData.room);
       const basePayload: any = { ho_ten: formData.customerName, sdt: formData.customerPhone, email: formData.customerEmail || null, id_phong: formData.room, so_khach: formData.numberOfGuests || 1, ghi_chu: formData.notes || null, ghi_chu_khach: formData.notes || null, kenh_dat: formData.bookingSource, trang_thai: 'da_coc', cccd_mat_truoc: formData.cccdFront || null, cccd_mat_sau: formData.cccdBack || null };
       if (bookingType === 'ngay') {
         const checkIn = `${selectedDate}T14:00:00`; const nextDay = new Date(selectedDate); nextDay.setDate(nextDay.getDate() + 1); const checkOut = `${nextDay.toISOString().split('T')[0]}T12:00:00`;
-        const response = await fetch(`${API_URL}/dat-phong`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` }, body: JSON.stringify({ ...basePayload, thoi_gian_nhan: checkIn, thoi_gian_tra: checkOut }) });
+        // Tính giá theo đêm
+        const pricePerNight = selectedRoom?.loai_phong?.gia_dem ? Number(selectedRoom.loai_phong.gia_dem) : 0;
+        const response = await fetch(`${API_URL}/dat-phong`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` }, body: JSON.stringify({ ...basePayload, thoi_gian_nhan: checkIn, thoi_gian_tra: checkOut, tong_tien: pricePerNight, coc_csvc: 0 }) });
         const data = await response.json();
         if (!data.success) throw new Error(data.error);
-        const selectedRoom = rooms.find((r: any) => r.id === formData.room);
-        setSuccessDialog({ show: true, maDat: data.data?.ma_dat || '', tenPhong: selectedRoom?.ten_phong || 'Phòng', tenKhach: formData.customerName, checkIn, checkOut, soLuong: 1 });
+        setSuccessDialog({ show: true, maDat: data.data?.ma_dat || '', tenPhong: selectedRoom?.ma_phong || 'Phòng', tenKhach: formData.customerName, checkIn, checkOut, soLuong: 1 });
       } else {
         if (selectedTimeSlots.length === 0) throw new Error('Vui lòng chọn ít nhất 1 khung giờ');
-        const promises = selectedTimeSlots.map(slot => fetch(`${API_URL}/dat-phong`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` }, body: JSON.stringify({ ...basePayload, thoi_gian_nhan: slot.start, thoi_gian_tra: slot.end, ghi_chu: (formData.notes || '') + ` (Slot: ${slot.label})` }) }).then(r => r.json()));
+        // Tính giá theo giờ cho mỗi slot
+        const hourlyPrice = selectedRoom?.loai_phong?.gia_gio ? Number(selectedRoom.loai_phong.gia_gio) : 0;
+        const promises = selectedTimeSlots.map(slot => {
+          const slotStart = new Date(slot.start);
+          const slotEnd = new Date(slot.end);
+          const hoursBooked = (slotEnd.getTime() - slotStart.getTime()) / (1000 * 60 * 60);
+          const slotPrice = Math.round(hourlyPrice * hoursBooked);
+          return fetch(`${API_URL}/dat-phong`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` }, body: JSON.stringify({ ...basePayload, thoi_gian_nhan: slot.start, thoi_gian_tra: slot.end, tong_tien: slotPrice, coc_csvc: 0, ghi_chu: (formData.notes || '') + ` (Slot: ${slot.label})` }) }).then(r => r.json());
+        });
         const results = await Promise.all(promises);
         const errors = results.filter(r => !r.success);
         const successResults = results.filter(r => r.success);
         if (errors.length > 0) toast.warning(`Có ${errors.length} khung giờ thất bại.`);
         if (successResults.length > 0) {
-          const selectedRoom = rooms.find((r: any) => r.id === formData.room);
           const maDatList = successResults.map(r => r.data?.ma_dat).filter(Boolean).join(', ');
-          setSuccessDialog({ show: true, maDat: maDatList, tenPhong: selectedRoom?.ten_phong || 'Phòng', tenKhach: formData.customerName, checkIn: selectedTimeSlots[0].start, checkOut: selectedTimeSlots[selectedTimeSlots.length - 1].end, soLuong: successResults.length });
+          setSuccessDialog({ show: true, maDat: maDatList, tenPhong: selectedRoom?.ma_phong || 'Phòng', tenKhach: formData.customerName, checkIn: selectedTimeSlots[0].start, checkOut: selectedTimeSlots[selectedTimeSlots.length - 1].end, soLuong: successResults.length });
         }
       }
       setFormData(prev => ({ ...prev, customerName: '', customerPhone: '', customerEmail: '', notes: '', cccdFront: '', cccdBack: '' }));
@@ -545,7 +585,7 @@ export default function NewBooking() {
                                     <td style={tableStyles.td}><span style={{ fontSize: '12px', color: '#6b7280' }}>{calculateDuration(booking.thoi_gian_nhan, booking.thoi_gian_tra)}</span></td>
                                     <td style={tableStyles.td}>{booking.kenh_dat}</td>
                                     <td style={tableStyles.td}>{getStatusBadge(booking.trang_thai)}</td>
-                                    <td style={{...tableStyles.td, textAlign: 'right', fontWeight: 'bold'}}>{formatCurrency(booking.tong_tien)}</td>
+                                    <td style={{...tableStyles.td, textAlign: 'right', fontWeight: 'bold'}}>{formatCurrency(calculateDisplayPrice(booking))}</td>
                                     <td style={{...tableStyles.td, textAlign: 'center'}}>
                                         <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
                                             {booking.trang_thai === 'cho_coc' && (
@@ -638,7 +678,7 @@ export default function NewBooking() {
                                                 <td style={tableStyles.td}>{calculateDuration(booking.thoi_gian_nhan, booking.thoi_gian_tra)}</td>
                                                 <td style={tableStyles.td}>{booking.kenh_dat}</td>
                                                 <td style={tableStyles.td}>{getStatusBadge(booking.trang_thai)}</td>
-                                                <td style={{...tableStyles.td, textAlign: 'right', fontWeight: 'bold'}}>{formatCurrency(booking.tong_tien)}</td>
+                                                <td style={{...tableStyles.td, textAlign: 'right', fontWeight: 'bold'}}>{formatCurrency(calculateDisplayPrice(booking))}</td>
                                                 <td style={{...tableStyles.td, textAlign: 'center'}}>
                                                     <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
                                                         {booking.trang_thai === 'cho_coc' && <button onClick={() => handleViewBookingDetail(booking)} style={{ padding: '4px 8px', borderRadius: '6px', border: 'none', backgroundColor: '#22c55e', color: 'white', cursor: 'pointer', fontSize: '11px', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Check size={12}/> Xác nhận</button>}
@@ -734,7 +774,7 @@ export default function NewBooking() {
                 {/* Info Grid */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', fontSize: '13px', backgroundColor: '#f9fafb', padding: '16px', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
                     <div><span style={{ color: '#6b7280', fontSize: '11px' }}>Phòng</span><div style={{ fontWeight: 'bold', color: '#111827' }}><MapPin size={12} style={{display:'inline', marginRight:4}}/> {bookingDetail.phong?.ma_phong}</div></div>
-                    <div><span style={{ color: '#6b7280', fontSize: '11px' }}>Tổng tiền</span><div style={{ fontWeight: 'bold', color: '#111827' }}>{formatCurrency(bookingDetail.tong_tien)}</div></div>
+                    <div><span style={{ color: '#6b7280', fontSize: '11px' }}>Tổng tiền</span><div style={{ fontWeight: 'bold', color: '#111827' }}>{formatCurrency(calculateDisplayPrice(bookingDetail))}</div></div>
                     <div><span style={{ color: '#6b7280', fontSize: '11px' }}>Check-in</span><div style={{ fontWeight: '600' }}>{formatDate(bookingDetail.thoi_gian_nhan)}</div></div>
                     <div><span style={{ color: '#6b7280', fontSize: '11px' }}>Check-out</span><div style={{ fontWeight: '600' }}>{formatDate(bookingDetail.thoi_gian_tra)}</div></div>
                 </div>
