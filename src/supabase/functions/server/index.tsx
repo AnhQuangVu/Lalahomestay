@@ -915,7 +915,75 @@ app.get('/make-server-faeb1932/tai-khoan/email/:email', async (c) => {
 app.post('/make-server-faeb1932/tai-khoan', async (c) => {
   try {
     const body = await c.req.json();
-    const data = await sql.createTaiKhoan(body);
+
+    // Basic validation
+    if (!body.ho_ten || !body.email) {
+      return c.json({ success: false, error: 'Họ tên và email là bắt buộc' }, 400);
+    }
+
+    // Attempt to create a Supabase Auth user using the service role client
+    let createdAuthUserId: string | null = null;
+    if (body.mat_khau && typeof body.mat_khau === 'string' && body.mat_khau.length >= 6) {
+      try {
+        const { data: createData, error: createError } = await supabase.auth.admin.createUser({
+          email: body.email,
+          password: body.mat_khau,
+          email_confirm: true,
+          user_metadata: {
+            name: body.ho_ten,
+            role: body.vai_tro || 'le_tan'
+          }
+        });
+
+        if (createError) {
+          // If user already exists, try to find the existing auth user by email
+          console.warn('Supabase auth createUser error:', createError.message || createError);
+          try {
+            // Attempt to list users and find by email (service role)
+            const listRes: any = await (supabase.auth.admin as any).listUsers?.();
+            if (listRes && listRes.data) {
+              const found = listRes.data.find((u: any) => u.email === body.email);
+              if (found) {
+                createdAuthUserId = found.id;
+              }
+            }
+          } catch (lookupErr) {
+            console.error('Error looking up existing auth user:', lookupErr);
+          }
+        } else {
+          createdAuthUserId = createData?.user?.id || null;
+        }
+      } catch (err) {
+        console.error('Error creating auth user:', err);
+      }
+    } else {
+      console.warn('No valid mat_khau provided — skipping auth user creation');
+    }
+
+    // Prepare profile payload for tai_khoan table (don't include plaintext password)
+    const profilePayload: any = { ...body };
+    if (Object.prototype.hasOwnProperty.call(profilePayload, 'mat_khau')) delete profilePayload.mat_khau;
+    if (createdAuthUserId) profilePayload.auth_id = createdAuthUserId;
+
+    // Check if a profile with same email already exists
+    try {
+      const existingProfile = await sql.getTaiKhoanByEmail(body.email);
+      if (existingProfile) {
+        // If existing profile has no auth_id but we obtained an auth user id, attach it
+        if (!existingProfile.auth_id && createdAuthUserId) {
+          const updated = await sql.updateTaiKhoan(existingProfile.id, { auth_id: createdAuthUserId });
+          return c.json({ success: true, data: updated, message: 'Cập nhật auth_id cho tài khoản hiện có' });
+        }
+
+        // If profile exists and already linked or we don't have auth id, return conflict
+        return c.json({ success: false, error: 'Email đã tồn tại', code: 'EMAIL_CONFLICT' }, 409);
+      }
+    } catch (checkErr) {
+      console.error('Error checking existing tai_khoan by email:', checkErr);
+      // continue to attempt insert — SQL functions will surface errors
+    }
+
+    const data = await sql.createTaiKhoan(profilePayload);
     return c.json({
       success: true,
       data,

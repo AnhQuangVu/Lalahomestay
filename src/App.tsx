@@ -9,7 +9,7 @@ import ImagePreview from './components/ImagePreview';
 import TestRoomImages from './components/TestRoomImages';
 import { supabase } from './utils/supabase/client';
 
-export type UserRole = 'customer' | 'staff' | 'admin' | null;
+export type UserRole = 'customer' | 'staff' | 'admin' | 'le_tan' | 'ke_toan' | 'quan_tri' | null;
 
 export interface AuthUser {
   id: string;
@@ -50,6 +50,10 @@ function App() {
     setUser(authUser);
   };
 
+  const isStaffRole = (role: UserRole | null | undefined) => {
+    return role === 'staff' || role === 'le_tan' || role === 'ke_toan' || role === 'quan_tri';
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setUser(null);
@@ -80,7 +84,7 @@ function App() {
         <Route path="/login" element={
           user ? (
             user.role === 'admin' ? <Navigate to="/admin" /> :
-            user.role === 'staff' ? <Navigate to="/staff" /> :
+            isStaffRole(user.role) ? <Navigate to="/staff" /> :
             <Navigate to="/" />
           ) : (
             <Login onLogin={handleLogin} />
@@ -89,7 +93,7 @@ function App() {
         
         {/* Staff routes */}
         <Route path="/staff/*" element={
-          user?.role === 'staff' || user?.role === 'admin' ? (
+          (isStaffRole(user?.role) || user?.role === 'admin') ? (
             <StaffLayout user={user} onLogout={handleLogout} />
           ) : (
             <Navigate to="/login" />

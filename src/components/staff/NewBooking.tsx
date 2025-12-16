@@ -7,7 +7,9 @@ import {
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
-import { format, differenceInMinutes, isValid, differenceInHours } from 'date-fns';
+import { format, differenceInMinutes, isValid, differenceInHours, startOfDay, eachDayOfInterval } from 'date-fns';
+import { DayPicker } from 'react-day-picker';
+import 'react-day-picker/dist/style.css';
 
 const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-faeb1932`;
 
@@ -50,6 +52,79 @@ const calculateDuration = (start: string, end: string) => {
             </div>
         );
     } catch { return '-'; }
+};
+
+// Ensure timestamps are sent in local (no timezone shift)
+const toLocalISOString = (date: Date) => {
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+};
+
+// --- DAILY CALENDAR COMPONENT (reuse BookingPage logic) ---
+const DailyCalendar = ({ selectedDate, setSelectedDate, numberOfNights, bookings }: any) => {
+  const bookedDateStrings = useMemo(() => {
+    const dates = new Set<string>();
+    bookings.forEach((b: any) => {
+      if (!b.thoi_gian_nhan || !b.thoi_gian_tra) return;
+      const start = startOfDay(new Date(b.thoi_gian_nhan));
+      const end = startOfDay(new Date(b.thoi_gian_tra));
+      const endExclusive = new Date(end);
+      endExclusive.setDate(endExclusive.getDate() - 1);
+      if (endExclusive >= start) {
+        eachDayOfInterval({ start, end: endExclusive }).forEach(d => dates.add(format(d, 'yyyy-MM-dd')));
+      }
+    });
+    return dates;
+  }, [bookings]);
+
+  const bookedDateObjects = useMemo(() => Array.from(bookedDateStrings).map(s => new Date(s)), [bookedDateStrings]);
+
+  const disabledBookedDates = useMemo(() => {
+    const disabled: Date[] = [];
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    for (let i = 0; i < 365; i++) {
+      const checkInDate = new Date(today);
+      checkInDate.setDate(checkInDate.getDate() + i);
+      let hasOverlap = false;
+      for (let n = 0; n < numberOfNights; n++) {
+        const stayDate = new Date(checkInDate);
+        stayDate.setDate(stayDate.getDate() + n);
+        if (bookedDateStrings.has(format(stayDate, 'yyyy-MM-dd'))) { hasOverlap = true; break; }
+      }
+      if (hasOverlap) disabled.push(new Date(checkInDate));
+    }
+    return disabled;
+  }, [bookedDateStrings, numberOfNights]);
+
+  let userCheckoutDate: Date | null = null;
+  if (selectedDate && numberOfNights > 0) {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() + numberOfNights);
+    userCheckoutDate = d;
+  }
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  const pastDates = Array.from({ length: 365 }, (_, i) => {
+    const d = new Date(today); d.setDate(d.getDate() - (i + 1)); return d;
+  });
+
+  const disabledDates = [ ...disabledBookedDates, ...pastDates ];
+
+  return (
+    <div>
+      <DayPicker
+        mode="single"
+        selected={selectedDate ? new Date(selectedDate) : undefined}
+        onSelect={d => d && setSelectedDate(format(d, 'yyyy-MM-dd'))}
+        modifiers={{ booked: bookedDateObjects, userCheckout: userCheckoutDate ? [userCheckoutDate] : [] }}
+        modifiersStyles={{ booked: { backgroundColor: '#fee2e2', color: '#dc2626', border: '2px solid #dc2626', borderRadius: '8px', opacity: 0.8 }, userCheckout: { backgroundColor: '#dbeafe', color: '#2563eb', border: '2px dashed #2563eb', borderRadius: '8px' } }}
+        disabled={disabledDates}
+        weekStartsOn={1}
+        styles={{ day: { borderRadius: '8px' } }}
+      />
+    </div>
+  );
 };
 
 const getStatusBadge = (status: string) => {
@@ -223,6 +298,7 @@ export default function NewBooking() {
   const [formData, setFormData] = useState({ customerName: '', customerPhone: '', customerEmail: '', location: '', concept: '', room: '', numberOfGuests: 2, notes: '', bookingSource: 'facebook', paymentMethod: 'transfer', cccdFront: '', cccdBack: '', cccdFrontUploading: false, cccdBackUploading: false });
   const [bookingType, setBookingType] = useState<'ngay' | 'gio'>('ngay');
   const [selectedDate, setSelectedDate] = useState<string>('');
+  const [numberOfNights, setNumberOfNights] = useState<number>(1);
   const [selectedTimeSlots, setSelectedTimeSlots] = useState<any[]>([]);
   const [existingBookings, setExistingBookings] = useState<any[]>([]);
   
@@ -331,12 +407,13 @@ export default function NewBooking() {
     if (!formData.room || !selectedDate) return;
     setFetchingBookings(true);
     try {
-      const checkDate = new Date(selectedDate);
-      const bufferStart = new Date(checkDate); bufferStart.setDate(bufferStart.getDate() - 1);
-      const response = await fetch(`${API_URL}/dat-phong?start_date=${bufferStart.toISOString()}&end_date=${checkDate.toISOString()}`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } });
+      const day = new Date(selectedDate);
+      const start = new Date(day); start.setDate(start.getDate() - 1); start.setHours(0,0,0,0);
+      const end = new Date(day); end.setDate(end.getDate() + 1); end.setHours(23,59,59,999);
+      const response = await fetch(`${API_URL}/dat-phong?start_date=${start.toISOString()}&end_date=${end.toISOString()}`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } });
       const data = await response.json();
       if (data.success) {
-        const roomBookings = data.data.filter((b: any) => b.id_phong === formData.room && b.trang_thai !== 'da_huy');
+        const roomBookings = data.data.filter((b: any) => b.id_phong === formData.room && b.trang_thai !== 'da_huy' && b.trang_thai !== 'da_tra_phong');
         setExistingBookings(roomBookings);
       }
     } catch (error) { console.error(error); } finally { setFetchingBookings(false); }
@@ -461,15 +538,17 @@ export default function NewBooking() {
   const isDayBookingAvailable = useMemo(() => {
     if (!selectedDate || !formData.room) return false;
     const checkIn = new Date(`${selectedDate}T14:00:00`);
-    const checkOut = new Date(checkIn); checkOut.setDate(checkOut.getDate() + 1); checkOut.setHours(12, 0, 0, 0);
-    const requestStart = new Date(checkIn.getTime() - 30 * 60 * 1000);
-    const requestEnd = new Date(checkOut.getTime() + 30 * 60 * 1000);
+    const checkOut = new Date(checkIn);
+    checkOut.setDate(checkOut.getDate() + (numberOfNights || 1));
+    checkOut.setHours(12, 0, 0, 0);
+    const requestStart = new Date(checkIn.getTime() - 15 * 60 * 1000);
+    const requestEnd = new Date(checkOut.getTime() + 15 * 60 * 1000);
     for (const booking of existingBookings) {
       const bStart = new Date(booking.thoi_gian_nhan); const bEnd = new Date(booking.thoi_gian_tra);
       if (requestStart < bEnd && requestEnd > bStart) return false;
     }
     return true;
-  }, [selectedDate, formData.room, existingBookings]);
+  }, [selectedDate, formData.room, existingBookings, numberOfNights]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -479,10 +558,14 @@ export default function NewBooking() {
       const selectedRoom = rooms.find((r: any) => r.id === formData.room);
       const basePayload: any = { ho_ten: formData.customerName, sdt: formData.customerPhone, email: formData.customerEmail || null, id_phong: formData.room, so_khach: formData.numberOfGuests || 1, ghi_chu: formData.notes || null, ghi_chu_khach: formData.notes || null, kenh_dat: formData.bookingSource, trang_thai: 'da_coc', cccd_mat_truoc: formData.cccdFront || null, cccd_mat_sau: formData.cccdBack || null };
       if (bookingType === 'ngay') {
-        const checkIn = `${selectedDate}T14:00:00`; const nextDay = new Date(selectedDate); nextDay.setDate(nextDay.getDate() + 1); const checkOut = `${nextDay.toISOString().split('T')[0]}T12:00:00`;
+        const checkIn = `${selectedDate}T14:00:00`;
+        const nextDay = new Date(selectedDate);
+        nextDay.setDate(nextDay.getDate() + (numberOfNights || 1));
+        const checkOut = `${nextDay.toISOString().split('T')[0]}T12:00:00`;
         // Tính giá theo đêm
         const pricePerNight = selectedRoom?.loai_phong?.gia_dem ? Number(selectedRoom.loai_phong.gia_dem) : 0;
-        const response = await fetch(`${API_URL}/dat-phong`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` }, body: JSON.stringify({ ...basePayload, thoi_gian_nhan: checkIn, thoi_gian_tra: checkOut, tong_tien: pricePerNight, coc_csvc: 0 }) });
+        const totalPrice = pricePerNight * (numberOfNights || 1);
+        const response = await fetch(`${API_URL}/dat-phong`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` }, body: JSON.stringify({ ...basePayload, thoi_gian_nhan: checkIn, thoi_gian_tra: checkOut, tong_tien: totalPrice, coc_csvc: 0 }) });
         const data = await response.json();
         if (!data.success) throw new Error(data.error);
         setSuccessDialog({ show: true, maDat: data.data?.ma_dat || '', tenPhong: selectedRoom?.ma_phong || 'Phòng', tenKhach: formData.customerName, checkIn, checkOut, soLuong: 1 });
@@ -946,7 +1029,19 @@ export default function NewBooking() {
 
                         <div style={{ marginBottom: '20px' }}>
                             <label style={styles.label}>Ngày {bookingType === 'ngay' ? 'nhận phòng' : 'xem lịch'}</label>
-                            <input type="date" style={styles.input} value={selectedDate} onChange={e => setSelectedDate(e.target.value)} min={new Date().toISOString().split('T')[0]} />
+                            {bookingType === 'ngay' ? (
+                              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                                <div style={{ minWidth: 320 }}>
+                                  <DailyCalendar selectedDate={selectedDate} setSelectedDate={(d: string) => setSelectedDate(d)} numberOfNights={numberOfNights} bookings={existingBookings} />
+                                </div>
+                                <div style={{ minWidth: 160 }}>
+                                  <label style={{ ...styles.label, marginBottom: 8 }}>Số đêm</label>
+                                  <input type="number" min={1} value={numberOfNights} onChange={e => setNumberOfNights(parseInt(e.target.value) || 1)} style={styles.input} />
+                                </div>
+                              </div>
+                            ) : (
+                              <input type="date" style={styles.input} value={selectedDate} onChange={e => setSelectedDate(e.target.value)} min={new Date().toISOString().split('T')[0]} />
+                            )}
                         </div>
 
                         {/* EXISTING BOOKINGS PANEL */}
