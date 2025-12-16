@@ -478,11 +478,24 @@ export default function BookingPage() {
   const [concepts, setConcepts] = useState<any[]>([]);
   const [allRooms, setAllRooms] = useState<any[]>([]);
   const [filteredRooms, setFilteredRooms] = useState<any[]>([]);
+  const [displayConcepts, setDisplayConcepts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [selectedLocation, setSelectedLocation] = useState<string>('all');
   const [selectedConcept, setSelectedConcept] = useState<string>('all');
   const [priceRange, setPriceRange] = useState<string>('all');
+
+  // Filter concepts based on selected location
+  useEffect(() => {
+    if (selectedLocation === 'all') {
+      setDisplayConcepts(concepts);
+    } else {
+      setDisplayConcepts(concepts.filter(c => c.id_co_so === selectedLocation));
+    }
+    // Reset concept filter when location changes
+    setSelectedConcept('all');
+  }, [selectedLocation, concepts]);
+
 
   // Booking State
   const [selectedRoom, setSelectedRoom] = useState<any>(null);
@@ -594,8 +607,8 @@ export default function BookingPage() {
     if (selectedConcept !== 'all') filtered = filtered.filter(r => r.id_loai_phong === selectedConcept);
     if (priceRange !== 'all') {
       filtered = filtered.filter(r => {
-        // Ở bước 1 (chọn phòng), dùng giá đêm làm mặc định để filter
-        const price = r.loai_phong?.gia_dem || r.loai_phong?.gia_gio || 0;
+        // Lọc theo giá giờ làm mặc định
+        const price = r.loai_phong?.gia_gio || r.loai_phong?.gia_dem || 0;
         if (priceRange === 'low') return price < 200000;
         if (priceRange === 'mid') return price >= 200000 && price < 500000;
         if (priceRange === 'high') return price >= 500000;
@@ -859,7 +872,7 @@ export default function BookingPage() {
               </select>
               <select value={selectedConcept} onChange={(e) => setSelectedConcept(e.target.value)} style={{ padding: '10px 16px', borderRadius: '10px', border: '1px solid #e2e8f0', backgroundColor: '#f8fafc', color: '#334155', outline: 'none', cursor: 'pointer', flex: 1, minWidth: '200px' }}>
                 <option value="all">🏷️ Tất cả loại phòng</option>
-                {concepts.map(c => <option key={c.id} value={c.id}>{c.ten_loai}</option>)}
+                {displayConcepts.map(c => <option key={c.id} value={c.id}>{c.ten_loai}</option>)}
               </select>
               <button onClick={fetchData} style={{ marginLeft: 'auto', color: '#0f7072', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '14px', fontWeight: '500', border: 'none', background: 'none', cursor: 'pointer' }}><RefreshCw size={16} /> Làm mới</button>
             </div>
