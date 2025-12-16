@@ -36,14 +36,41 @@ interface RevenueReportProps {
 
 export default function RevenueReport({ reportData, formatCurrency }: RevenueReportProps) {
   // Hàm format ngày ngắn gọn (dd/MM)
-  const formatDateShort = (dateString: string) => {
-    if (!dateString) return '-';
-    try {
-      const date = new Date(dateString);
-      return `${date.getDate()}/${date.getMonth() + 1}`;
-    } catch {
-      return dateString;
+  const formatDateShort = (dateString: any) => {
+    if (!dateString && dateString !== 0) return '-';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    // If already in dd/MM or dd/MM/yyyy
+    if (typeof dateString === 'string') {
+      const s = dateString.trim();
+      const ddmm = /^\d{1,2}\/\d{1,2}$/;
+      const ddmmyyyy = /^\d{1,2}\/\d{1,2}\/\d{2,4}$/;
+      if (ddmmyyyy.test(s)) {
+        const parts = s.split('/');
+        let year = parts[2]; if (year.length === 2) year = '20' + year;
+        return `${pad(Number(parts[0]))}/${pad(Number(parts[1]))}/${year}`;
+      }
+      if (ddmm.test(s)) {
+        const parts = s.split('/');
+        const year = new Date().getFullYear();
+        return `${pad(Number(parts[0]))}/${pad(Number(parts[1]))}/${year}`;
+      }
     }
+
+    // If it's a numeric timestamp
+    if (typeof dateString === 'number' || (typeof dateString === 'string' && /^\d+$/.test(String(dateString).trim()))) {
+      const d = new Date(Number(dateString));
+      if (!isNaN(d.getTime())) return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+    }
+
+    // Try ISO / parseable strings
+    try {
+      const d = new Date(String(dateString));
+      if (!isNaN(d.getTime())) return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+    } catch { /* fallthrough */ }
+
+    // Fallback: show raw non-empty string so user can inspect
+    if (typeof dateString === 'string' && dateString.trim().length > 0) return dateString.trim();
+    return '-';
   };
 
   // Dữ liệu cho bảng (fallback mảng rỗng nếu null)
