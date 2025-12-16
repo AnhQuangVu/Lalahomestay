@@ -845,7 +845,14 @@ export default function CustomerManagement() {
                 {/* Booking History */}
                 <Card>
                   <CardHeader className="bg-gray-50">
-                    <CardTitle className="text-base">📅 Lịch sử đặt phòng ({customerBookings.length})</CardTitle>
+                    <div className="flex items-center justify-between w-full">
+                      <CardTitle className="text-base">📅 Lịch sử đặt phòng ({customerBookings.length})</CardTitle>
+                      <div>
+                        <Button variant="outline" size="sm" onClick={() => selectedCustomer && fetchCustomerBookings(selectedCustomer.id)}>
+                          <RefreshCw className="w-4 h-4 mr-2" /> Làm mới
+                        </Button>
+                      </div>
+                    </div>
                   </CardHeader>
                   <CardContent className="pt-4">
                     {customerBookings.length === 0 ? (
