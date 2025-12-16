@@ -293,31 +293,33 @@ export default function StaffDashboard() {
       } catch { } 
   };
 
-  const handleProcessBooking = async () => {
-    if (!showConfirmDialog) return;
-    const { type, bookingId } = showConfirmDialog;
+    const handleProcessBooking = async (typeParam?: 'approve' | 'reject', bookingIdParam?: string) => {
+    const dialog = showConfirmDialog;
+    const type = typeParam || dialog?.type;
+    const bookingId = bookingIdParam || dialog?.bookingId;
+    if (!type || !bookingId) return;
     setActionLoading(true);
     try {
-        const status = type === 'approve' ? 'da_coc' : 'da_huy';
-        const noteUpdate = type === 'reject' ? (bookingDetail?.ghi_chu ? `${bookingDetail.ghi_chu} [Đã từ chối]` : '[Đã từ chối]') : undefined;
-        const body: any = { trang_thai: status };
-        if (noteUpdate) body.ghi_chu = noteUpdate;
-        const response = await fetch(`${API_URL}/dat-phong/${bookingId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
-            body: JSON.stringify(body)
-        });
-        const result = await response.json();
-        if (result.success) {
-            toast.success(type === 'approve' ? 'Đã xác nhận thanh toán!' : 'Đã từ chối đơn!');
-            setShowConfirmDialog(null);
-            setSelectedRoom(null);
-            loadRooms(); 
-        } else {
-            toast.error('Lỗi: ' + result.error);
-        }
+      const status = type === 'approve' ? 'da_coc' : 'da_huy';
+      const noteUpdate = type === 'reject' ? (bookingDetail?.ghi_chu ? `${bookingDetail.ghi_chu} [Đã từ chối]` : '[Đã từ chối]') : undefined;
+      const body: any = { trang_thai: status };
+      if (noteUpdate) body.ghi_chu = noteUpdate;
+      const response = await fetch(`${API_URL}/dat-phong/${bookingId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
+        body: JSON.stringify(body)
+      });
+      const result = await response.json();
+      if (result.success) {
+        toast.success(type === 'approve' ? 'Đã xác nhận thanh toán!' : 'Đã từ chối đơn!');
+        setShowConfirmDialog(null);
+        setSelectedRoom(null);
+        loadRooms(); 
+      } else {
+        toast.error('Lỗi: ' + result.error);
+      }
     } catch { toast.error('Lỗi kết nối'); } finally { setActionLoading(false); }
-  };
+    };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -515,11 +517,11 @@ export default function StaffDashboard() {
                                 <AlertCircle size={16}/> Khách chưa thanh toán?
                             </div>
                             <div style={{ display: 'flex', gap: '10px' }}>
-                                <button onClick={() => setShowConfirmDialog({ type: 'reject', bookingId: selectedRoom.currentBooking!.id })} style={styles.rejectBtn}>
-                                    <Ban size={16}/> Từ chối
+                                <button onClick={() => handleProcessBooking('reject', selectedRoom.currentBooking!.id)} style={styles.rejectBtn}>
+                                  <Ban size={16}/> Từ chối
                                 </button>
-                                <button onClick={() => setShowConfirmDialog({ type: 'approve', bookingId: selectedRoom.currentBooking!.id })} style={styles.confirmBtn}>
-                                    <Check size={16}/> Xác nhận thanh toán
+                                <button onClick={() => handleProcessBooking('approve', selectedRoom.currentBooking!.id)} style={styles.confirmBtn}>
+                                  <Check size={16}/> Xác nhận thanh toán
                                 </button>
                             </div>
                         </div>
@@ -534,11 +536,11 @@ export default function StaffDashboard() {
                                         <AlertCircle size={16}/> Khách chưa thanh toán
                                     </div>
                                     <div style={{ display: 'flex', gap: '10px' }}>
-                                        <button onClick={() => setShowConfirmDialog({ type: 'reject', bookingId: selectedRoom.currentBooking!.id })} style={styles.rejectBtn}>
-                                            <Ban size={16}/> Từ chối
+                                        <button onClick={() => handleProcessBooking('reject', selectedRoom.currentBooking!.id)} style={styles.rejectBtn}>
+                                          <Ban size={16}/> Từ chối
                                         </button>
-                                        <button onClick={() => setShowConfirmDialog({ type: 'approve', bookingId: selectedRoom.currentBooking!.id })} style={styles.confirmBtn}>
-                                            <Check size={16}/> Xác nhận thanh toán
+                                        <button onClick={() => handleProcessBooking('approve', selectedRoom.currentBooking!.id)} style={styles.confirmBtn}>
+                                          <Check size={16}/> Xác nhận thanh toán
                                         </button>
                                     </div>
                                 </div>
