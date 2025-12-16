@@ -293,33 +293,80 @@ export default function StaffDashboard() {
       } catch { } 
   };
 
-    const handleProcessBooking = async (typeParam?: 'approve' | 'reject', bookingIdParam?: string) => {
-    const dialog = showConfirmDialog;
-    const type = typeParam || dialog?.type;
-    const bookingId = bookingIdParam || dialog?.bookingId;
-    if (!type || !bookingId) return;
+    // Lấy thông tin từ state dialog
+    const handleProcessBooking = async () => {
+    if (!showConfirmDialog || !showConfirmDialog.bookingId || !showConfirmDialog.type) {
+        toast.error('Lỗi: Không tìm thấy thông tin đơn hàng.');
+        return;
+    }
+
+    const { type, bookingId } = showConfirmDialog;
+    
     setActionLoading(true);
     try {
-      const status = type === 'approve' ? 'da_coc' : 'da_huy';
-      const noteUpdate = type === 'reject' ? (bookingDetail?.ghi_chu ? `${bookingDetail.ghi_chu} [Đã từ chối]` : '[Đã từ chối]') : undefined;
-      const body: any = { trang_thai: status };
-      if (noteUpdate) body.ghi_chu = noteUpdate;
-      const response = await fetch(`${API_URL}/dat-phong/${bookingId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
-        body: JSON.stringify(body)
-      });
-      const result = await response.json();
-      if (result.success) {
-        toast.success(type === 'approve' ? 'Đã xác nhận thanh toán!' : 'Đã từ chối đơn!');
-        setShowConfirmDialog(null);
-        setSelectedRoom(null);
-        loadRooms(); 
-      } else {
-        toast.error('Lỗi: ' + result.error);
-      }
-    } catch { toast.error('Lỗi kết nối'); } finally { setActionLoading(false); }
-    };
+        const status = type === 'approve' ? 'da_coc' : 'da_huy';
+        
+        // Nếu từ chối thì thêm ghi chú
+        const noteUpdate = type === 'reject' 
+            ? (bookingDetail?.ghi_chu ? `${bookingDetail.ghi_chu} [Đã từ chối]` : '[Đã từ chối]') 
+            : undefined;
+
+        const body: any = { trang_thai: status };
+        if (noteUpdate) body.ghi_chu = noteUpdate;
+        
+        console.log('Processing booking:', bookingId, body); // Debug log
+
+        const response = await fetch(`${API_URL}/dat-phong/${bookingId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
+            body: JSON.stringify(body)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            toast.success(type === 'approve' ? 'Đã xác nhận thanh toán!' : 'Đã từ chối đơn!');
+            setShowConfirmDialog(null);
+            
+            // Cập nhật lại UI ngay lập tức
+            // Nếu modal phòng đang mở và trùng booking, update selectedRoom
+            if (selectedRoom && selectedRoom.currentBooking && selectedRoom.currentBooking.id === bookingId) {
+                 setSelectedRoom(prev => prev ? ({
+                    ...prev,
+                    status: type === 'approve' ? prev.status : 'available',
+                    currentBooking: type === 'approve' 
+                        ? { ...prev.currentBooking!, status: 'da_coc', deposit: prev.currentBooking!.totalPrice } 
+                        : undefined
+                 }) : null);
+            }
+
+            // Optimistic update for rooms list: update the matching room by bookingId (covers grid)
+            setRooms(prev => {
+              const updated = prev.map(r => {
+                // match by room id (selectedRoom) or by booking id inside currentBooking
+                const hasBookingMatch = (r.currentBooking && r.currentBooking.id === bookingId) || (selectedRoom && r.id === selectedRoom.id && selectedRoom.currentBooking && selectedRoom.currentBooking.id === bookingId);
+                if (!hasBookingMatch) return r;
+                return {
+                  ...r,
+                  status: type === 'approve' ? r.status : 'available',
+                  currentBooking: type === 'approve' ? ({ ...r.currentBooking!, status: 'da_coc', deposit: r.currentBooking?.totalPrice || 0 }) : undefined
+                } as Room;
+              });
+              console.log('[StaffDashboard] optimistic rooms update', { bookingId, type, before: prev, after: updated });
+              return updated;
+            });
+            
+            loadRooms(); // Tải lại dữ liệu mới nhất
+        } else {
+            toast.error('Lỗi: ' + (result.error || 'Không xác định'));
+        }
+    } catch (err) { 
+        console.error(err);
+        toast.error('Lỗi kết nối server'); 
+    } finally { 
+        setActionLoading(false); 
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -517,10 +564,10 @@ export default function StaffDashboard() {
                                 <AlertCircle size={16}/> Khách chưa thanh toán?
                             </div>
                             <div style={{ display: 'flex', gap: '10px' }}>
-                                <button onClick={() => handleProcessBooking('reject', selectedRoom.currentBooking!.id)} style={styles.rejectBtn}>
+                                <button onClick={() => setShowConfirmDialog({ type: 'reject', bookingId: selectedRoom.currentBooking!.id })} style={styles.rejectBtn}>
                                   <Ban size={16}/> Từ chối
                                 </button>
-                                <button onClick={() => handleProcessBooking('approve', selectedRoom.currentBooking!.id)} style={styles.confirmBtn}>
+                                <button onClick={() => setShowConfirmDialog({ type: 'approve', bookingId: selectedRoom.currentBooking!.id })} style={styles.confirmBtn}>
                                   <Check size={16}/> Xác nhận thanh toán
                                 </button>
                             </div>
@@ -536,10 +583,10 @@ export default function StaffDashboard() {
                                         <AlertCircle size={16}/> Khách chưa thanh toán
                                     </div>
                                     <div style={{ display: 'flex', gap: '10px' }}>
-                                        <button onClick={() => handleProcessBooking('reject', selectedRoom.currentBooking!.id)} style={styles.rejectBtn}>
+                                        <button onClick={() => setShowConfirmDialog({ type: 'reject', bookingId: selectedRoom.currentBooking!.id })} style={styles.rejectBtn}>
                                           <Ban size={16}/> Từ chối
                                         </button>
-                                        <button onClick={() => handleProcessBooking('approve', selectedRoom.currentBooking!.id)} style={styles.confirmBtn}>
+                                        <button onClick={() => setShowConfirmDialog({ type: 'approve', bookingId: selectedRoom.currentBooking!.id })} style={styles.confirmBtn}>
                                           <Check size={16}/> Xác nhận thanh toán
                                         </button>
                                     </div>
@@ -585,11 +632,11 @@ export default function StaffDashboard() {
                 <div style={{ display: 'flex', gap: '12px' }}>
                     <button onClick={() => setShowConfirmDialog(null)} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', backgroundColor: 'white', color: '#374151', fontWeight: '600', cursor: 'pointer' }}>Hủy</button>
                     <button 
-                        onClick={handleProcessBooking} 
-                        disabled={actionLoading}
-                        style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: showConfirmDialog.type === 'approve' ? '#16a34a' : '#dc2626', color: 'white', fontWeight: '600', cursor: 'pointer' }}
+                      onClick={handleProcessBooking} 
+                      disabled={actionLoading}
+                      style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: showConfirmDialog?.type === 'approve' ? '#16a34a' : '#dc2626', color: 'white', fontWeight: '600', cursor: 'pointer' }}
                     >
-                        {actionLoading ? 'Đang xử lý...' : 'Đồng ý'}
+                      {actionLoading ? 'Đang xử lý...' : 'Đồng ý'}
                     </button>
                 </div>
             </div>
