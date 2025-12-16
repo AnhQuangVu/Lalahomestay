@@ -679,7 +679,7 @@ app.get('/make-server-faeb1932/bookings/lookup', async (c) => {
           checkOut: booking.thoi_gian_tra,
           numberOfGuests: booking.so_khach,
           totalAmount: booking.tong_tien,
-          paymentStatus: 'pending',
+          paymentStatus: (booking.trang_thai === 'cho_coc' || booking.trang_thai === 'huy' || booking.trang_thai === 'da_huy') ? 'pending' : 'paid',
           bookingStatus: booking.trang_thai === 'da_coc' ? 'confirmed' :
             (booking.trang_thai === 'da_nhan_phong' || booking.trang_thai === 'dang_o') ? 'checked-in' :
               (booking.trang_thai === 'da_tra_phong' || booking.trang_thai === 'da_tra' || booking.trang_thai === 'checkout') ? 'checked-out' :
@@ -704,7 +704,7 @@ app.get('/make-server-faeb1932/bookings/lookup', async (c) => {
           checkOut: booking.thoi_gian_tra,
           numberOfGuests: booking.so_khach,
           totalAmount: booking.tong_tien,
-          paymentStatus: 'pending',
+          paymentStatus: (booking.trang_thai === 'cho_coc' || booking.trang_thai === 'huy' || booking.trang_thai === 'da_huy') ? 'pending' : 'paid',
           bookingStatus: booking.trang_thai === 'da_coc' ? 'confirmed' :
             (booking.trang_thai === 'da_nhan_phong' || booking.trang_thai === 'dang_o') ? 'checked-in' :
               (booking.trang_thai === 'da_tra_phong' || booking.trang_thai === 'da_tra' || booking.trang_thai === 'checkout') ? 'checked-out' :
