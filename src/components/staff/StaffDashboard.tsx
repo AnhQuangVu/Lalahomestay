@@ -497,15 +497,11 @@ export default function StaffDashboard() {
                             </div>
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '13px' }}>
-                             <div style={{ backgroundColor: 'white', padding: '8px', borderRadius: '6px', border: '1px solid #e5e7eb' }}>
-                                <span style={{ color: '#6b7280', fontSize: '11px' }}>Tổng tiền</span>
-                                <div style={{ fontWeight: 'bold', color: '#111827' }}>{formatCurrency(selectedRoom.currentBooking.totalPrice)}</div>
-                             </div>
-                             <div style={{ backgroundColor: 'white', padding: '8px', borderRadius: '6px', border: '1px solid #e5e7eb' }}>
-                                <span style={{ color: '#6b7280', fontSize: '11px' }}>Thanh toán</span>
-                                <div style={{ fontWeight: 'bold', color: '#16a34a' }}>{formatCurrency(selectedRoom.currentBooking.deposit)}</div>
-                             </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px', fontSize: '13px' }}>
+                            <div style={{ backgroundColor: 'white', padding: '8px', borderRadius: '6px', border: '1px solid #e5e7eb' }}>
+                              <span style={{ color: '#6b7280', fontSize: '11px' }}>Tổng tiền</span>
+                              <div style={{ fontWeight: 'bold', color: '#111827' }}>{formatCurrency(selectedRoom.currentBooking.totalPrice || 0)}</div>
+                            </div>
                         </div>
                     </div>
                 )}

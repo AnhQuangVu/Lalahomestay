@@ -361,6 +361,20 @@ export default function NewBooking() {
     }
   }, [rooms]);
 
+  const calculatePaidAmount = useCallback((booking: any) => {
+    if (!booking) return 0;
+    // Sum explicit payment records first
+    if (Array.isArray(booking.thanh_toan) && booking.thanh_toan.length > 0) {
+      try {
+        return booking.thanh_toan.reduce((sum: number, p: any) => sum + (Number(p.so_tien) || 0), 0);
+      } catch { /* ignore */ }
+    }
+    // Fallbacks used in some places: tien_coc (deposit) or coc_csvc
+    if (Number(booking.tien_coc)) return Number(booking.tien_coc);
+    if (Number(booking.coc_csvc)) return Number(booking.coc_csvc);
+    return 0;
+  }, []);
+
   // Init
   useEffect(() => { 
       fetchData(); 
@@ -861,8 +875,23 @@ export default function NewBooking() {
 
                 {/* Info Grid */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', fontSize: '13px', backgroundColor: '#f9fafb', padding: '16px', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
-                    <div><span style={{ color: '#6b7280', fontSize: '11px' }}>Phòng</span><div style={{ fontWeight: 'bold', color: '#111827' }}><MapPin size={12} style={{display:'inline', marginRight:4}}/> {bookingDetail.phong?.ma_phong}</div></div>
-                    <div><span style={{ color: '#6b7280', fontSize: '11px' }}>Tổng tiền</span><div style={{ fontWeight: 'bold', color: '#111827' }}>{formatCurrency(calculateDisplayPrice(bookingDetail))}</div></div>
+                    <div>
+                      <span style={{ color: '#6b7280', fontSize: '11px' }}>Phòng</span>
+                      <div style={{ fontWeight: 'bold', color: '#111827' }}><MapPin size={12} style={{display:'inline', marginRight:4}}/> {bookingDetail.phong?.ma_phong}</div>
+                    </div>
+                    <div>
+                      <span style={{ color: '#6b7280', fontSize: '11px' }}>Tổng / Thanh toán</span>
+                      <div style={{ display: 'flex', gap: '12px', marginTop: '6px', alignItems: 'center' }}>
+                        <div style={{ background: 'white', padding: '8px 12px', borderRadius: 8, border: '1px solid #e6e6e6' }}>
+                          <div style={{ fontSize: '11px', color: '#6b7280' }}>Tổng tiền</div>
+                          <div style={{ fontWeight: 'bold', color: '#111827' }}>{formatCurrency(calculateDisplayPrice(bookingDetail))}</div>
+                        </div>
+                        <div style={{ background: 'white', padding: '8px 12px', borderRadius: 8, border: '1px solid #e6e6e6' }}>
+                          <div style={{ fontSize: '11px', color: '#6b7280' }}>Thanh toán</div>
+                          <div style={{ fontWeight: 'bold', color: '#111827' }}>{formatCurrency(calculatePaidAmount(bookingDetail))}</div>
+                        </div>
+                      </div>
+                    </div>
                     <div><span style={{ color: '#6b7280', fontSize: '11px' }}>Check-in</span><div style={{ fontWeight: '600' }}>{formatDate(bookingDetail.thoi_gian_nhan)}</div></div>
                     <div><span style={{ color: '#6b7280', fontSize: '11px' }}>Check-out</span><div style={{ fontWeight: '600' }}>{formatDate(bookingDetail.thoi_gian_tra)}</div></div>
                 </div>

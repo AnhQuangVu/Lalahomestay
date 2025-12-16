@@ -250,6 +250,15 @@ export default function BookingManagement() {
       currency: 'VND'
     }).format(amount);
   };
+  const calculatePaidAmount = (booking: any) => {
+    if (!booking) return 0;
+    if (Array.isArray(booking.thanh_toan) && booking.thanh_toan.length > 0) {
+      return booking.thanh_toan.reduce((sum: number, p: any) => sum + (Number(p.so_tien) || 0), 0);
+    }
+    if (Number(booking.tien_coc)) return Number(booking.tien_coc);
+    if (Number(booking.coc_csvc)) return Number(booking.coc_csvc);
+    return 0;
+  };
 
   const getChannelBadge = (channel: string) => {
     const labels: any = {
@@ -421,6 +430,10 @@ export default function BookingManagement() {
                           >
                             <Eye className="w-4 h-4" />
                           </Button>
+                            <div>
+                              <Label>Thanh toán</Label>
+                              <p className="mt-1">{formatCurrency(calculatePaidAmount(booking))}</p>
+                            </div>
                           {booking.trang_thai === 'cho_coc' && (
                             <Button
                               variant="outline"
