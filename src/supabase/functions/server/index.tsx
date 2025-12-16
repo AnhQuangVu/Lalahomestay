@@ -606,6 +606,10 @@ app.put('/make-server-faeb1932/dat-phong/:id', async (c) => {
         ) {
           await sql.updatePhong(roomId, { trang_thai: 'trong' });
         }
+        // When booking is confirmed with deposit, mark room as 'check-in soon'
+        else if (newStatus === 'da_coc') {
+          await sql.updatePhong(roomId, { trang_thai: 'sap_nhan' });
+        }
         // When booking is checked in or occupied, mark room as in-use
         else if (
           newStatus === 'checkin' ||

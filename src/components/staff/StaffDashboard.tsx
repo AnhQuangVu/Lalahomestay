@@ -23,12 +23,13 @@ interface Room {
   status: 'available' | 'occupied' | 'checkout-soon' | 'checkin-soon' | 'overdue' | 'maintenance' | 'pending';
   cleanStatus: 'clean' | 'dirty' | 'cleaning';
   price2h: number; priceNight: number;
+  hasPendingBookings: boolean;
   currentBooking?: {
     id: string;
     code: string; customerName: string; checkIn: string; checkOut: string;
     source: string; note: string; totalPrice: number; deposit: number;
     status: string;
-    cccdTruoc?: string; cccdSau?: string;
+    cccdTruoc?: string; ccdSau?: string;
   };
 }
 
@@ -101,6 +102,10 @@ const styles: { [key: string]: React.CSSProperties } = {
   confirmBtn: { flex: 1, padding: '10px', borderRadius: '8px', fontWeight: 'bold', backgroundColor: '#16a34a', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' },
   rejectBtn: { flex: 1, padding: '10px', borderRadius: '8px', fontWeight: 'bold', backgroundColor: '#ef4444', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' },
   pendingBanner: { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: '#ca8a04', color: 'white', fontSize: '10px', fontWeight: '800', textAlign: 'center', padding: '4px', zIndex: 10, letterSpacing: '0.5px' },
+  cccdBox: { position: 'relative', width: '100%', height: '120px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e5e7eb', backgroundColor: '#f9fafb' },
+  cccdImg: { width: '100%', height: '100%', objectFit: 'cover' },
+  cccdLabel: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.5)', color: 'white', fontSize: '12px', padding: '4px 8px', textAlign: 'center' },
+  noCccd: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', color: '#9ca3af', fontSize: '12px' },
 };
 
 // --- MAIN COMPONENT ---
@@ -177,7 +182,7 @@ export default function StaffDashboard() {
              const end = new Date(currentBooking.thoi_gian_tra);
              
              // Kiểm tra chưa thanh toán trước - ưu tiên hiển thị pending
-             const isPending = currentBooking.trang_thai === 'cho_coc' || (currentBooking.tien_coc || 0) === 0;
+             const isPending = currentBooking.trang_thai === 'cho_coc';
              
              if (isValid(start) && isValid(end)) {
                  // Đang trong thời gian ở (đã check-in)
@@ -201,18 +206,21 @@ export default function StaffDashboard() {
              }
         }
 
+        const hasPendingBookings = bookingsFromApi.some((b: any) => b.id_phong === r.id && b.trang_thai === 'cho_coc');
         const cleanMap: any = { 'sach': 'clean', 'dang_don': 'cleaning', 'chua_don': 'dirty' };
 
         return {
           id: r.id, number: r.ma_phong, concept: r.loai_phong?.ten_loai || '', location: r.loai_phong?.co_so?.ten_co_so || '',
           status: derivedStatus as any, cleanStatus: cleanMap[r.tinh_trang_vesinh] || 'clean',
           price2h: r.loai_phong?.gia_gio || 0, priceNight: r.loai_phong?.gia_dem || 0,
+          hasPendingBookings,
           currentBooking: currentBooking ? {
             id: currentBooking.id,
             code: currentBooking.ma_dat, customerName: currentBooking.khach_hang?.ho_ten || 'Khách lẻ',
             checkIn: currentBooking.thoi_gian_nhan, checkOut: currentBooking.thoi_gian_tra,
             source: currentBooking.kenh_dat || 'Khác', note: currentBooking.ghi_chu || '',
-            totalPrice: currentBooking.tong_tien || 0, deposit: currentBooking.tien_coc || 0,
+            totalPrice: currentBooking.tong_tien || 0, 
+            deposit: !['cho_coc'].includes(currentBooking.trang_thai) ? (currentBooking.tong_tien || 1) : 0,
             status: currentBooking.trang_thai,
             cccdTruoc: currentBooking.khach_hang?.cccd_mat_truoc,
             cccdSau: currentBooking.khach_hang?.cccd_mat_sau
@@ -333,9 +341,9 @@ export default function StaffDashboard() {
             if (selectedRoom && selectedRoom.currentBooking && selectedRoom.currentBooking.id === bookingId) {
                  setSelectedRoom(prev => prev ? ({
                     ...prev,
-                    status: type === 'approve' ? prev.status : 'available',
+                    status: type === 'approve' ? 'checkin-soon' : 'available',
                     currentBooking: type === 'approve' 
-                        ? { ...prev.currentBooking!, status: 'da_coc', deposit: prev.currentBooking!.totalPrice } 
+                        ? { ...prev.currentBooking!, status: 'da_coc' } 
                         : undefined
                  }) : null);
             }
@@ -348,8 +356,8 @@ export default function StaffDashboard() {
                 if (!hasBookingMatch) return r;
                 return {
                   ...r,
-                  status: type === 'approve' ? r.status : 'available',
-                  currentBooking: type === 'approve' ? ({ ...r.currentBooking!, status: 'da_coc', deposit: r.currentBooking?.totalPrice || 0 }) : undefined
+                  status: type === 'approve' ? 'checkin-soon' : 'available',
+                  currentBooking: type === 'approve' ? ({ ...r.currentBooking!, status: 'da_coc' }) : undefined
                 } as Room;
               });
               console.log('[StaffDashboard] optimistic rooms update', { bookingId, type, before: prev, after: updated });
@@ -381,10 +389,8 @@ export default function StaffDashboard() {
   };
   
   const filteredRooms = filter === 'all' ? rooms : rooms.filter(r => {
-    // Nếu filter là 'pending' hoặc 'checkin-soon', cần check thêm điều kiện đặc biệt
     if (filter === 'pending') {
-      // Hiện cả những phòng pending VÀ những phòng checkin-soon nhưng chưa thanh toán
-      return r.status === 'pending' || (r.status === 'checkin-soon' && r.currentBooking && r.currentBooking.deposit === 0);
+      return r.hasPendingBookings;
     }
     if (filter === 'checkin-soon') {
       // Hiện cả những phòng checkin-soon VÀ những phòng pending sắp tới (trong 24h)
