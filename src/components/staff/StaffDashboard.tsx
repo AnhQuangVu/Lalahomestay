@@ -413,7 +413,7 @@ export default function StaffDashboard() {
                       <div style={styles.roomNumberLarge}>{room.number}</div>
                       <div style={styles.roomConceptSmall}>{room.concept}</div>
                   </div>
-                  {room.cleanStatus === 'dirty' && <Sparkles size={16} color="#ef4444" />}
+                  {room.cleanStatus === 'dirty' && room.status === 'available' && <Sparkles size={16} color="#ef4444" />}
               </div>
 
               <div style={styles.roomContent}>
@@ -453,7 +453,7 @@ export default function StaffDashboard() {
                       <span style={{ ...styles.statusDot, backgroundColor: conf.text }}></span>
                       {conf.label}
                   </div>
-                  {room.cleanStatus === 'dirty' && <span style={{ color: '#ef4444', fontWeight: '700', fontSize: '10px', textTransform: 'uppercase' }}>Dơ</span>}
+                  {room.cleanStatus === 'dirty' && room.status === 'available' && <span style={{ color: '#ef4444', fontWeight: '700', fontSize: '10px', textTransform: 'uppercase' }}>Dơ</span>}
               </div>
             </div>
           );

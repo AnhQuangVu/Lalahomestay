@@ -74,9 +74,23 @@ export default function GuestList() {
   }, []);
 
   const filteredGuests = guests.filter(guest => {
-    const matchesSearch = guest.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         guest.phone.includes(searchTerm) ||
-                         guest.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const q = (searchTerm || '').trim().toLowerCase();
+    const qDigits = (searchTerm || '').replace(/\D/g, '');
+    const name = (guest.name || '').toLowerCase();
+    const email = (guest.email || '').toLowerCase();
+    const phone = (guest.phone || '').toString();
+    const phoneDigits = phone.replace(/\D/g, '');
+    const room = (guest.room || '').toLowerCase();
+
+    const matchesSearch = !q || (
+      name.includes(q) ||
+      email.includes(q) ||
+      room.includes(q) ||
+      // match phone either raw or digits-only
+      phone.includes(q) ||
+      (qDigits && phoneDigits.includes(qDigits))
+    );
+
     const matchesStatus = statusFilter === 'all' || guest.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
