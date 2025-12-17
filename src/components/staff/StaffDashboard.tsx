@@ -134,9 +134,10 @@ export default function StaffDashboard() {
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
+      const cacheBust = `t=${new Date().getTime()}`;
       const [roomsRes, bookingsRes] = await Promise.all([
-        fetch(`${API_URL}/phong`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` }, signal: controller.signal }),
-        fetch(`${API_URL}/dat-phong`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` }, signal: controller.signal })
+        fetch(`${API_URL}/phong?${cacheBust}`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` }, signal: controller.signal }),
+        fetch(`${API_URL}/dat-phong?${cacheBust}`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` }, signal: controller.signal })
       ]);
 
       if (!roomsRes.ok || !bookingsRes.ok) throw new Error('API Error');
@@ -180,32 +181,36 @@ export default function StaffDashboard() {
         if (r.trang_thai === 'bao_tri') {
             derivedStatus = 'maintenance';
         } else if (currentBooking) {
-             const start = new Date(currentBooking.thoi_gian_nhan);
-             const end = new Date(currentBooking.thoi_gian_tra);
-             
-             // Kiểm tra chưa thanh toán trước - ưu tiên hiển thị pending
-             const isPending = currentBooking.trang_thai === 'cho_coc';
-             
-             if (isValid(start) && isValid(end)) {
-                 // Đang trong thời gian ở (đã check-in)
-                 if (now >= start && now <= end) {
-                     derivedStatus = 'occupied';
-                     // Sắp trả: còn dưới 2 tiếng
-                     if (differenceInHours(end, now) <= 2) derivedStatus = 'checkout-soon';
-                 } 
-                 // Chưa tới giờ check-in
-                 else if (now < start) {
-                     // Nếu chưa thanh toán -> pending, ngược lại -> checkin-soon (nếu trong 24h)
-                     if (isPending) {
-                         derivedStatus = 'pending';
-                     } else if (differenceInHours(start, now) <= 24) {
-                         derivedStatus = 'checkin-soon';
-                     }
-                 }
-             } else if (isPending) {
-                 // Không có thời gian hợp lệ nhưng chưa thanh toán
-                 derivedStatus = 'pending';
-             }
+            if (currentBooking.trang_thai === 'da_nhan_phong') {
+                derivedStatus = 'occupied';
+                const end = new Date(currentBooking.thoi_gian_tra);
+                if (isValid(end) && differenceInHours(end, now) <= 2) {
+                    derivedStatus = 'checkout-soon';
+                }
+            } else {
+                // Logic for other states (pending, checkin-soon)
+                const start = new Date(currentBooking.thoi_gian_nhan);
+                const end = new Date(currentBooking.thoi_gian_tra);
+                const isPending = currentBooking.trang_thai === 'cho_coc';
+                
+                if (isValid(start) && isValid(end)) {
+                    if (now >= start && now <= end) {
+                        // This case can happen if a user should have been checked in but wasn't marked.
+                        // We can treat it as occupied for UI purposes.
+                        derivedStatus = 'occupied';
+                        if (differenceInHours(end, now) <= 2) derivedStatus = 'checkout-soon';
+                    } 
+                    else if (now < start) {
+                        if (isPending) {
+                            derivedStatus = 'pending';
+                        } else if (differenceInHours(start, now) <= 24) {
+                            derivedStatus = 'checkin-soon';
+                        }
+                    }
+                } else if (isPending) {
+                    derivedStatus = 'pending';
+                }
+            }
         }
 
         const hasPendingBookings = bookingsFromApi.some((b: any) => b.id_phong === r.id && b.trang_thai === 'cho_coc');
@@ -303,8 +308,8 @@ export default function StaffDashboard() {
           await updateRoomStatusApi(selectedRoom.id, 'available', 'dirty');
 
           toast.success('Trả phòng thành công!', { id: toastId });
+          await loadRooms();
           setSelectedRoom(null);
-          loadRooms();
         } catch (e: any) {
           toast.error(e.message || 'Lỗi hệ thống', { id: toastId });
         } finally {
@@ -314,7 +319,7 @@ export default function StaffDashboard() {
     });
   };
 
-  const handleCleanRoom = async () => { if (!selectedRoom) return; try { setActionLoading(true); await updateRoomStatusApi(selectedRoom.id, 'available', 'clean'); toast.success('Đã dọn xong!'); setSelectedRoom(null); loadRooms(); } catch (e: any) { toast.error(e.message || 'Lỗi'); } finally { setActionLoading(false); } };
+  const handleCleanRoom = async () => { if (!selectedRoom) return; try { setActionLoading(true); await updateRoomStatusApi(selectedRoom.id, 'available', 'clean'); toast.success('Đã dọn xong!'); await loadRooms(); setSelectedRoom(null); } catch (e: any) { toast.error(e.message || 'Lỗi'); } finally { setActionLoading(false); } };
   
   const handleCheckIn = () => {
     if (!selectedRoom?.currentBooking) return;
@@ -339,8 +344,8 @@ export default function StaffDashboard() {
             await updateRoomStatusApi(selectedRoom.id, 'occupied', selectedRoom.cleanStatus);
 
             toast.success('Đã nhận phòng!', { id: toastId });
+            await loadRooms();
             setSelectedRoom(null);
-            loadRooms();
         } catch (e: any) {
             toast.error(e.message || 'Lỗi check-in', { id: toastId });
         } finally {
@@ -360,18 +365,12 @@ export default function StaffDashboard() {
 
     // Lấy thông tin từ state dialog
     const handleProcessBooking = async () => {
-    if (!showConfirmDialog || !showConfirmDialog.bookingId || !showConfirmDialog.type) {
-        toast.error('Lỗi: Không tìm thấy thông tin đơn hàng.');
-        return;
-    }
-
+    if (!showConfirmDialog) return;
     const { type, bookingId } = showConfirmDialog;
-    
+    const toastId = toast.loading('Đang xử lý...');
     setActionLoading(true);
     try {
         const status = type === 'approve' ? 'da_coc' : 'da_huy';
-        
-        // Nếu từ chối thì thêm ghi chú
         const noteUpdate = type === 'reject' 
             ? (bookingDetail?.ghi_chu ? `${bookingDetail.ghi_chu} [Đã từ chối]` : '[Đã từ chối]') 
             : undefined;
@@ -379,8 +378,6 @@ export default function StaffDashboard() {
         const body: any = { trang_thai: status };
         if (noteUpdate) body.ghi_chu = noteUpdate;
         
-        console.log('Processing booking:', bookingId, body); // Debug log
-
         const response = await fetch(`${API_URL}/dat-phong/${bookingId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
@@ -390,44 +387,15 @@ export default function StaffDashboard() {
         const result = await response.json();
         
         if (result.success) {
-            toast.success(type === 'approve' ? 'Đã xác nhận thanh toán!' : 'Đã từ chối đơn!');
+            toast.success(type === 'approve' ? 'Đã xác nhận thanh toán!' : 'Đã từ chối đơn!', { id: toastId });
             setShowConfirmDialog(null);
-            
-            // Cập nhật lại UI ngay lập tức
-            // Nếu modal phòng đang mở và trùng booking, update selectedRoom
-            if (selectedRoom && selectedRoom.currentBooking && selectedRoom.currentBooking.id === bookingId) {
-                 setSelectedRoom(prev => prev ? ({
-                    ...prev,
-                    status: type === 'approve' ? 'checkin-soon' : 'available',
-                    currentBooking: type === 'approve' 
-                        ? { ...prev.currentBooking!, status: 'da_coc' } 
-                        : undefined
-                 }) : null);
-            }
-
-            // Optimistic update for rooms list: update the matching room by bookingId (covers grid)
-            setRooms(prev => {
-              const updated = prev.map(r => {
-                // match by room id (selectedRoom) or by booking id inside currentBooking
-                const hasBookingMatch = (r.currentBooking && r.currentBooking.id === bookingId) || (selectedRoom && r.id === selectedRoom.id && selectedRoom.currentBooking && selectedRoom.currentBooking.id === bookingId);
-                if (!hasBookingMatch) return r;
-                return {
-                  ...r,
-                  status: type === 'approve' ? 'checkin-soon' : 'available',
-                  currentBooking: type === 'approve' ? ({ ...r.currentBooking!, status: 'da_coc' }) : undefined
-                } as Room;
-              });
-              console.log('[StaffDashboard] optimistic rooms update', { bookingId, type, before: prev, after: updated });
-              return updated;
-            });
-            
-            loadRooms(); // Tải lại dữ liệu mới nhất
+            await loadRooms();
+            setSelectedRoom(null);
         } else {
-            toast.error('Lỗi: ' + (result.error || 'Không xác định'));
+            throw new Error(result.error || 'Không xác định');
         }
-    } catch (err) { 
-        console.error(err);
-        toast.error('Lỗi kết nối server'); 
+    } catch (err: any) { 
+        toast.error(err.message || 'Lỗi kết nối server', { id: toastId }); 
     } finally { 
         setActionLoading(false); 
     }
@@ -447,7 +415,7 @@ export default function StaffDashboard() {
   
   const filteredRooms = filter === 'all' ? rooms : rooms.filter(r => {
     if (filter === 'pending') {
-      return r.hasPendingBookings;
+      return r.status === 'pending';
     }
     if (filter === 'checkin-soon') {
       // Hiện cả những phòng checkin-soon VÀ những phòng pending sắp tới (trong 24h)
