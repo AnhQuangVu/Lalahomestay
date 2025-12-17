@@ -119,6 +119,8 @@ export default function StaffDashboard() {
   const [isEditingInfo, setIsEditingInfo] = useState(false);
   const [infoForm, setInfoForm] = useState({ number: '', concept: '', price2h: 0, priceNight: 0 });
   const [actionLoading, setActionLoading] = useState(false);
+  const [confirmation, setConfirmation] = useState<{ title: string; message: string; onConfirm: () => void; } | null>(null);
+  
   
   const [bookingDetail, setBookingDetail] = useState<any | null>(null);
   const [showBookingForm, setShowBookingForm] = useState(false);
@@ -148,7 +150,7 @@ export default function StaffDashboard() {
 
       const mapped: Room[] = activeRooms.map((r: any) => {
         const now = new Date();
-        const relevantBookings = bookingsFromApi.filter((b: any) => b.id_phong === r.id && !['da_huy', 'da_tra', 'checkout'].includes(b.trang_thai));
+        const relevantBookings = bookingsFromApi.filter((b: any) => b.id_phong === r.id && !['da_huy', 'da_tra_phong', 'checkout'].includes(b.trang_thai));
         
         // Tìm booking đang diễn ra (now trong khoảng start-end)
         let currentBooking = relevantBookings.find((b: any) => {
@@ -252,10 +254,15 @@ export default function StaffDashboard() {
   const updateRoomStatusApi = async (roomId: string, status: string, cleanStatus: string) => {
     const statusMap: any = { 'available': 'trong', 'occupied': 'dang_dung', 'checkout-soon': 'sap_tra', 'checkin-soon': 'sap_nhan', 'maintenance': 'bao_tri' };
     const cleanMap: any = { 'clean': 'sach', 'cleaning': 'dang_don', 'dirty': 'chua_don' };
-    await fetch(`${API_URL}/phong/${roomId}`, {
+    const response = await fetch(`${API_URL}/phong/${roomId}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
       body: JSON.stringify({ trang_thai: statusMap[status] || 'trong', tinh_trang_vesinh: cleanMap[cleanStatus] || 'sach' })
     });
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error( (errorData as any).error || `Không thể cập nhật trạng thái phòng.`);
+    }
+    return response.json();
   };
 
   const handleUpdateRoomInfo = async () => {
@@ -272,26 +279,76 @@ export default function StaffDashboard() {
     } catch (e) { toast.error('Lỗi cập nhật', { id: toastId }); } finally { setActionLoading(false); }
   };
 
-  const handleCheckout = async () => {
+  const handleCheckout = () => {
     if (!selectedRoom?.currentBooking) return;
-    if (!window.confirm(`Xác nhận trả phòng cho khách ${selectedRoom.currentBooking.customerName}?`)) return;
-    const toastId = toast.loading('Đang xử lý...');
-    try {
-      setActionLoading(true);
-      const bookingRes = await fetch(`${API_URL}/dat-phong/ma/${selectedRoom.currentBooking.code}`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } });
-      const bookingData = await bookingRes.json();
-      if (bookingData.success) {
-        await Promise.all([
-          fetch(`${API_URL}/dat-phong/${bookingData.data.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` }, body: JSON.stringify({ trang_thai: 'da_tra', thoi_gian_tra_thuc_te: new Date().toISOString() }) }),
-          updateRoomStatusApi(selectedRoom.id, 'available', 'dirty')
-        ]);
-        toast.success('Trả phòng thành công!', { id: toastId }); setSelectedRoom(null); loadRooms();
-      } else { toast.error('Lỗi tìm đơn', { id: toastId }); }
-    } catch (e) { toast.error('Lỗi hệ thống', { id: toastId }); } finally { setActionLoading(false); }
+    setConfirmation({
+      title: 'Xác nhận trả phòng?',
+      message: `Bạn có chắc muốn trả phòng cho khách ${selectedRoom.currentBooking.customerName}? Thao tác này không thể hoàn tác.`,
+      onConfirm: async () => {
+        const toastId = toast.loading('Đang xử lý...');
+        try {
+          setActionLoading(true);
+          const bookingRes = await fetch(`${API_URL}/dat-phong/ma/${selectedRoom.currentBooking!.code}`, { headers: { 'Authorization': `Bearer ${publicAnonKey}` } });
+          const bookingData = await bookingRes.json();
+          if (!bookingData.success) {
+            throw new Error(bookingData.error || 'Lỗi tìm đơn đặt phòng.');
+          }
+          
+          const bookingUpdateRes = await fetch(`${API_URL}/dat-phong/${bookingData.data.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` }, body: JSON.stringify({ trang_thai: 'da_tra_phong' }) });
+          const bookingUpdateData = await bookingUpdateRes.json();
+          if (!bookingUpdateData.success) {
+              throw new Error(bookingUpdateData.error || 'Không thể cập nhật trạng thái trả phòng.');
+          }
+
+          await updateRoomStatusApi(selectedRoom.id, 'available', 'dirty');
+
+          toast.success('Trả phòng thành công!', { id: toastId });
+          setSelectedRoom(null);
+          loadRooms();
+        } catch (e: any) {
+          toast.error(e.message || 'Lỗi hệ thống', { id: toastId });
+        } finally {
+          setActionLoading(false);
+        }
+      }
+    });
   };
 
-  const handleCleanRoom = async () => { if (!selectedRoom) return; try { setActionLoading(true); await updateRoomStatusApi(selectedRoom.id, 'available', 'clean'); toast.success('Đã dọn xong!'); setSelectedRoom(null); loadRooms(); } catch { toast.error('Lỗi'); } finally { setActionLoading(false); } };
-  const handleCheckIn = async () => { if (!selectedRoom) return; try { setActionLoading(true); await updateRoomStatusApi(selectedRoom.id, 'occupied', selectedRoom.cleanStatus); toast.success('Đã nhận phòng!'); setSelectedRoom(null); loadRooms(); } catch { toast.error('Lỗi'); } finally { setActionLoading(false); } };
+  const handleCleanRoom = async () => { if (!selectedRoom) return; try { setActionLoading(true); await updateRoomStatusApi(selectedRoom.id, 'available', 'clean'); toast.success('Đã dọn xong!'); setSelectedRoom(null); loadRooms(); } catch (e: any) { toast.error(e.message || 'Lỗi'); } finally { setActionLoading(false); } };
+  
+  const handleCheckIn = () => {
+    if (!selectedRoom?.currentBooking) return;
+    setConfirmation({
+      title: 'Xác nhận nhận phòng?',
+      message: `Khách ${selectedRoom.currentBooking.customerName} sẽ nhận phòng ${selectedRoom.number}.`,
+      onConfirm: async () => {
+        const toastId = toast.loading('Đang xử lý check-in...');
+        try {
+            setActionLoading(true);
+            const bookingUpdateRes = await fetch(`${API_URL}/dat-phong/${selectedRoom.currentBooking!.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
+                body: JSON.stringify({ trang_thai: 'da_nhan_phong' })
+            });
+
+            const result = await bookingUpdateRes.json();
+            if (!result.success) {
+                throw new Error(result.error || 'Không thể cập nhật trạng thái đơn đặt phòng.');
+            }
+
+            await updateRoomStatusApi(selectedRoom.id, 'occupied', selectedRoom.cleanStatus);
+
+            toast.success('Đã nhận phòng!', { id: toastId });
+            setSelectedRoom(null);
+            loadRooms();
+        } catch (e: any) {
+            toast.error(e.message || 'Lỗi check-in', { id: toastId });
+        } finally {
+            setActionLoading(false);
+        }
+      }
+    });
+  };
   
   const handleShowDetail = async (bookingCode: string) => { 
       try { 
@@ -643,6 +700,33 @@ export default function StaffDashboard() {
                       style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: showConfirmDialog?.type === 'approve' ? '#16a34a' : '#dc2626', color: 'white', fontWeight: '600', cursor: 'pointer' }}
                     >
                       {actionLoading ? 'Đang xử lý...' : 'Đồng ý'}
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* GENERIC CONFIRMATION DIALOG */}
+      {confirmation && (
+        <div style={{ ...styles.modalOverlay, zIndex: 80 }}>
+            <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '24px', width: '100%', maxWidth: '360px', textAlign: 'center', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#111827', marginBottom: '8px' }}>
+                    {confirmation.title}
+                </h3>
+                <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '24px', lineHeight: '1.5' }}>
+                    {confirmation.message}
+                </p>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                    <button onClick={() => setConfirmation(null)} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', backgroundColor: 'white', color: '#374151', fontWeight: '600', cursor: 'pointer' }}>Hủy</button>
+                    <button 
+                      onClick={() => {
+                          confirmation.onConfirm();
+                          setConfirmation(null);
+                      }} 
+                      disabled={actionLoading}
+                      style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: '#2563eb', color: 'white', fontWeight: '600', cursor: 'pointer', opacity: actionLoading ? 0.7 : 1 }}
+                    >
+                      {actionLoading ? 'Đang xử lý...' : 'Xác nhận'}
                     </button>
                 </div>
             </div>
