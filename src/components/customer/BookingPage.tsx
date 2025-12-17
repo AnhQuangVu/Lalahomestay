@@ -621,23 +621,51 @@ export default function BookingPage() {
 
   const calculateTotal = () => {
     if (!selectedRoom) return 0;
-    if (bookingType === 'ngay' && selectedDate && numberOfNights > 0) {
+    
+    if (bookingType === 'ngay') {
+      if (!selectedDate || numberOfNights <= 0) return 0;
       const price = selectedRoom.loai_phong?.gia_dem ? Number(selectedRoom.loai_phong.gia_dem) : 0;
       return price * numberOfNights;
-    } else if (bookingType === 'gio' && selectedTimeSlots.length > 0) {
-      // *** TÍNH TỔNG TIỀN CHO NHIỀU SLOT ***
-      let total = 0;
+    } 
+    
+    if (bookingType === 'gio') {
+      if (selectedTimeSlots.length === 0) return 0;
+
       const hourlyPrice = selectedRoom.loai_phong?.gia_gio ? Number(selectedRoom.loai_phong.gia_gio) : 0;
-      
-      selectedTimeSlots.forEach(slot => {
-         const start = new Date(slot.start);
-         const end = new Date(slot.end);
-         // Làm tròn thời gian cho từng slot (đã fix cứng trong FIXED_SLOTS rồi)
-         let hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-         total += hourlyPrice * hours;
+      const sortedSlots = [...selectedTimeSlots].sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+
+      const bookingGroups: any[][] = [];
+      if (sortedSlots.length > 0) {
+          bookingGroups.push([sortedSlots[0]]);
+          for (let i = 1; i < sortedSlots.length; i++) {
+              const prevSlot = sortedSlots[i - 1];
+              const currentSlot = sortedSlots[i];
+              const prevEndTime = new Date(prevSlot.end).getTime();
+              const currentStartTime = new Date(currentSlot.start).getTime();
+
+              if (currentStartTime - prevEndTime <= 15 * 60 * 1000) {
+                  bookingGroups[bookingGroups.length - 1].push(currentSlot);
+              } else {
+                  bookingGroups.push([currentSlot]);
+              }
+          }
+      }
+
+      let totalAmount = 0;
+      bookingGroups.forEach(group => {
+          let groupPrice = 0;
+          group.forEach(slot => {
+              const s = new Date(slot.start);
+              const e = new Date(slot.end);
+              const hours = (e.getTime() - s.getTime()) / (1000 * 60 * 60);
+              groupPrice += hourlyPrice * hours;
+          });
+          totalAmount += Math.round(groupPrice);
       });
-      return Math.round(total);
+      
+      return totalAmount;
     }
+    
     return 0;
   };
 
@@ -768,60 +796,101 @@ export default function BookingPage() {
             bookingDetails: { roomName: `${selectedRoom.loai_phong?.ten_loai} - ${selectedRoom.ma_phong}`, checkIn: new Date(checkIn).toLocaleString('vi-VN'), checkOut: new Date(checkOut).toLocaleString('vi-VN') }
           });
       } else {
-          // *** LOOP CREATE MULTIPLE BOOKINGS ***
-          // Với mỗi slot, ta tạo 1 booking riêng
+          // --- LOGIC MỚI: GOM SLOT LIỀN KỀ ---
           const hourlyPrice = selectedRoom.loai_phong?.gia_gio ? Number(selectedRoom.loai_phong.gia_gio) : 0;
           
-          // Dùng Promise.all để gửi đồng thời
-          const promises = selectedTimeSlots.map(slot => {
-             const start = new Date(slot.start);
-             const end = new Date(slot.end);
-             const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-             const slotPrice = Math.round(hourlyPrice * hours);
+          // 1. Sắp xếp các slot đã chọn theo thời gian bắt đầu
+          const sortedSlots = [...selectedTimeSlots].sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
 
-             const payload = {
-                 ...basePayload,
-                 thoi_gian_nhan: toLocalISOString(start),
-                 thoi_gian_tra: toLocalISOString(end),
-                 tong_tien: slotPrice,
-                 coc_csvc: 0,
-                 ghi_chu: notes ? `${notes} (Slot: ${slot.label})` : `Slot: ${slot.label}` // Note thêm tên slot vào
-             };
+          // 2. Gom các slot liền kề vào thành từng nhóm
+          const bookingGroups: any[][] = [];
+          if (sortedSlots.length > 0) {
+              bookingGroups.push([sortedSlots[0]]); // Bắt đầu nhóm đầu tiên
+              for (let i = 1; i < sortedSlots.length; i++) {
+                  const prevSlot = sortedSlots[i - 1];
+                  const currentSlot = sortedSlots[i];
+                  const prevEndTime = new Date(prevSlot.end).getTime();
+                  const currentStartTime = new Date(currentSlot.start).getTime();
 
-             return fetch(`${API_URL}/dat-phong`, {
-                 method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
-                 body: JSON.stringify(payload)
-             }).then(r => r.json());
+                  // 2.1. Kiểm tra xem slot hiện tại có "liền kề" với slot trước không
+                  // Liền kề ở đây là khoảng cách giữa giờ kết thúc slot trước và giờ bắt đầu slot sau <= 15 phút
+                  // (15 * 60 * 1000 = 900000 ms)
+                  if (currentStartTime - prevEndTime <= 15 * 60 * 1000) {
+                      // Thêm vào nhóm hiện tại
+                      bookingGroups[bookingGroups.length - 1].push(currentSlot);
+                  } else {
+                      // Bắt đầu một nhóm mới
+                      bookingGroups.push([currentSlot]);
+                  }
+              }
+          }
+
+          // 3. Tạo các request đặt phòng cho từng nhóm
+          const promises = bookingGroups.map(group => {
+              const firstSlot = group[0];
+              const lastSlot = group[group.length - 1];
+              
+              const start = new Date(firstSlot.start);
+              const end = new Date(lastSlot.end);
+
+              // Tính tổng tiền cho nhóm này
+              let groupPrice = 0;
+              let groupLabels = [];
+              for (const slot of group) {
+                  const s = new Date(slot.start);
+                  const e = new Date(slot.end);
+                  const hours = (e.getTime() - s.getTime()) / (1000 * 60 * 60);
+                  groupPrice += hourlyPrice * hours;
+                  groupLabels.push(slot.label);
+              }
+              
+              const payload = {
+                  ...basePayload,
+                  thoi_gian_nhan: toLocalISOString(start),
+                  thoi_gian_tra: toLocalISOString(end),
+                  tong_tien: Math.round(groupPrice),
+                  coc_csvc: 0,
+                  ghi_chu: notes ? `${notes} (Slots: ${groupLabels.join(', ')})` : `Slots: ${groupLabels.join(', ')}`
+              };
+
+              return fetch(`${API_URL}/dat-phong`, {
+                  method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${publicAnonKey}` },
+                  body: JSON.stringify(payload)
+              }).then(r => r.json());
           });
 
           const results = await Promise.all(promises);
           
-          // Kiểm tra xem có lỗi nào không
-          const errors = results.filter(r => !r.success);
-          if (errors.length > 0) {
-              console.error(errors);
-              toast.warning(`Có ${errors.length} khung giờ bị lỗi (có thể do vừa bị đặt). Các khung giờ khác thành công.`);
+          const successfulBookings = results.filter(r => r.success).map(r => r.data);
+          const failedBookings = results.filter(r => !r.success);
+
+          if (failedBookings.length > 0) {
+              console.error("Lỗi đặt một số khung giờ:", failedBookings);
+              toast.warning(`Có ${failedBookings.length} nhóm khung giờ bị lỗi (có thể do vừa bị đặt). Các nhóm khác thành công.`);
           }
 
-          // Lấy mã đặt của cái đầu tiên thành công để hiển thị QR
-          const successBooking = results.find(r => r.success);
-          if (successBooking) {
+          if (successfulBookings.length > 0) {
+              // Gộp mã các booking thành công lại
+              const bookingCodes = successfulBookings.map(b => b.ma_dat).join(', ');
+              // Tổng tiền là hàm calculateTotal() đã tính đúng từ đầu
+              const totalAmount = calculateTotal();
+
               setBookingData({
-                  bookingCode: successBooking.data.ma_dat + '...', // Mã đại diện
-                  amount: calculateTotal(),
+                  bookingCode: bookingCodes,
+                  amount: totalAmount,
                   bookingDetails: { 
                       roomName: `${selectedRoom.loai_phong?.ten_loai} - ${selectedRoom.ma_phong}`, 
-                      checkIn: `${selectedTimeSlots.length} khung giờ`, 
+                      checkIn: `${selectedTimeSlots.length} khung giờ (${bookingGroups.length} đơn)`, 
                       checkOut: new Date(selectedDate).toLocaleDateString('vi-VN') 
                   }
               });
           } else {
-             throw new Error('Không thể đặt phòng.');
+             throw new Error('Không thể đặt phòng cho bất kỳ khung giờ nào.');
           }
     }
 
     setShowPaymentDialog(true); 
-    toast.success('Đặt thành công!');
+    toast.success('Yêu cầu đặt phòng đã được gửi!');
   };
 
   return (
