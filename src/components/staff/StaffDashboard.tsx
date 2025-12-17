@@ -457,14 +457,20 @@ export default function StaffDashboard() {
               <button 
                 key={btn.val} 
                 onClick={() => setFilter(btn.val)} 
-                style={{
-                    ...styles.filterBtn,
-                    backgroundColor: filter === btn.val ? btn.bg : 'white',
-                    color: filter === btn.val ? 'white' : '#4b5563',
-                    borderColor: filter === btn.val ? 'transparent' : '#e5e7eb',
-                    boxShadow: filter !== btn.val ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
-                    border: btn.val === 'available' && filter !== 'available' ? '1px solid #e5e7eb' : undefined
-                }}
+                style={(() => {
+                    const isSelected = filter === btn.val;
+                    return {
+                        ...styles.filterBtn,
+                        backgroundColor: isSelected ? btn.bg : 'white',
+                        color: isSelected 
+                            ? (btn.bg === '#ffffff' ? '#1f2937' : 'white')
+                            : '#4b5563',
+                        borderColor: isSelected 
+                            ? (btn.bg === '#ffffff' ? '#1f2937' : 'transparent')
+                            : '#e5e7eb',
+                        boxShadow: !isSelected ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+                    };
+                })()}
               >
                 {btn.label}
               </button>
