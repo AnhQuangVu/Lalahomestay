@@ -215,9 +215,9 @@ export default function AdminDashboard() {
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             Làm mới
           </button>
-          <button onClick={() => setShowRaw((s: boolean) => !s)} className="ml-3 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white hover:bg-gray-50">
+          {/* <button onClick={() => setShowRaw((s: boolean) => !s)} className="ml-3 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white hover:bg-gray-50">
             {showRaw ? 'Ẩn raw' : 'Xem raw'}
-          </button>
+          </button> */}
         </div>
         
         {showRaw && rawStats && (
