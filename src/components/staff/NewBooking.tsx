@@ -42,12 +42,24 @@ const calculateDuration = (start: string, end: string) => {
     if (!start || !end) return '-';
     try {
         const diffMins = differenceInMinutes(new Date(end), new Date(start));
+        if (diffMins < 0) return '-';
+
         const hours = Math.floor(diffMins / 60);
+        const minutes = diffMins % 60;
         const days = Math.floor(hours / 24);
         
+        let durationText;
+        if (hours > 0 && minutes > 0) {
+            durationText = `${hours}h ${minutes}m`;
+        } else if (hours > 0) {
+            durationText = `${hours}h`;
+        } else {
+            durationText = `${minutes}m`;
+        }
+
         return (
             <div>
-                <div style={{fontWeight: 'bold', fontSize: '13px'}}>{hours}h</div>
+                <div style={{fontWeight: 'bold', fontSize: '13px'}}>{durationText}</div>
                 {days >= 1 && <div style={{fontSize: '11px', color: '#6b7280'}}>({days} đêm)</div>}
             </div>
         );
