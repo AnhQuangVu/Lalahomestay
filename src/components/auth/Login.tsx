@@ -100,11 +100,11 @@ export default function Login({ onLogin }: LoginProps) {
         </form>
 
 
-        <div className="mt-8 pt-6 border-t border-gray-200 text-center">
+        {/* <div className="mt-8 pt-6 border-t border-gray-200 text-center">
           <a href="/" className="text-blue-600 hover:text-blue-700">
             ← Quay lại trang chủ
           </a>
-        </div>
+        </div> */}
       </div>
     </div>
   );
