@@ -513,6 +513,7 @@ export default function BookingPage() {
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
   const [cccdFront, setCccdFront] = useState<File | null>(null);
   const [cccdBack, setCccdBack] = useState<File | null>(null);
@@ -740,7 +741,7 @@ export default function BookingPage() {
 
     // Payload cơ bản
     const basePayload = {
-      ho_ten: fullName, sdt: phone, email: email || null,
+      ho_ten: fullName, sdt: phone, email: email || null, dia_chi: address || null,
       cccd_mat_truoc: cccdFrontUrl, cccd_mat_sau: cccdBackUrl,
       id_phong: selectedRoom.id,
       so_khach: numberOfGuests, 
@@ -1125,6 +1126,13 @@ export default function BookingPage() {
                   <div style={{ position: 'relative' }}>
                     <Mail size={18} style={{ position: 'absolute', top: '12px', left: '12px', color: '#94a3b8' }} />
                     <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="email@domain.com" style={{ width: '100%', padding: '10px 10px 10px 40px', borderRadius: '10px', border: '1px solid #e2e8f0', outline: 'none' }} />
+                  </div>
+                </div>
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '8px' }}>Địa chỉ (Không bắt buộc)</label>
+                  <div style={{ position: 'relative' }}>
+                    <MapPin size={18} style={{ position: 'absolute', top: '12px', left: '12px', color: '#94a3b8' }} />
+                    <input type="text" value={address} onChange={e => setAddress(e.target.value)} placeholder="Nhập địa chỉ của bạn" style={{ width: '100%', padding: '10px 10px 10px 40px', borderRadius: '10px', border: '1px solid #e2e8f0', outline: 'none' }} />
                   </div>
                 </div>
                 <div style={{ gridColumn: 'span 2' }}>

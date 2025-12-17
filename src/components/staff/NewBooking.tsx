@@ -295,7 +295,7 @@ function TimeSlotSelector({ roomId, selectedDate, selectedSlots, onSlotsChange, 
 export default function NewBooking() {
   const navigate = useNavigate();
   // State Form
-  const [formData, setFormData] = useState({ customerName: '', customerPhone: '', customerEmail: '', location: '', concept: '', room: '', numberOfGuests: 2, notes: '', bookingSource: 'facebook', paymentMethod: 'transfer', cccdFront: '', cccdBack: '', cccdFrontUploading: false, cccdBackUploading: false });
+  const [formData, setFormData] = useState({ customerName: '', customerPhone: '', customerEmail: '', address: '', location: '', concept: '', room: '', numberOfGuests: 2, notes: '', bookingSource: 'facebook', paymentMethod: 'transfer', cccdFront: '', cccdBack: '', cccdFrontUploading: false, cccdBackUploading: false });
   const [bookingType, setBookingType] = useState<'ngay' | 'gio'>('ngay');
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [numberOfNights, setNumberOfNights] = useState<number>(1);
@@ -570,7 +570,7 @@ export default function NewBooking() {
     setLoading(true);
     try {
       const selectedRoom = rooms.find((r: any) => r.id === formData.room);
-      const basePayload: any = { ho_ten: formData.customerName, sdt: formData.customerPhone, email: formData.customerEmail || null, id_phong: formData.room, so_khach: formData.numberOfGuests || 1, ghi_chu: formData.notes || null, ghi_chu_khach: formData.notes || null, kenh_dat: formData.bookingSource, trang_thai: 'da_coc', cccd_mat_truoc: formData.cccdFront || null, cccd_mat_sau: formData.cccdBack || null };
+      const basePayload: any = { ho_ten: formData.customerName, sdt: formData.customerPhone, email: formData.customerEmail || null, dia_chi: formData.address || null, id_phong: formData.room, so_khach: formData.numberOfGuests || 1, ghi_chu: formData.notes || null, ghi_chu_khach: formData.notes || null, kenh_dat: formData.bookingSource, trang_thai: 'da_coc', cccd_mat_truoc: formData.cccdFront || null, cccd_mat_sau: formData.cccdBack || null };
       if (bookingType === 'ngay') {
         const checkIn = `${selectedDate}T14:00:00`;
         const nextDay = new Date(selectedDate);
@@ -962,6 +962,7 @@ export default function NewBooking() {
                         </div>
                     </div>
                     <input type="email" placeholder="Email" style={styles.input} value={formData.customerEmail} onChange={e => setFormData({ ...formData, customerEmail: e.target.value })} />
+                    <input type="text" placeholder="Địa chỉ khách hàng" style={styles.input} value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} />
                   </div>
                 </div>
 
