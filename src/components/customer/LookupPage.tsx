@@ -217,8 +217,8 @@ export default function LookupPage() {
                       </div>
                       <div className="text-right">
                         {getStatusBadge(booking.bookingStatus)}
-                        {/* Only show payment status if booking is not already pending or cancelled */}
-                        {!['pending', 'cancelled'].includes(booking.bookingStatus) && (
+                        {/* Only show payment status if booking status isn't self-explanatory (pending, cancelled, confirmed) */}
+                        {!['pending', 'cancelled', 'confirmed'].includes(booking.bookingStatus) && (
                           <div className="mt-1">
                             {getPaymentStatusBadge(booking.paymentStatus)}
                           </div>

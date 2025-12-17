@@ -110,7 +110,7 @@ export default function OverviewReport({ reportData, formatCurrency }: OverviewR
       </div>
 
       {/* Secondary KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      {/* <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <div className="bg-white rounded-lg shadow-sm p-4">
           <p className="text-sm text-gray-600 mb-1">Tiền cọc CSVC</p>
           <p className="text-xl text-gray-900">{formatCurrency(reportData.totalDeposit)}</p>
@@ -135,7 +135,7 @@ export default function OverviewReport({ reportData, formatCurrency }: OverviewR
           <p className="text-sm text-gray-600 mb-1">Tỷ lệ hủy</p>
           <p className="text-xl text-gray-900">{reportData.cancelRate.toFixed(1)}%</p>
         </div>
-      </div>
+      </div> */}
 
       {/* Charts Row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
